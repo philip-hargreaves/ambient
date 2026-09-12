@@ -116,13 +116,18 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
     EXPECT_LE(results.shown.size(), 3u);
     EXPECT_GE(results.considered, static_cast<int>(results.shown.size()));
     EXPECT_FALSE(results.abstained);
-    EXPECT_EQ(results.shown[0].guideline, "fx100");
+    EXPECT_EQ(results.shown[0].code, "fx100");
+    EXPECT_EQ(results.floor, 0.2);
+    EXPECT_EQ(results.searched.size(), 2u);  // the two loaded corpora, not the stale one
     for (const auto& r : results.shown) {
         EXPECT_EQ(r.corpus, "fixture-a");
         EXPECT_FALSE(r.chunk_id.empty());
         EXPECT_FALSE(r.title.empty());
         EXPECT_FALSE(r.section.empty());
         EXPECT_FALSE(r.text.empty());
+        EXPECT_FALSE(r.number.empty());
+        EXPECT_EQ(r.url, "https://example.test/" + r.chunk_id);
+        EXPECT_EQ(r.source, "text");
         EXPECT_GE(r.score, 0.2);
         EXPECT_NE(note.find(r.trigger), std::string::npos) << "trigger is a sentence of the note";
     }

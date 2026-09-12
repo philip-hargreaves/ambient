@@ -93,14 +93,18 @@ Results Retriever::Search(const std::string& note, int limit) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
     Results out;
+    out.floor = options_.floor;
+    std::vector<CorpusStore*> stores;
+    for (auto& item : loaded_) {
+        if (item.store) {
+            stores.push_back(item.store.get());
+            out.searched.push_back(item.corpus);
+        }
+    }
     const auto queries = SubQueries(note);
     if (queries.empty()) {
         out.abstained = true;
         return out;
-    }
-    std::vector<CorpusStore*> stores;
-    for (auto& item : loaded_) {
-        if (item.store) stores.push_back(item.store.get());
     }
     if (stores.empty()) return out;
 
@@ -144,10 +148,15 @@ Results Retriever::Search(const std::string& note, int limit) {
         Result result;
         result.corpus = store->Info().id;
         result.chunk_id = cite.chunk_id;
-        result.guideline = cite.code;
+        result.code = cite.code;
+        result.number = cite.number;
         result.title = cite.title;
-        result.section = cite.section.empty() ? cite.number : cite.section;
+        result.section = cite.section;
         result.text = std::move(chunk.text);
+        result.url = std::move(chunk.url);
+        result.last_updated = std::move(chunk.last_updated);
+        result.update_tag = std::move(chunk.update_tag);
+        result.source = store->Info().source;
         result.score = candidate.cosine;
         result.trigger = candidate.trigger;
         out.shown.push_back(std::move(result));

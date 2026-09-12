@@ -50,6 +50,8 @@ inline std::vector<Chunk> Chunks(const std::filesystem::path& fixture_dir,
         c.code = row.at("code");
         if (!codes.empty() && !codes.count(c.code)) continue;
         c.title = row.at("title");
+        c.number = c.id.substr(c.code.size() + 1);
+        std::replace(c.number.begin(), c.number.end(), '_', '.');
         c.section = row.at("section");
         c.text = row.at("text");
         c.url = "https://example.test/" + c.id;
@@ -83,9 +85,7 @@ inline void WriteMarkdown(const std::filesystem::path& fixture_dir,
                           const std::filesystem::path& docs) {
     std::map<std::string, std::string> per_code;
     for (const auto& chunk : Chunks(fixture_dir)) {
-        auto number = chunk.id.substr(chunk.code.size() + 1);
-        std::replace(number.begin(), number.end(), '_', '.');
-        per_code[chunk.code] += number + " " + chunk.text + "\n\n";
+        per_code[chunk.code] += chunk.number + " " + chunk.text + "\n\n";
     }
     std::filesystem::create_directories(docs);
     for (const auto& [code, text] : per_code) {

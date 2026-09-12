@@ -1,6 +1,5 @@
 #include "adapters/ipc/handlers.hpp"
 
-#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <openvino/core/version.hpp>
@@ -8,6 +7,7 @@
 #include <stdexcept>
 
 #include "adapters/demo/sample_year.hpp"
+#include "adapters/guidance/guidance_record.hpp"
 #include "adapters/host/power_throttling.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/translate/translate_lane.hpp"
@@ -746,37 +746,14 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
 }
 
 json GuidanceResultsJson(const std::string& session, const ambient::guidance::Results& results) {
-    json shown = json::array();
-    for (const auto& r : results.shown) {
-        shown.push_back({{"corpus", r.corpus},
-                         {"chunkId", r.chunk_id},
-                         {"guideline", r.guideline},
-                         {"title", r.title},
-                         {"section", r.section},
-                         {"text", r.text},
-                         {"score", std::round(r.score * 1000) / 1000},
-                         {"trigger", r.trigger}});
-    }
-    return json{{"id", NullWhenEmpty(session)},
-                {"shown", shown},
-                {"considered", results.considered},
-                {"abstained", results.abstained}};
+    json body = ambient::guidance::ToJson(results);
+    body["id"] = NullWhenEmpty(session);
+    return body;
 }
 
 json GuidanceCorporaJson(const std::vector<ambient::guidance::Corpus>& corpora) {
     json list = json::array();
-    for (const auto& c : corpora) {
-        list.push_back({{"id", c.id},
-                        {"name", c.name},
-                        {"licence", c.licence},
-                        {"attribution", c.attribution},
-                        {"source", c.source},
-                        {"embedder", c.embedder},
-                        {"sha256", c.sha256},
-                        {"chunks", c.chunks},
-                        {"builtAt", NullWhenEmpty(c.built_at)},
-                        {"unavailable", NullWhenEmpty(c.unavailable)}});
-    }
+    for (const auto& c : corpora) list.push_back(ambient::guidance::ToJson(c));
     return json{{"corpora", list}};
 }
 
@@ -795,7 +772,7 @@ ambient::guidance::SearchRequest GuidanceSearchRequest(const std::string& sessio
 }
 
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
-                                               ambient::guidance::GuidanceLane& lane,
+                                               ambient::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify) {
     int limit = kGuidanceLimit;
     if (params.contains("limit")) {
@@ -829,7 +806,7 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
 
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::GuidanceLane& lane) {
+                             ambient::guidance::IGuidanceLane& lane) {
     server.RegisterMethod("guidance/search", [&server, &sessions, &lane](const json& params) {
         return HandleGuidanceSearch(sessions, lane, params,
                                     [&server](const std::string& method, json notification) {

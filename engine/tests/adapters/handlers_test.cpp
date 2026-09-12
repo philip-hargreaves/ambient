@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "adapters/diarisation/anchor_store.hpp"
+#include "adapters/guidance/guidance_lane.hpp"
 #include "adapters/storage/sqlite_session_store.hpp"
 #include "core/version.hpp"
 
@@ -649,15 +650,30 @@ struct Sent {
 TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     ambient::guidance::Results results;
     results.considered = 40;
+    results.floor = 0.85;
+    ambient::guidance::Corpus scanned;
+    scanned.id = "fixture";
+    scanned.name = "Fixture guidance corpus";
+    scanned.licence = "invented";
+    scanned.attribution = "none";
+    scanned.source = "text";
+    scanned.embedder = "gte-large-int8";
+    scanned.sha256 = "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f";
+    scanned.chunks = 40;
+    scanned.built_at = "2026-09-11T00:00:00Z";
+    results.searched.push_back(scanned);
     ambient::guidance::Result one;
     one.corpus = "fixture";
     one.chunk_id = "fx100-1_1_1";
-    one.guideline = "fx100";
+    one.code = "fx100";
+    one.number = "1.1.1";
     one.title = "Fictional inflammatory joint disease: assessment and management";
     one.section = "1.1 Referral";
     one.text =
         "Refer adults with persistent synovitis of undetermined cause to a specialist, and refer "
         "urgently if the small joints of the hands or feet are affected.";
+    one.url = "https://example.test/fx100-1_1_1";
+    one.source = "text";
     one.score = 0.8971234;
     one.trigger = "Examination shows synovitis of several MCP joints.";
     results.shown.push_back(one);

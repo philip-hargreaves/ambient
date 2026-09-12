@@ -6,11 +6,11 @@
 
 #include "adapters/audio/capture_devices.hpp"
 #include "adapters/diarisation/anchor_store.hpp"
-#include "adapters/guidance/guidance_lane.hpp"
 #include "adapters/ipc/messages.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "core/session_controller.hpp"
+#include "ports/guidance_lane.hpp"
 #include "ports/note_lane.hpp"
 
 namespace ambient::models {
@@ -88,11 +88,11 @@ ambient::guidance::SearchRequest GuidanceSearchRequest(const std::string& sessio
 // guidance/search: the stored note of session id, or free text, through the
 // lane. The reply is immediate; the results arrive as a notification
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
-                                               ambient::guidance::GuidanceLane& lane,
+                                               ambient::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify);
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::GuidanceLane& lane);
+                             ambient::guidance::IGuidanceLane& lane);
 
 // Every method the engine serves. first_use: model caches were cold at
 // launch, so the one-off compiles are running and readiness reports them.

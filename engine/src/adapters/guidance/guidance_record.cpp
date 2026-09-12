@@ -1,0 +1,120 @@
+#include "adapters/guidance/guidance_record.hpp"
+
+#include <cmath>
+
+namespace ambient::guidance {
+namespace {
+
+// Null where absence is a state of its own: not built, not refused
+json OrNull(const std::string& s) {
+    if (s.empty()) return nullptr;
+    return s;
+}
+
+std::string Str(const json& j, const char* key) {
+    const auto it = j.find(key);
+    if (it == j.end() || it->is_null()) return "";
+    return it->get<std::string>();
+}
+
+int Int(const json& j, const char* key) {
+    const auto it = j.find(key);
+    if (it == j.end() || !it->is_number()) return 0;
+    return it->get<int>();
+}
+
+double Num(const json& j, const char* key) {
+    const auto it = j.find(key);
+    if (it == j.end() || !it->is_number()) return 0;
+    return it->get<double>();
+}
+
+}  // namespace
+
+json ToJson(const Corpus& c) {
+    return json{{"id", c.id},
+                {"name", c.name},
+                {"licence", c.licence},
+                {"attribution", c.attribution},
+                {"source", c.source},
+                {"embedder", c.embedder},
+                {"sha256", c.sha256},
+                {"chunks", c.chunks},
+                {"builtAt", OrNull(c.built_at)},
+                {"unavailable", OrNull(c.unavailable)}};
+}
+
+json ToJson(const Results& results) {
+    json shown = json::array();
+    for (const auto& r : results.shown) {
+        shown.push_back({{"corpus", r.corpus},
+                         {"chunkId", r.chunk_id},
+                         {"code", r.code},
+                         {"number", r.number},
+                         {"title", r.title},
+                         {"section", r.section},
+                         {"text", r.text},
+                         {"url", r.url},
+                         {"lastUpdated", r.last_updated},
+                         {"updateTag", r.update_tag},
+                         {"source", r.source},
+                         {"score", std::round(r.score * 1000) / 1000},
+                         {"trigger", r.trigger}});
+    }
+    json searched = json::array();
+    for (const auto& c : results.searched) searched.push_back(ToJson(c));
+    return json{{"shown", shown},
+                {"searched", searched},
+                {"considered", results.considered},
+                {"floor", results.floor},
+                {"abstained", results.abstained}};
+}
+
+Corpus CorpusFromJson(const json& j) {
+    Corpus c;
+    c.id = Str(j, "id");
+    c.name = Str(j, "name");
+    c.licence = Str(j, "licence");
+    c.attribution = Str(j, "attribution");
+    c.source = Str(j, "source");
+    c.embedder = Str(j, "embedder");
+    c.sha256 = Str(j, "sha256");
+    c.chunks = Int(j, "chunks");
+    c.built_at = Str(j, "builtAt");
+    c.unavailable = Str(j, "unavailable");
+    return c;
+}
+
+Results FromJson(const json& j) {
+    Results out;
+    if (const auto shown = j.find("shown"); shown != j.end() && shown->is_array()) {
+        for (const auto& r : *shown) {
+            Result result;
+            result.corpus = Str(r, "corpus");
+            result.chunk_id = Str(r, "chunkId");
+            result.code = Str(r, "code");
+            result.number = Str(r, "number");
+            result.title = Str(r, "title");
+            result.section = Str(r, "section");
+            result.text = Str(r, "text");
+            result.url = Str(r, "url");
+            result.last_updated = Str(r, "lastUpdated");
+            result.update_tag = Str(r, "updateTag");
+            result.source = Str(r, "source");
+            result.score = Num(r, "score");
+            result.trigger = Str(r, "trigger");
+            out.shown.push_back(std::move(result));
+        }
+    }
+    if (const auto searched = j.find("searched"); searched != j.end() && searched->is_array()) {
+        for (const auto& c : *searched) out.searched.push_back(CorpusFromJson(c));
+    }
+    out.considered = Int(j, "considered");
+    out.floor = Num(j, "floor");
+    if (const auto it = j.find("abstained"); it != j.end() && it->is_boolean()) {
+        out.abstained = it->get<bool>();
+    }
+    return out;
+}
+
+}  // namespace ambient::guidance

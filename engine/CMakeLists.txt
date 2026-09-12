@@ -40,12 +40,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# Results to and from JSON. Ports and json only, so ipc links this and not the
+# guidance adapter
+add_library(ambient_guidance_record STATIC
+    src/adapters/guidance/guidance_record.cpp)
+target_link_libraries(ambient_guidance_record
+    PUBLIC ambient_core nlohmann_json::nlohmann_json
+    PRIVATE ambient_warnings)
+
 add_library(ambient_ipc STATIC
     src/adapters/ipc/handlers.cpp
     src/adapters/ipc/pipe_security.cpp
     src/adapters/ipc/pipe_server.cpp)
 target_link_libraries(ambient_ipc
-    PUBLIC ambient_core ambient_guidance ambient_models nlohmann_json::nlohmann_json
+    PUBLIC ambient_core ambient_guidance_record ambient_models nlohmann_json::nlohmann_json
     PRIVATE ambient_warnings ambient_audio advapi32)
 
 FetchContent_Declare(

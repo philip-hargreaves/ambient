@@ -27,19 +27,26 @@ struct Corpus {
 // it, so the clinician sees why it appeared
 struct Result {
     std::string corpus;
-    std::string chunk_id;   // guideline code and recommendation number, "ng100-1_1_1"
-    std::string guideline;  // the code alone, "ng100"
+    std::string chunk_id;  // guideline code and recommendation number, "ng100-1_1_1"
+    std::string code;      // the code alone, "ng100"
+    std::string number;    // recommendation number, "1.1.1"
     std::string title;
     std::string section;
     std::string text;
+    std::string url;
+    std::string last_updated;  // ISO 8601, from the guideline
+    std::string update_tag;    // NICE change marker on the recommendation
+    std::string source;        // the corpus source, "nice"/"text"/"upload"
     double score = 0;
     std::string trigger;
 };
 
 struct Results {
     std::vector<Result> shown;
-    int considered = 0;      // candidates before the floor and the filters
-    bool abstained = false;  // nothing cleared the floor
+    std::vector<Corpus> searched;  // corpora open to the search, for the record
+    int considered = 0;            // candidates before the floor and the filters
+    double floor = 0;              // cosine floor the candidates were held to
+    bool abstained = false;        // nothing cleared the floor
 };
 
 // Retrieval for the Guidelines feature: the note in, the recommendations to

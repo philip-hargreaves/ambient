@@ -44,8 +44,14 @@ struct FakeGuidanceRetriever : IGuidanceRetriever {
                 if (static_cast<int>(results.shown.size()) >= limit) break;
                 const auto id = chunk.at("id").get<std::string>();
                 if (std::find(expected.begin(), expected.end(), id) == expected.end()) continue;
-                results.shown.push_back({"fixture", id, chunk.at("code"), chunk.at("title"),
-                                         chunk.at("section"), chunk.at("text"), 1.0, note});
+                results.shown.push_back({.corpus = "fixture",
+                                         .chunk_id = id,
+                                         .code = chunk.at("code"),
+                                         .title = chunk.at("title"),
+                                         .section = chunk.at("section"),
+                                         .text = chunk.at("text"),
+                                         .score = 1.0,
+                                         .trigger = note});
             }
         }
         return results;
@@ -98,7 +104,7 @@ TEST(FakeGuidanceRetriever, HonoursTheLimitAndNamesTheTrigger) {
     EXPECT_FALSE(all.abstained);
     EXPECT_EQ(all.considered, static_cast<int>(fake.corpus.size()));
     EXPECT_EQ(all.shown.front().trigger, note);
-    EXPECT_EQ(all.shown.front().guideline, "fx100");
+    EXPECT_EQ(all.shown.front().code, "fx100");
     EXPECT_EQ(fake.Search(note, 1).shown.size(), 1u);
 }
 
