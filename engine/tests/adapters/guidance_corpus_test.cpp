@@ -16,37 +16,17 @@
 #endif
 #include <windows.h>
 
-#include "adapters/guidance/chunker.hpp"
 #include "adapters/guidance/corpus_builder.hpp"
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/storage/db.hpp"
+#include "guidance_fixture.hpp"
 
 namespace ambient::guidance {
 namespace {
 
 constexpr const char* kFixtureDir = AMBIENT_GUIDANCE_FIXTURE_DIR;
 constexpr int kDim = 8;
-
-std::vector<Chunk> FixtureChunks() {
-    std::ifstream in(std::filesystem::path(kFixtureDir) / "corpus.jsonl");
-    if (!in.is_open()) throw std::runtime_error("missing guidance fixture corpus");
-    std::vector<Chunk> chunks;
-    for (std::string line; std::getline(in, line);) {
-        if (line.empty()) continue;
-        const auto row = nlohmann::json::parse(line);
-        Chunk c;
-        c.id = row.at("id");
-        c.code = row.at("code");
-        c.title = row.at("title");
-        c.section = row.at("section");
-        c.text = row.at("text");
-        c.url = "https://example.test/" + c.id;
-        c.source = "text";
-        chunks.push_back(std::move(c));
-    }
-    return chunks;
-}
 
 // Deterministic unit vectors, one per chunk
 std::vector<float> FixtureVectors(std::size_t rows) {
@@ -76,36 +56,21 @@ CorpusSpec Spec() {
     spec.licence = "invented";
     spec.attribution = "none";
     spec.source = "text";
-    spec.embedder_id = "fx-embed-int8";
-    spec.embedder_rev = "abc123";
-    spec.dim = kDim;
+    spec.embedder = Embedder();
     spec.built_at = "2026-09-10T00:00:00Z";
     spec.builder = "engine_tests";
     return spec;
 }
 
-struct CorpusDir {
-    std::filesystem::path path;
-    explicit CorpusDir(const char* name)
-        : path(std::filesystem::temp_directory_path() / ("ambient-corpus-" + std::string(name))) {
-        std::filesystem::remove_all(path);
-    }
-    ~CorpusDir() {
-        std::error_code ignored;
-        for (const auto& e : std::filesystem::recursive_directory_iterator(path, ignored)) {
-            SetFileAttributesW(e.path().c_str(), FILE_ATTRIBUTE_NORMAL);
-        }
-        std::filesystem::remove_all(path, ignored);
-    }
-};
+using fixture::TempDir;
 
-void Build(const CorpusDir& dir) {
-    const auto chunks = FixtureChunks();
+void Build(const TempDir& dir) {
+    const auto chunks = fixture::Chunks(kFixtureDir);
     BuildCorpus(dir.path, Spec(), chunks, FixtureVectors(chunks.size()));
 }
 
 // After editing corpus.db by hand, make the manifest agree again so a deeper guard is reached
-void Rehash(const CorpusDir& dir) {
+void Rehash(const TempDir& dir) {
     const auto manifest_path = dir.path / kManifestFile;
     std::ifstream in(manifest_path);
     auto manifest = nlohmann::json::parse(in);
@@ -117,7 +82,7 @@ void Rehash(const CorpusDir& dir) {
     out << manifest.dump(2);
 }
 
-void EditManifest(const CorpusDir& dir, const char* key, const nlohmann::json& value) {
+void EditManifest(const TempDir& dir, const char* key, const nlohmann::json& value) {
     const auto manifest_path = dir.path / kManifestFile;
     std::ifstream in(manifest_path);
     auto manifest = nlohmann::json::parse(in);
@@ -127,12 +92,12 @@ void EditManifest(const CorpusDir& dir, const char* key, const nlohmann::json& v
     out << manifest.dump(2);
 }
 
-void Sql(const CorpusDir& dir, const char* sql) {
+void Sql(const TempDir& dir, const char* sql) {
     store::Db db(dir.path / kCorpusFile, store::Db::Mode::kBuild);
     db.Exec(sql);
 }
 
-std::string Refusal(const CorpusDir& dir) {
+std::string Refusal(const TempDir& dir) {
     std::string reason;
     const auto store = CorpusStore::Open(dir.path, Embedder(), reason);
     EXPECT_EQ(store, nullptr);
@@ -140,7 +105,7 @@ std::string Refusal(const CorpusDir& dir) {
 }
 
 TEST(CorpusStore, BuildsOpensAndFillsTheMatrixInOrdinalOrder) {
-    CorpusDir dir("build");
+    TempDir dir("corpus-build");
     Build(dir);
     EXPECT_FALSE(std::filesystem::exists(dir.path / "corpus.db.tmp"));
     EXPECT_FALSE(std::filesystem::exists(dir.path / "corpus.db-wal"));
@@ -150,7 +115,7 @@ TEST(CorpusStore, BuildsOpensAndFillsTheMatrixInOrdinalOrder) {
     const auto store = CorpusStore::Open(dir.path, Embedder(), reason);
     ASSERT_NE(store, nullptr) << reason;
     EXPECT_TRUE(reason.empty());
-    const auto chunks = FixtureChunks();
+    const auto chunks = fixture::Chunks(kFixtureDir);
     const auto vectors = FixtureVectors(chunks.size());
     ASSERT_EQ(store->Size(), chunks.size());
     EXPECT_EQ(store->Dim(), kDim);
@@ -168,7 +133,7 @@ TEST(CorpusStore, BuildsOpensAndFillsTheMatrixInOrdinalOrder) {
 }
 
 TEST(CorpusStore, TheFileUsesARollbackJournalAndTheCorpusPageSize) {
-    CorpusDir dir("journal");
+    TempDir dir("corpus-journal");
     Build(dir);
     std::ifstream in(dir.path / kCorpusFile, std::ios::binary);
     unsigned char header[100];
@@ -179,7 +144,7 @@ TEST(CorpusStore, TheFileUsesARollbackJournalAndTheCorpusPageSize) {
 }
 
 TEST(CorpusStore, RefusesAHashThatDoesNotMatchTheManifest) {
-    CorpusDir dir("hash");
+    TempDir dir("corpus-hash");
     Build(dir);
     EditManifest(dir, "sha256", std::string(64, '0'));
     EXPECT_NE(Refusal(dir).find("hash"), std::string::npos);
@@ -187,7 +152,7 @@ TEST(CorpusStore, RefusesAHashThatDoesNotMatchTheManifest) {
 
 TEST(CorpusStore, RefusesWhenMetaAndManifestDisagree) {
     for (const char* key : {"id", "dim", "embedder_id", "chunks"}) {
-        CorpusDir dir("meta");
+        TempDir dir("corpus-meta");
         Build(dir);
         if (std::string(key) == "dim") {
             EditManifest(dir, key, kDim + 1);
@@ -203,7 +168,7 @@ TEST(CorpusStore, RefusesWhenMetaAndManifestDisagree) {
 }
 
 TEST(CorpusStore, RefusesACorpusBuiltWithAnotherEmbedder) {
-    CorpusDir dir("embedder");
+    TempDir dir("corpus-embedder");
     Build(dir);
     std::string reason;
     auto staged = Embedder();
@@ -218,7 +183,7 @@ TEST(CorpusStore, RefusesACorpusBuiltWithAnotherEmbedder) {
 
 TEST(CorpusStore, RefusesDamagedShards) {
     {
-        CorpusDir dir("shard-length");
+        TempDir dir("corpus-shard-length");
         Build(dir);
         Sql(dir,
             "PRAGMA ignore_check_constraints=ON; UPDATE guidance_vectors SET data = substr(data, "
@@ -227,14 +192,14 @@ TEST(CorpusStore, RefusesDamagedShards) {
         EXPECT_NE(Refusal(dir).find("length"), std::string::npos);
     }
     {
-        CorpusDir dir("shard-gap");
+        TempDir dir("corpus-shard-gap");
         Build(dir);
         Sql(dir, "UPDATE guidance_vectors SET first_ord = first_ord + 1 WHERE shard = 0");
         Rehash(dir);
         EXPECT_NE(Refusal(dir).find("contiguous"), std::string::npos);
     }
     {
-        CorpusDir dir("shard-norm");
+        TempDir dir("corpus-shard-norm");
         Build(dir);
         // the first float becomes 2.0, so the first vector is no longer unit length
         Sql(dir,
@@ -247,21 +212,21 @@ TEST(CorpusStore, RefusesDamagedShards) {
 
 TEST(CorpusStore, RefusesAForeignOrNewerFileAndAWalModeFile) {
     {
-        CorpusDir dir("version");
+        TempDir dir("corpus-version");
         Build(dir);
         Sql(dir, "PRAGMA user_version=2");
         Rehash(dir);
         EXPECT_NE(Refusal(dir).find("format"), std::string::npos);
     }
     {
-        CorpusDir dir("app-id");
+        TempDir dir("corpus-app-id");
         Build(dir);
         Sql(dir, "PRAGMA application_id=0");
         Rehash(dir);
         EXPECT_NE(Refusal(dir).find("not a corpus"), std::string::npos);
     }
     {
-        CorpusDir dir("wal");
+        TempDir dir("corpus-wal");
         Build(dir);
         Sql(dir, "PRAGMA journal_mode=WAL");
         Rehash(dir);
@@ -270,7 +235,7 @@ TEST(CorpusStore, RefusesAForeignOrNewerFileAndAWalModeFile) {
 }
 
 TEST(CorpusStore, ReportsAMissingOrBrokenManifestAsUnavailable) {
-    CorpusDir dir("manifest");
+    TempDir dir("corpus-manifest");
     std::filesystem::create_directories(dir.path);
     EXPECT_EQ(Refusal(dir), "no manifest.json");
     std::ofstream(dir.path / kManifestFile) << "{ not json";
@@ -278,22 +243,25 @@ TEST(CorpusStore, ReportsAMissingOrBrokenManifestAsUnavailable) {
 }
 
 TEST(CorpusStore, LoadsFromAReadOnlyDirectory) {
-    CorpusDir dir("readonly");
+    TempDir dir("corpus-readonly");
     Build(dir);
     for (const char* name : {kCorpusFile, kManifestFile}) {
         SetFileAttributesW((dir.path / name).c_str(), FILE_ATTRIBUTE_READONLY);
     }
     std::string reason;
     const auto store = CorpusStore::Open(dir.path, Embedder(), reason);
+    for (const char* name : {kCorpusFile, kManifestFile}) {
+        SetFileAttributesW((dir.path / name).c_str(), FILE_ATTRIBUTE_NORMAL);
+    }
     ASSERT_NE(store, nullptr) << reason;
-    EXPECT_EQ(store->TextAt(0).text, FixtureChunks()[0].text);
+    EXPECT_EQ(store->TextAt(0).text, fixture::Chunks(kFixtureDir)[0].text);
 }
 
 TEST(CorpusBuilder, RefusesBadInputAndLeavesAnExistingCorpusIntact) {
-    CorpusDir dir("atomic");
+    TempDir dir("corpus-atomic");
     Build(dir);
     const auto before = models::Sha256File(dir.path / kCorpusFile);
-    auto chunks = FixtureChunks();
+    auto chunks = fixture::Chunks(kFixtureDir);
     auto vectors = FixtureVectors(chunks.size());
     vectors[0] *= 2.0f;
     EXPECT_THROW(BuildCorpus(dir.path, Spec(), chunks, vectors), std::invalid_argument);

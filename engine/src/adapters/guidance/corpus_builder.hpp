@@ -1,20 +1,14 @@
 #pragma once
 
-#include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string>
 #include <vector>
 
 #include "adapters/guidance/chunker.hpp"
+#include "adapters/guidance/embedder.hpp"
 
 namespace ambient::guidance {
-
-inline constexpr std::uint32_t kCorpusApplicationId = 0x414D4247;  // "AMBG"
-inline constexpr int kCorpusFormat = 1;
-inline constexpr int kShardVectors = 256;  // 1 MB a shard at 1024 dimensions
-inline constexpr const char* kCorpusFile = "corpus.db";
-inline constexpr const char* kManifestFile = "manifest.json";
 
 // What the indexer knows about a corpus that the chunks do not carry
 struct CorpusSpec {
@@ -23,11 +17,7 @@ struct CorpusSpec {
     std::string licence;
     std::string attribution;
     std::string source;  // "nice" or "text"
-    std::string embedder_id;
-    std::string embedder_rev;  // sha256 of the model weights
-    std::string query_prefix;
-    int max_tokens = 512;
-    int dim = 0;
+    EmbedderIdentity embedder;
     std::string built_at;  // ISO 8601 UTC
     std::string builder;
 };

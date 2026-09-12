@@ -55,7 +55,6 @@ inline std::vector<Chunk> Chunks(const std::filesystem::path& fixture_dir,
         c.section = row.at("section");
         c.text = row.at("text");
         c.url = "https://example.test/" + c.id;
-        c.source = "text";
         chunks.push_back(std::move(c));
     }
     return chunks;
@@ -108,11 +107,7 @@ inline void Build(const std::filesystem::path& dir, const std::string& id, IEmbe
     spec.licence = "invented";
     spec.attribution = "none";
     spec.source = "text";
-    spec.embedder_id = identity.id;
-    spec.embedder_rev = identity.rev;
-    spec.query_prefix = identity.query_prefix;
-    spec.max_tokens = identity.max_tokens;
-    spec.dim = identity.dim;
+    spec.embedder = identity;
     spec.built_at = "2026-09-11T00:00:00Z";
     spec.builder = "tests";
     BuildCorpus(dir, spec, chunks, vectors);

@@ -4,7 +4,6 @@
 #include <map>
 #include <stdexcept>
 
-#include "adapters/guidance/corpus_builder.hpp"
 #include "core/guidance_query.hpp"
 #include "core/guidance_scan.hpp"
 

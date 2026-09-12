@@ -6,10 +6,9 @@
 
 namespace ambient::guidance {
 
-// A guidance corpus the retriever found. The hash, embedder and build date go
-// into the sealed record of what a session was shown, so an audit can name the
-// text that produced it. A corpus that failed a load guard is listed with the
-// reason and searched by nothing
+// A guidance corpus the retriever found. The hash, embedder and build date
+// name the exact text a result came from. A corpus that failed a load guard is
+// listed with the reason and searched by nothing
 struct Corpus {
     std::string id;
     std::string name;

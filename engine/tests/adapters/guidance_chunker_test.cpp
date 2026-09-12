@@ -51,7 +51,6 @@ TEST(ChunksFromDocument, OneChunkPerRecommendationWithDuplicatesAndParagraphsSki
     EXPECT_EQ(chunks[0].last_updated, "2026-01-01");
     EXPECT_EQ(chunks[0].url,
               "https://example.test/guidance/fx100/chapter/Recommendations#fx100-1_1_1");
-    EXPECT_EQ(chunks[0].source, "nice");
     EXPECT_EQ(chunks[1].id, "fx100-1_1_2");
     EXPECT_EQ(chunks[2].id, "fx100-1_2_1") << "the copied chapter contributes only its new id";
     EXPECT_EQ(chunks[2].chapter, "Recommendations (copy)");
@@ -99,7 +98,6 @@ TEST(ChunksFromText, RunsCloseAtHeadingsAndAtTheTargetLength) {
     EXPECT_EQ(chunks[2].text, Paragraph(40)) << "the run before it reached the target length";
     EXPECT_EQ(chunks[3].text.substr(0, 16), "Recommendation 2");
     EXPECT_EQ(chunks[3].url, "doc.md");
-    EXPECT_EQ(chunks[3].source, "text");
     EXPECT_TRUE(ChunksFromText("x", "x", "too short\n\nalso short").empty());
 }
 

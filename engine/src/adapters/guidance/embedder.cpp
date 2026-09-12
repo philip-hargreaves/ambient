@@ -7,6 +7,8 @@
 #include <utility>
 #include <variant>
 
+#include "adapters/models/model_store.hpp"
+
 namespace ambient::guidance {
 
 struct Embedder::Impl {

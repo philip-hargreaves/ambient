@@ -14,7 +14,6 @@
 #endif
 #include <windows.h>
 
-#include "adapters/guidance/corpus_builder.hpp"
 #include "adapters/models/model_store.hpp"
 
 namespace ambient::guidance {
@@ -182,11 +181,10 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         }
 
         auto cites = store->db_.Prepare(
-            "SELECT chunk_id, code, title, chapter, number, section FROM chunks ORDER BY ord");
+            "SELECT chunk_id, code, title, number, section FROM chunks ORDER BY ord");
         while (cites.Step()) {
             store->cites_.push_back({cites.ColumnText(0), cites.ColumnText(1), cites.ColumnText(2),
-                                     cites.ColumnText(3), cites.ColumnText(4),
-                                     cites.ColumnText(5)});
+                                     cites.ColumnText(3), cites.ColumnText(4)});
         }
         Guard(store->cites_.size() == rows, "chunk rows changed under the reader");
         reason.clear();

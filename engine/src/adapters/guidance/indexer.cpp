@@ -1,18 +1,14 @@
 #include "adapters/guidance/indexer.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
+#include "core/guidance_query.hpp"
+
 namespace ambient::guidance {
 namespace {
-
-std::string Lower(std::string s) {
-    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
 
 std::string ReadFile(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
@@ -30,7 +26,8 @@ std::vector<std::filesystem::path> SortedFiles(const std::filesystem::path& dir,
                                                const std::set<std::string>& extensions) {
     std::vector<std::filesystem::path> files;
     for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-        if (entry.is_regular_file() && extensions.count(Lower(entry.path().extension().string()))) {
+        if (entry.is_regular_file() &&
+            extensions.count(detail::Lower(entry.path().extension().string()))) {
             files.push_back(entry.path());
         }
     }
@@ -88,7 +85,7 @@ std::set<std::string> ReadCodes(const std::filesystem::path& file) {
         if (end == std::string::npos) continue;
         code.erase(end + 1);
         code.erase(0, code.find_first_not_of(" \t"));
-        if (!code.empty()) codes.insert(Lower(code));
+        if (!code.empty()) codes.insert(detail::Lower(code));
     }
     return codes;
 }
@@ -113,7 +110,7 @@ std::vector<Chunk> ChunksFromTextDir(const std::filesystem::path& dir) {
     std::vector<Chunk> out;
     for (const auto& path : SortedFiles(dir, {".md", ".txt"})) {
         const auto text = ReadFile(path);
-        const auto code = Lower(path.stem().string());
+        const auto code = detail::Lower(path.stem().string());
         auto title = FirstHeading(text);
         if (title.empty()) title = path.stem().string();
         auto chunks = ChunksFromText(code, title, text, path.filename().string());
@@ -145,11 +142,7 @@ IndexReport IndexCorpus(const BuildSpec& spec, IEmbedder& embedder,
         if (progress) progress(i + 1, chunks.size());
     }
     CorpusSpec corpus = spec.corpus;
-    corpus.embedder_id = identity.id;
-    corpus.embedder_rev = identity.rev;
-    corpus.query_prefix = identity.query_prefix;
-    corpus.max_tokens = identity.max_tokens;
-    corpus.dim = identity.dim;
+    corpus.embedder = identity;
     corpus.built_at = built_at;
     corpus.builder = builder;
     BuildCorpus(out_dir, corpus, chunks, vectors);
