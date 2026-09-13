@@ -441,7 +441,11 @@ int main(int argc, char* argv[]) {
                 return ambient::guidance::Embedder::Load(model_store);
             },
             corpora_root);
-        ambient::guidance::GuidanceLane guidance_lane(guidance_retriever);
+        ambient::guidance::GuidanceLane guidance_lane(
+            guidance_retriever, [&server](const ambient::guidance::Readiness& readiness) {
+                server.PushNotification("guidance/model",
+                                        ambient::ipc::GuidanceModelJson(readiness));
+            });
         events.SetGuidance(&guidance_lane);
         guidance_lane.Prepare();
         // 10 s, not 3: a Bluetooth microphone link waking measured 1.6-8.8 s

@@ -626,6 +626,9 @@ struct EchoRetriever : ambient::guidance::IGuidanceRetriever {
     std::vector<ambient::guidance::Corpus> Corpora() override {
         return {};
     }
+    ambient::guidance::Readiness Status() override {
+        return {ambient::guidance::Readiness::Phase::kReady, ""};
+    }
 };
 
 // Notifications the lane sent, waitable
@@ -780,8 +783,19 @@ TEST(Handlers, GuidanceCorporaMatchesTheFixture) {
     refused.id = "nice-2026-08-25";
     refused.unavailable = "corpus.db sha256 does not match the manifest";
 
+    ambient::guidance::Readiness ready;
+    ready.phase = ambient::guidance::Readiness::Phase::kReady;
     const json fixture = LoadFixture("guidance-corpora.json");
-    EXPECT_EQ(GuidanceCorporaJson({loaded, refused}), fixture["result"]);
+    EXPECT_EQ(GuidanceCorporaJson(ready, {loaded, refused}), fixture["result"]);
+}
+
+TEST(Handlers, GuidanceModelMatchesTheFixture) {
+    ambient::guidance::Readiness unavailable;
+    unavailable.phase = ambient::guidance::Readiness::Phase::kUnavailable;
+    unavailable.detail = "no model for embedding/default";
+    const json fixture = LoadFixture("guidance-model.json");
+    EXPECT_EQ(fixture["method"], "guidance/model");
+    EXPECT_EQ(GuidanceModelJson(unavailable), fixture["params"]);
 }
 
 TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {

@@ -755,12 +755,31 @@ json GuidanceReadyJson(const std::string& session, const ambient::guidance::Reco
     return body;
 }
 
+const char* PhaseName(ambient::guidance::Readiness::Phase phase) {
+    switch (phase) {
+        case ambient::guidance::Readiness::Phase::kLoading:
+            return "loading";
+        case ambient::guidance::Readiness::Phase::kReady:
+            return "ready";
+        case ambient::guidance::Readiness::Phase::kUnavailable:
+            return "unavailable";
+    }
+    return "unavailable";
+}
+
 }  // namespace
 
-json GuidanceCorporaJson(const std::vector<ambient::guidance::Corpus>& corpora) {
+json GuidanceModelJson(const ambient::guidance::Readiness& readiness) {
+    return json{{"state", PhaseName(readiness.phase)}, {"detail", NullWhenEmpty(readiness.detail)}};
+}
+
+json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
+                         const std::vector<ambient::guidance::Corpus>& corpora) {
+    json result = GuidanceModelJson(readiness);
     json list = json::array();
     for (const auto& c : corpora) list.push_back(ambient::guidance::ToJson(c));
-    return json{{"corpora", list}};
+    result["corpora"] = list;
+    return result;
 }
 
 ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
@@ -861,7 +880,7 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
                                     });
     });
     server.RegisterMethod("guidance/corpora", [&retriever](const json&) {
-        return GuidanceCorporaJson(retriever.Corpora());
+        return GuidanceCorporaJson(retriever.Status(), retriever.Corpora());
     });
     server.RegisterMethod("session/guidance", [&sessions](const json& params) {
         return HandleSessionGuidance(sessions, params);

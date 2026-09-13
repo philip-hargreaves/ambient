@@ -61,6 +61,9 @@ struct StubRetriever : IGuidanceRetriever {
     std::vector<Corpus> Corpora() override {
         return {};
     }
+    Readiness Status() override {
+        return {};
+    }
 };
 
 TEST(GuidancePort, DocumentCallsAreNotSupportedYet) {

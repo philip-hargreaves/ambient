@@ -90,7 +90,9 @@ std::string NoteText(const char* id) {
 TEST(Retriever, ListsEveryCorpusDirectoryWithTheStaleOneUnavailable) {
     Root root;
     auto retriever = root.Make();
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kLoading);
     retriever->Prepare();
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kReady);
     const auto corpora = retriever->Corpora();
     ASSERT_EQ(corpora.size(), 3u);
     EXPECT_EQ(corpora[0].id, "fixture-a");
@@ -203,6 +205,8 @@ TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {
     }
     EXPECT_EQ(loads, 1);
     EXPECT_TRUE(retriever.Corpora().empty());
+    EXPECT_EQ(retriever.Status().phase, Readiness::Phase::kUnavailable);
+    EXPECT_EQ(retriever.Status().detail, "no embedding model staged");
 }
 
 TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
@@ -210,6 +214,7 @@ TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
                         std::filesystem::temp_directory_path() / "ambient-retriever-none");
     retriever.Prepare();
     EXPECT_TRUE(retriever.Corpora().empty());
+    EXPECT_EQ(retriever.Status().phase, Readiness::Phase::kReady) << "loaded, nothing installed";
     const auto results = retriever.Search("Chest pain on exertion.", 3);
     EXPECT_TRUE(results.shown.empty());
     EXPECT_FALSE(results.abstained);

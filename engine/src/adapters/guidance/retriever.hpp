@@ -25,9 +25,9 @@ using EmbedderLoader = std::function<std::unique_ptr<IEmbedder>()>;
 // The shipped retriever: one embedder, every corpus under corpora_root that
 // passes the load guards, exact scan, rank vote across the sub-queries, cosine
 // floor, population guard. A result's score is its best cosine; the order is
-// the vote. Prepare and Search run one at a time; Corpora may be read from any
-// thread. A load failure is kept and rethrown, never retried: the model store
-// does not change while the engine runs
+// the vote. Prepare and Search run one at a time. Corpora and Status may be
+// read from any thread. A load failure is kept and rethrown, never retried,
+// since the model store does not change while the engine runs
 class Retriever : public IGuidanceRetriever {
    public:
     Retriever(EmbedderLoader load_embedder, std::filesystem::path corpora_root,
@@ -36,6 +36,7 @@ class Retriever : public IGuidanceRetriever {
     void Prepare() override;
     Results Search(const std::string& note, int limit) override;
     std::vector<Corpus> Corpora() override;
+    Readiness Status() override;
 
    private:
     struct Loaded {
@@ -55,6 +56,7 @@ class Retriever : public IGuidanceRetriever {
 
     std::mutex corpora_mutex_;
     std::vector<Corpus> corpora_;
+    Readiness readiness_;
 };
 
 }  // namespace ambient::guidance

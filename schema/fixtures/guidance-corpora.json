@@ -2,6 +2,8 @@
     "jsonrpc": "2.0",
     "id": 13,
     "result": {
+        "state": "ready",
+        "detail": null,
         "corpora": [
             {
                 "id": "fixture",

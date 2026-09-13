@@ -79,7 +79,11 @@ json HandleDemoClear(ambient::store::ISessionStore& sessions);
 // Guidance: the panel shows the top three
 inline constexpr int kGuidanceLimit = 3;
 using Notify = std::function<void(const std::string& method, json params)>;
-json GuidanceCorporaJson(const std::vector<ambient::guidance::Corpus>& corpora);
+// guidance/corpora: whether the embedder is loading, ready or unavailable, and
+// every corpus directory. guidance/model carries the state alone once loading ends
+json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
+                         const std::vector<ambient::guidance::Corpus>& corpora);
+json GuidanceModelJson(const ambient::guidance::Readiness& readiness);
 // The lane request behind every search: results go out as guidance/ready, a
 // failure as guidance/failed, both naming the session (null for free text).
 // With a session the record is stored before the notification. A session

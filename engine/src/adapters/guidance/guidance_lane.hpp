@@ -1,6 +1,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -10,11 +11,13 @@
 
 namespace ambient::guidance {
 
+using ReadinessListener = std::function<void(const Readiness&)>;
+
 // One worker over the retriever: loads in the background and calls the
-// request's callbacks on the worker
+// request's callbacks on the worker. The listener hears how loading ended
 class GuidanceLane : public IGuidanceLane {
    public:
-    explicit GuidanceLane(IGuidanceRetriever& retriever);
+    explicit GuidanceLane(IGuidanceRetriever& retriever, ReadinessListener on_readiness = {});
     ~GuidanceLane() override;
 
     void Prepare() override;
@@ -25,6 +28,7 @@ class GuidanceLane : public IGuidanceLane {
     void Work();
 
     IGuidanceRetriever& retriever_;
+    ReadinessListener on_readiness_;
     std::mutex mutex_;
     std::condition_variable wake_;
     std::thread worker_;

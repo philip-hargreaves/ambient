@@ -6,7 +6,8 @@
 
 namespace ambient::guidance {
 
-GuidanceLane::GuidanceLane(IGuidanceRetriever& retriever) : retriever_(retriever) {}
+GuidanceLane::GuidanceLane(IGuidanceRetriever& retriever, ReadinessListener on_readiness)
+    : retriever_(retriever), on_readiness_(std::move(on_readiness)) {}
 
 GuidanceLane::~GuidanceLane() {
     {
@@ -58,6 +59,7 @@ void GuidanceLane::Work() {
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "ambient-engine: guidance unavailable: %s\n", e.what());
             }
+            if (on_readiness_) on_readiness_(retriever_.Status());
             lock.lock();
             continue;
         }

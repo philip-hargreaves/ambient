@@ -29,6 +29,7 @@ struct FakeRetriever : IGuidanceRetriever {
     void Prepare() override {
         std::lock_guard<std::mutex> lock(mutex);
         ++prepares;
+        changed.notify_all();
         if (prepare_throws) throw std::runtime_error("no embedding model staged");
     }
     Results Search(const std::string& note, int limit) override {
@@ -47,6 +48,11 @@ struct FakeRetriever : IGuidanceRetriever {
     }
     std::vector<Corpus> Corpora() override {
         return {};
+    }
+    Readiness Status() override {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (prepare_throws) return {Readiness::Phase::kUnavailable, "no embedding model staged"};
+        return {Readiness::Phase::kReady, ""};
     }
 
     template <typename Pred>
@@ -143,6 +149,28 @@ TEST(GuidanceLane, ALoadFailureIsLoggedAndSurfacesOnTheSearch) {
     ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.failed.size() == 1; }));
     EXPECT_EQ(outcome.failed[0], "no embedding model staged");
     EXPECT_EQ(retriever.prepares, 1);
+}
+
+TEST(GuidanceLane, PrepareReportsHowLoadingEnded) {
+    std::vector<Readiness> heard;
+    auto listen = [&](const Readiness& readiness) { heard.push_back(readiness); };
+    {
+        FakeRetriever retriever;
+        GuidanceLane lane(retriever, listen);
+        lane.Prepare();
+        ASSERT_TRUE(retriever.WaitUntil([&] { return retriever.prepares == 1; }));
+    }
+    {
+        FakeRetriever retriever;
+        retriever.prepare_throws = true;
+        GuidanceLane lane(retriever, listen);
+        lane.Prepare();
+        ASSERT_TRUE(retriever.WaitUntil([&] { return retriever.prepares == 1; }));
+    }
+    ASSERT_EQ(heard.size(), 2u);
+    EXPECT_EQ(heard[0].phase, Readiness::Phase::kReady);
+    EXPECT_EQ(heard[1].phase, Readiness::Phase::kUnavailable);
+    EXPECT_EQ(heard[1].detail, "no embedding model staged");
 }
 
 TEST(GuidanceLane, PrepareRunsOnceOnTheWorker) {

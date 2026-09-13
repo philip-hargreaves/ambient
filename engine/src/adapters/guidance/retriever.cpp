@@ -82,8 +82,11 @@ void Retriever::Load() {
         loaded_ = std::move(loaded);
         std::lock_guard<std::mutex> lock(corpora_mutex_);
         corpora_ = std::move(corpora);
+        readiness_ = {Readiness::Phase::kReady, ""};
     } catch (const std::exception& e) {
         load_error_ = e.what();
+        std::lock_guard<std::mutex> lock(corpora_mutex_);
+        readiness_ = {Readiness::Phase::kUnavailable, load_error_};
         throw;
     }
 }
@@ -167,6 +170,11 @@ Results Retriever::Search(const std::string& note, int limit) {
 std::vector<Corpus> Retriever::Corpora() {
     std::lock_guard<std::mutex> lock(corpora_mutex_);
     return corpora_;
+}
+
+Readiness Retriever::Status() {
+    std::lock_guard<std::mutex> lock(corpora_mutex_);
+    return readiness_;
 }
 
 }  // namespace ambient::guidance

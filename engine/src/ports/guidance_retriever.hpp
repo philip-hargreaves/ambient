@@ -48,6 +48,13 @@ struct Results {
     bool abstained = false;        // nothing to show, by filter or by floor
 };
 
+// Whether the embedder and corpora are usable yet
+struct Readiness {
+    enum class Phase { kLoading, kReady, kUnavailable };
+    Phase phase = Phase::kLoading;
+    std::string detail;  // the loader's reason when unavailable
+};
+
 // Retrieval for the Guidelines feature: the note in, the recommendations to
 // show out, already filtered, ordered and thresholded. Retrieved text never
 // enters a generated document. Uploads arrive later; until then the two
@@ -63,6 +70,8 @@ class IGuidanceRetriever {
     virtual Results Search(const std::string& note, int limit) = 0;
 
     virtual std::vector<Corpus> Corpora() = 0;
+
+    virtual Readiness Status() = 0;
 
     virtual void AddDocument(const std::string& /*path*/) {
         throw std::logic_error("guidance documents are not supported yet");
