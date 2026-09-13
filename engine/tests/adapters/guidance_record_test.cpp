@@ -35,6 +35,7 @@ Results Sample() {
     full.last_updated = "2020-07-01";
     full.update_tag = "2020";
     full.source = "nice";
+    full.citation = "NG100 1.1.1, Rheumatoid arthritis in adults: management";
     full.score = 0.8971234;  // rounded to 3 dp on the wire
     full.trigger = "Synovitis of the small joints of both hands.";
     out.shown.push_back(full);
@@ -48,14 +49,16 @@ Results Sample() {
     sparse.section = "1.2 Investigations";
     sparse.text = "Offer a full blood count.";
     sparse.source = "nice";
+    sparse.citation = "NG100 1.2.1, Rheumatoid arthritis in adults: management";
     sparse.score = 0.861;
     sparse.trigger = "Bloods requested.";
     out.shown.push_back(sparse);
     return out;
 }
 
-TEST(GuidanceRecord, RoundTripsEveryField) {
+TEST(GuidanceRecord, ReadingBackAndWritingAgainChangesNothing) {
     const json wire = ToJson(Sample());
+    EXPECT_EQ(wire["version"], kRecordVersion);
     const Results back = FromJson(wire);
     EXPECT_EQ(ToJson(back), wire) << wire.dump(2);
 }

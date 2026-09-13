@@ -128,6 +128,7 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
         EXPECT_FALSE(r.number.empty());
         EXPECT_EQ(r.url, "https://example.test/" + r.chunk_id);
         EXPECT_EQ(r.source, "text");
+        EXPECT_EQ(r.citation, Citation(r.code, r.number, r.title));
         EXPECT_GE(r.score, 0.2);
         EXPECT_NE(note.find(r.trigger), std::string::npos) << "trigger is a sentence of the note";
     }
@@ -171,6 +172,17 @@ TEST(Retriever, AnEmptyNoteAbstainsWithoutEmbedding) {
     const auto results = retriever->Search("  ", 3);
     EXPECT_TRUE(results.abstained);
     EXPECT_EQ(results.considered, 0);
+}
+
+TEST(Retriever, TheWholeNoteIsTheTriggerWhenEverySentenceIsFiltered) {
+    Root root;
+    auto retriever = root.Make();
+    const auto results = retriever->Search(
+        "No persistent synovitis of the small joints of the hands. "
+        "Denies any urgent referral to a specialist.",
+        3);
+    ASSERT_FALSE(results.shown.empty());
+    for (const auto& r : results.shown) EXPECT_TRUE(r.trigger.empty());
 }
 
 TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {

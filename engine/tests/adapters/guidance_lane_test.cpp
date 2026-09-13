@@ -119,6 +119,7 @@ TEST(GuidanceLane, TheLatestRequestReplacesOneStillWaiting) {
     }
     EXPECT_EQ(retriever.searched, (std::vector<std::string>{"first", "third"}));
     EXPECT_EQ(outcome.ready, (std::vector<std::string>{"first", "third"}));
+    EXPECT_EQ(outcome.failed, (std::vector<std::string>{"superseded"}));
 }
 
 TEST(GuidanceLane, AFailedSearchReportsTheDetail) {

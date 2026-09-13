@@ -151,13 +151,14 @@ Results Retriever::Search(const std::string& note, int limit) {
         result.number = cite.number;
         result.title = cite.title;
         result.section = cite.section;
+        result.citation = Citation(cite.code, cite.number, cite.title);
         result.text = std::move(chunk.text);
         result.url = std::move(chunk.url);
         result.last_updated = std::move(chunk.last_updated);
         result.update_tag = std::move(chunk.update_tag);
         result.source = store->Info().source;
         result.score = candidate.cosine;
-        result.trigger = candidate.trigger;
+        result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
         out.shown.push_back(std::move(result));
     }
     return out;

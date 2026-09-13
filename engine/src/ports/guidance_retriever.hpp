@@ -22,8 +22,7 @@ struct Corpus {
     std::string unavailable;  // empty when loaded; otherwise why not
 };
 
-// One recommendation the panel shows. trigger is the note sentence that found
-// it, so the clinician sees why it appeared
+// One recommendation the panel shows
 struct Result {
     std::string corpus;
     std::string chunk_id;  // guideline code and recommendation number, "ng100-1_1_1"
@@ -36,8 +35,9 @@ struct Result {
     std::string last_updated;  // ISO 8601, from the guideline
     std::string update_tag;    // NICE change marker on the recommendation
     std::string source;        // the corpus source, "nice"/"text"/"upload"
+    std::string citation;      // code, number and title on one line, for the clipboard
     double score = 0;
-    std::string trigger;
+    std::string trigger;  // the note sentence that found it, empty when the note as a whole did
 };
 
 struct Results {
@@ -45,7 +45,7 @@ struct Results {
     std::vector<Corpus> searched;  // corpora open to the search, for the record
     int considered = 0;            // candidates before the floor and the filters
     double floor = 0;              // cosine floor the candidates were held to
-    bool abstained = false;        // nothing cleared the floor
+    bool abstained = false;        // nothing to show, by filter or by floor
 };
 
 // Retrieval for the Guidelines feature: the note in, the recommendations to

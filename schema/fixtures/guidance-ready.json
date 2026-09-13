@@ -3,24 +3,54 @@
     "method": "guidance/ready",
     "params": {
         "id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "version": 1,
         "shown": [
             {
-                "corpus": "fixture",
+                "corpus": "fixture-nice",
                 "chunkId": "fx100-1_1_1",
                 "code": "fx100",
                 "number": "1.1.1",
                 "title": "Fictional inflammatory joint disease: assessment and management",
-                "section": "1.1 Referral",
+                "section": "1.1 Referral, diagnosis and investigations > Referral from primary care",
                 "text": "Refer adults with persistent synovitis of undetermined cause to a specialist, and refer urgently if the small joints of the hands or feet are affected.",
-                "url": "https://example.test/fx100-1_1_1",
+                "url": "https://example.test/guidance/fx100/chapter/1-recommendations#fx100-1_1_1",
+                "lastUpdated": "2020-10-12",
+                "updateTag": "2009, amended 2018",
+                "source": "nice",
+                "citation": "FX100 1.1.1, Fictional inflammatory joint disease: assessment and management",
+                "score": 0.897,
+                "trigger": "Examination shows synovitis of several MCP joints."
+            },
+            {
+                "corpus": "fixture",
+                "chunkId": "gout-1",
+                "code": "gout",
+                "number": "1.1.1",
+                "title": "Fictional gout guideline",
+                "section": "",
+                "text": "1.1.1 Offer an NSAID or colchicine for an acute flare.",
+                "url": "Gout.md",
                 "lastUpdated": "",
                 "updateTag": "",
                 "source": "text",
-                "score": 0.897,
-                "trigger": "Examination shows synovitis of several MCP joints."
+                "citation": "GOUT 1.1.1, Fictional gout guideline",
+                "score": 0.861,
+                "trigger": ""
             }
         ],
         "searched": [
+            {
+                "id": "fixture-nice",
+                "name": "Fixture guidance corpus (structured)",
+                "licence": "invented",
+                "attribution": "none",
+                "source": "nice",
+                "embedder": "gte-large-int8",
+                "sha256": "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f",
+                "chunks": 40,
+                "builtAt": "2026-09-11T00:00:00Z",
+                "unavailable": null
+            },
             {
                 "id": "fixture",
                 "name": "Fixture guidance corpus",
@@ -28,9 +58,9 @@
                 "attribution": "none",
                 "source": "text",
                 "embedder": "gte-large-int8",
-                "sha256": "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f",
-                "chunks": 40,
-                "builtAt": "2026-09-11T00:00:00Z",
+                "sha256": "1b7d2e9f0a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6",
+                "chunks": 5,
+                "builtAt": "2026-09-12T00:00:00Z",
                 "unavailable": null
             }
         ],

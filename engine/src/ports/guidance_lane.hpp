@@ -14,8 +14,9 @@ struct SearchRequest {
     std::function<void(const std::string& detail)> on_failed;
 };
 
-// One search at a time off the RPC thread; a request arriving mid-search
-// replaces any still waiting, so the latest note is the one searched
+// One search at a time off the RPC thread. A request arriving while one waits
+// replaces it, and the replaced request fails with "superseded", so the latest
+// note is the one searched
 class IGuidanceLane {
    public:
     virtual ~IGuidanceLane() = default;

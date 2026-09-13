@@ -25,10 +25,14 @@ void GuidanceLane::Prepare() {
 }
 
 void GuidanceLane::Run(SearchRequest request) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    pending_ = std::move(request);
-    Start();
+    std::optional<SearchRequest> displaced;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        displaced = std::exchange(pending_, std::optional<SearchRequest>(std::move(request)));
+        Start();
+    }
     wake_.notify_all();
+    if (displaced && displaced->on_failed) displaced->on_failed("superseded");
 }
 
 void GuidanceLane::Start() {

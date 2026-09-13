@@ -58,16 +58,15 @@ json ToJson(const Results& results) {
                          {"lastUpdated", r.last_updated},
                          {"updateTag", r.update_tag},
                          {"source", r.source},
+                         {"citation", r.citation},
                          {"score", std::round(r.score * 1000) / 1000},
                          {"trigger", r.trigger}});
     }
     json searched = json::array();
     for (const auto& c : results.searched) searched.push_back(ToJson(c));
-    return json{{"shown", shown},
-                {"searched", searched},
-                {"considered", results.considered},
-                {"floor", results.floor},
-                {"abstained", results.abstained}};
+    return json{{"version", kRecordVersion}, {"shown", shown},
+                {"searched", searched},      {"considered", results.considered},
+                {"floor", results.floor},    {"abstained", results.abstained}};
 }
 
 Corpus CorpusFromJson(const json& j) {
@@ -101,6 +100,7 @@ Results FromJson(const json& j) {
             result.last_updated = Str(r, "lastUpdated");
             result.update_tag = Str(r, "updateTag");
             result.source = Str(r, "source");
+            result.citation = Str(r, "citation");
             result.score = Num(r, "score");
             result.trigger = Str(r, "trigger");
             out.shown.push_back(std::move(result));

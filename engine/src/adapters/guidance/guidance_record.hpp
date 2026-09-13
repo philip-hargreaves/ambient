@@ -8,6 +8,9 @@ namespace ambient::guidance {
 
 using nlohmann::json;
 
+// Bumped when a field changes meaning, so an old record reads as old
+inline constexpr int kRecordVersion = 1;
+
 // One shape for a search on the wire and at rest: guidance/ready wraps it with
 // the session id, and a stored copy reads back whole, with the corpora it ran
 // over and the floor it was held to
