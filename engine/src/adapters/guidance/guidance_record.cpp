@@ -132,4 +132,23 @@ Record RecordFromJson(const json& j) {
     return record;
 }
 
+std::string Dump(const Record& record) {
+    return ToJson(record).dump(-1, ' ', false, json::error_handler_t::replace);
+}
+
+// A version this build knows, and the two fields the section's state is read
+// from: anything less reads back as no record rather than as an empty one
+bool CanRead(const json& j) {
+    if (!j.is_object()) return false;
+    const auto version = j.find("version");
+    if (version != j.end()) {
+        if (!version->is_number_integer()) return false;
+        const auto v = version->get<std::int64_t>();
+        if (v < 1 || v > kRecordVersion) return false;
+    }
+    const auto shown = j.find("shown");
+    const auto abstained = j.find("abstained");
+    return shown != j.end() && shown->is_array() && abstained != j.end() && abstained->is_boolean();
+}
+
 }  // namespace ambient::guidance

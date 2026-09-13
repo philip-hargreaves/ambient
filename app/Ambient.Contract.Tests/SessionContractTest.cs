@@ -88,12 +88,14 @@ public class SessionContractTest
                 await patientReady.Task.WaitAsync(Timeout);
                 lock (notifications)
                 {
-                    // Sessions stream levels and turns; the pipeline ordering holds among the rest
+                    // Sessions stream levels and turns and the embedder announces itself
+                    // once; the pipeline ordering holds among the rest
                     Assert.Contains("audio.level", notifications);
                     Assert.Equal(
                         ExpectedNotifications,
                         notifications
-                            .Where(n => n != "audio.level" && n != "transcript.turn")
+                            .Where(n => n is not (
+                                "audio.level" or "transcript.turn" or "guidance/model"))
                             .ToArray());
 
                     // The cancelled session emits no turn; the stopped one flushes its tail

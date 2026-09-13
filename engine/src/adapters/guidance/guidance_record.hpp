@@ -9,7 +9,7 @@ namespace ambient::guidance {
 
 using nlohmann::json;
 
-// Bumped when a field changes meaning, so an old record reads as old
+// Bumped when a field changes meaning, so a reader refuses a newer record
 inline constexpr int kRecordVersion = 1;
 
 // One shape for a search on the wire and at rest: guidance/ready wraps it with
@@ -29,5 +29,11 @@ struct Record {
 
 json ToJson(const Record& record);
 Record RecordFromJson(const json& j);
+
+// Text for the store, invalid UTF-8 replaced rather than refused, as on the wire
+std::string Dump(const Record& record);
+
+// A stored record this reader can trust: an object no newer than kRecordVersion
+bool CanRead(const json& j);
 
 }  // namespace ambient::guidance

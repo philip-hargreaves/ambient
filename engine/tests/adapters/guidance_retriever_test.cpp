@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -113,14 +114,21 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
     Root root;
     auto retriever = root.Make();
     const auto note = NoteText("joint-referral");
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kLoading);
     const auto results = retriever->Search(note, 3);
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kReady);
     ASSERT_FALSE(results.shown.empty());
     EXPECT_LE(results.shown.size(), 3u);
     EXPECT_GE(results.considered, static_cast<int>(results.shown.size()));
     EXPECT_FALSE(results.abstained);
     EXPECT_EQ(results.shown[0].code, "fx100");
+    EXPECT_EQ(results.shown[0].citation,
+              "FX100 " + results.shown[0].number +
+                  ", Fictional inflammatory joint disease: assessment and management");
+    EXPECT_FALSE(results.shown[0].trigger.empty()) << "a sentence found it, not the whole note";
     EXPECT_EQ(results.floor, 0.2);
     EXPECT_EQ(results.searched.size(), 2u);  // the two loaded corpora, not the stale one
+    const auto sentences = SplitSentences(note);
     for (const auto& r : results.shown) {
         EXPECT_EQ(r.corpus, "fixture-a");
         EXPECT_FALSE(r.chunk_id.empty());
@@ -132,8 +140,32 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
         EXPECT_EQ(r.source, "text");
         EXPECT_EQ(r.citation, Citation(r.code, r.number, r.title));
         EXPECT_GE(r.score, 0.2);
-        EXPECT_NE(note.find(r.trigger), std::string::npos) << "trigger is a sentence of the note";
+        if (!r.trigger.empty()) {
+            EXPECT_NE(std::find(sentences.begin(), sentences.end(), r.trigger), sentences.end())
+                << "a trigger is a sentence of the note";
+        }
     }
+}
+
+TEST(Retriever, AbstainsWhenTheGuardDropsEveryMatch) {
+    fixture::TempDir dir("guarded");
+    WordEmbedder live;
+    Chunk only;
+    only.id = "px1-1_1_1";
+    only.code = "px1";
+    only.title = "Fictional paediatric fever";
+    only.number = "1.1.1";
+    only.text = "Offer children with fever paracetamol.";
+    fixture::Build(dir.path / "px1", "px1", live, {only});
+    RetrieverOptions options;
+    options.floor = 0.2;
+    Retriever retriever([] { return std::make_unique<WordEmbedder>(); }, dir.path, options);
+
+    EXPECT_EQ(retriever.Search("Fever offered paracetamol.", 3).shown.size(), 1u);
+    const auto guarded = retriever.Search("Adult man aged 45 with fever offered paracetamol.", 3);
+    EXPECT_EQ(guarded.considered, 1);
+    EXPECT_TRUE(guarded.shown.empty());
+    EXPECT_TRUE(guarded.abstained) << "the population guard emptied the list";
 }
 
 TEST(Retriever, MergesHitsFromEveryCorpusIntoOneList) {
@@ -219,13 +251,6 @@ TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
     EXPECT_TRUE(results.shown.empty());
     EXPECT_FALSE(results.abstained);
     EXPECT_EQ(results.considered, 0);
-}
-
-TEST(Retriever, DocumentCallsAreNotSupportedYet) {
-    Root root;
-    auto retriever = root.Make();
-    EXPECT_THROW(retriever->AddDocument("letter.pdf"), std::logic_error);
-    EXPECT_THROW(retriever->RemoveDocument("upload-1"), std::logic_error);
 }
 
 }  // namespace

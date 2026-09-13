@@ -8,15 +8,18 @@
 namespace ambient::guidance {
 
 struct SearchRequest {
+    std::string session;  // empty for a typed query
     std::string note;
     int limit = 0;
     std::function<void(const Results&)> on_ready;
     std::function<void(const std::string& detail)> on_failed;
 };
 
-// One search at a time off the RPC thread. A request arriving while one waits
-// replaces it, and the replaced request fails with "superseded", so the latest
-// note is the one searched
+// One search at a time off the RPC thread. Note searches queue one per session
+// in arrival order and are served before a typed query, which waits alone. A
+// request arriving while one waits for the same session (any session, for a
+// typed query) replaces it, and the replaced request fails with "superseded".
+// Requests still waiting at shutdown are dropped without a callback
 class IGuidanceLane {
    public:
     virtual ~IGuidanceLane() = default;

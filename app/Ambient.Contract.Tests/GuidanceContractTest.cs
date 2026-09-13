@@ -47,7 +47,9 @@ public class GuidanceContractTest
             var corpora = await client.RequestAsync("guidance/corpora", null, Timeout);
             if (corpora.GetProperty("state").GetString() == "loading")
             {
-                await model.Task.WaitAsync(Timeout);
+                var ended = await model.Task.WaitAsync(Timeout);
+                Assert.Equal("unavailable", ended.GetProperty("state").GetString());
+                Assert.False(string.IsNullOrEmpty(ended.GetProperty("detail").GetString()));
                 corpora = await client.RequestAsync("guidance/corpora", null, Timeout);
             }
             Assert.Equal("unavailable", corpora.GetProperty("state").GetString());

@@ -267,6 +267,7 @@ TEST(SessionStore, DocumentsAreNotPlaintextAtRest) {
     TempRoot root;
     const std::string note = "SENTINEL-BURSITIS-PHRASE";
     const std::string patient = "SENTINEL-PATIENT-PHRASE";
+    const std::string guidance = R"({"trigger":"SENTINEL-GUIDANCE-PHRASE"})";
     SessionId id;
     {
         SqliteSessionStore store(root.path, kNever);
@@ -274,6 +275,7 @@ TEST(SessionStore, DocumentsAreNotPlaintextAtRest) {
         store.Finalise(id);
         store.SaveDocument(id, DocumentKind::kNote, {.text = note});
         store.SaveDocument(id, DocumentKind::kPatient, {.text = patient});
+        store.SaveDocument(id, DocumentKind::kGuidance, {.text = guidance});
         EXPECT_EQ(store.ReadDocument(id, DocumentKind::kPatient).text, patient);
         EXPECT_EQ(store.ReadDocument(id, DocumentKind::kNote).text, note)
             << "patient and note are separate";
@@ -281,7 +283,7 @@ TEST(SessionStore, DocumentsAreNotPlaintextAtRest) {
     }
 
     const auto file = ReadFileBytes(root.DbPath());
-    for (const std::string& sentinel : {note, patient}) {
+    for (const std::string& sentinel : {note, patient, guidance}) {
         const std::vector<std::uint8_t> needle(sentinel.begin(), sentinel.end());
         EXPECT_EQ(std::search(file.begin(), file.end(), needle.begin(), needle.end()), file.end());
     }
@@ -730,6 +732,8 @@ TEST(SessionStore, DeleteErasesAFinishedSession) {
     store.Append(id, Ramp(16000), 0);
     store.AppendTurn(id, {0, 16000, "", "to be erased"});
     store.Finalise(id);
+    store.SaveDocument(id, DocumentKind::kGuidance, {.text = "{}"});
+    ASSERT_EQ(store.ReadDocument(id, DocumentKind::kGuidance).text, "{}");
 
     store.Delete(id);
 
@@ -739,6 +743,7 @@ TEST(SessionStore, DeleteErasesAFinishedSession) {
     EXPECT_EQ(db.QueryInt64("SELECT COUNT(*) FROM session_keys"), 0);
     EXPECT_EQ(db.QueryInt64("SELECT COUNT(*) FROM turns"), 0) << "cascade";
     EXPECT_EQ(db.QueryInt64("SELECT COUNT(*) FROM chunks"), 0) << "cascade";
+    EXPECT_EQ(db.QueryInt64("SELECT COUNT(*) FROM documents"), 0) << "cascade";
 }
 
 TEST(SessionStore, TheRecordingSessionCannotBeReadOrDeleted) {

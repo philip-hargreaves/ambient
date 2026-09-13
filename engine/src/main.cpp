@@ -163,7 +163,7 @@ class WireEvents : public ambient::audio::ISessionEvents {
             }));
     }
 
-    void SetGuidance(ambient::guidance::GuidanceLane* lane) {
+    void SetGuidance(ambient::guidance::IGuidanceLane* lane) {
         guidance_ = lane;
     }
 
@@ -209,7 +209,7 @@ class WireEvents : public ambient::audio::ISessionEvents {
     ambient::ipc::PipeServer& server_;
     ambient::store::ISessionStore& sessions_;
     ambient::translate::ITranslator* translator_ = nullptr;
-    ambient::guidance::GuidanceLane* guidance_ = nullptr;
+    ambient::guidance::IGuidanceLane* guidance_ = nullptr;
     std::mutex throttle_mutex_;
     std::map<std::string, std::chrono::steady_clock::time_point> last_partial_;
     std::map<std::string, ambient::core::ThroughputMeter> meters_;

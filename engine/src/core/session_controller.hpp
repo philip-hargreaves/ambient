@@ -1094,18 +1094,24 @@ class SessionController {
     }
 
     // A store refusal never costs the note: the text still reaches the shell.
-    // Returns the note as stored, nothing when the store refused it
+    // Returns the note as stored, nothing when the store refused it or its
+    // revision could not be read back
     std::optional<store::Document> SaveNote(const store::SessionId& id, const std::string& text,
                                             const note::NoteOptions& options) {
+        store::Document document;
+        document.text = text;
+        document.style = options.style;
+        document.detail = options.detail;
         try {
-            store::Document document;
-            document.text = text;
-            document.style = options.style;
-            document.detail = options.detail;
             store_.SaveDocument(id, store::DocumentKind::kNote, document);
-            return store_.ReadDocument(id, store::DocumentKind::kNote);
         } catch (const std::exception& e) {
             StoreFailed("note", e);
+            return std::nullopt;
+        }
+        try {
+            return store_.ReadDocument(id, store::DocumentKind::kNote);
+        } catch (const std::exception& e) {
+            StoreFailed("note revision", e);
             return std::nullopt;
         }
     }
@@ -1209,7 +1215,16 @@ class SessionController {
                     return;  // no note, no sheet, no label, and the print learns nothing
                 }
                 if (const auto stored = SaveNote(id, note, options)) {
-                    events_.OnNoteSaved(id, *stored);
+                    // What follows the note must never cost the note
+                    try {
+                        events_.OnNoteSaved(id, *stored);
+                    } catch (const std::exception& e) {
+                        std::fprintf(stderr,
+                                     "ambient-engine: work after the note not started: %s\n",
+                                     e.what());
+                    } catch (...) {
+                        std::fprintf(stderr, "ambient-engine: work after the note not started\n");
+                    }
                 }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

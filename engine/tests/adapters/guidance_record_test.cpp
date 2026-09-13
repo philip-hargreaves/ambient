@@ -12,44 +12,45 @@ Results Sample() {
     out.abstained = false;
 
     Corpus corpus;
-    corpus.id = "nice-2026-08-25";
-    corpus.name = "NICE guidance";
-    corpus.licence = "OGL v3.0";
-    corpus.attribution = "Contains public sector information";
+    corpus.id = "fixture-nice";
+    corpus.name = "Fixture guidance corpus (structured)";
+    corpus.licence = "invented";
+    corpus.attribution = "none";
     corpus.source = "nice";
     corpus.embedder = "gte-large-int8";
     corpus.sha256 = "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f";
-    corpus.chunks = 22991;
-    corpus.built_at = "2026-08-25T00:00:00Z";
+    corpus.chunks = 40;
+    corpus.built_at = "2026-09-11T00:00:00Z";
     out.searched.push_back(corpus);
 
     Result full;
-    full.corpus = "nice-2026-08-25";
-    full.chunk_id = "ng100-1_1_1";
-    full.code = "ng100";
+    full.corpus = "fixture-nice";
+    full.chunk_id = "fx100-1_1_1";
+    full.code = "fx100";
     full.number = "1.1.1";
-    full.title = "Rheumatoid arthritis in adults: management";
+    full.title = "Fictional inflammatory joint disease: assessment and management";
     full.section = "1.1 Referral";
-    full.text = "Refer for specialist opinion any adult with suspected persistent synovitis.";
-    full.url = "https://www.nice.org.uk/guidance/ng100";
-    full.last_updated = "2020-07-01";
-    full.update_tag = "2020";
+    full.text = "Refer adults with persistent synovitis of undetermined cause to a specialist.";
+    full.url = "https://example.test/guidance/fx100/chapter/1-recommendations#fx100-1_1_1";
+    full.last_updated = "2020-10-12";
+    full.update_tag = "2009, amended 2018";
     full.source = "nice";
-    full.citation = "NG100 1.1.1, Rheumatoid arthritis in adults: management";
+    full.citation = "FX100 1.1.1, Fictional inflammatory joint disease: assessment and management";
     full.score = 0.8971234;  // rounded to 3 dp on the wire
-    full.trigger = "Synovitis of the small joints of both hands.";
+    full.trigger = "Examination shows synovitis of several MCP joints.";
     out.shown.push_back(full);
 
     Result sparse;  // the optional fields empty, to exercise the null round-trip
-    sparse.corpus = "nice-2026-08-25";
-    sparse.chunk_id = "ng100-1_2_1";
-    sparse.code = "ng100";
+    sparse.corpus = "fixture-nice";
+    sparse.chunk_id = "fx100-1_2_1";
+    sparse.code = "fx100";
     sparse.number = "1.2.1";
-    sparse.title = "Rheumatoid arthritis in adults: management";
+    sparse.title = "Fictional inflammatory joint disease: assessment and management";
     sparse.section = "1.2 Investigations";
-    sparse.text = "Offer a full blood count.";
+    sparse.text = "Arrange baseline blood tests before the first appointment.";
     sparse.source = "nice";
-    sparse.citation = "NG100 1.2.1, Rheumatoid arthritis in adults: management";
+    sparse.citation =
+        "FX100 1.2.1, Fictional inflammatory joint disease: assessment and management";
     sparse.score = 0.861;
     sparse.trigger = "Bloods requested.";
     out.shown.push_back(sparse);
@@ -84,13 +85,34 @@ TEST(GuidanceRecord, CarriesTheNoteRevision) {
     EXPECT_EQ(ToJson(back), wire);
 }
 
+TEST(GuidanceRecord, StoresBytesTheWireWouldAlsoAccept) {
+    Record record{Sample(), 1};
+    record.results.shown[0].text = "curly quote \x92 from a Windows-1252 file";
+    EXPECT_THROW(ToJson(record).dump(), json::type_error);
+    const json back = json::parse(Dump(record));
+    EXPECT_TRUE(CanRead(back));
+    EXPECT_NE(back["shown"][0]["text"].get<std::string>().find("curly quote"), std::string::npos);
+}
+
+TEST(GuidanceRecord, RefusesWhatItCannotRead) {
+    const json empty{{"shown", json::array()}, {"abstained", false}};
+    EXPECT_FALSE(CanRead(json::parse("[]")));
+    EXPECT_FALSE(CanRead(json{{"version", kRecordVersion + 1}}));
+    EXPECT_FALSE(CanRead(json{{"version", 0}, {"shown", json::array()}, {"abstained", false}}));
+    EXPECT_FALSE(CanRead(json{{"version", 1}, {"shown", 5}, {"abstained", false}}));
+    EXPECT_FALSE(CanRead(json{{"version", 1}, {"shown", json::array()}, {"abstained", "yes"}}));
+    EXPECT_FALSE(CanRead(json{{"version", 1}, {"shown", json::array()}}));
+    EXPECT_TRUE(CanRead(empty)) << "a record before version was written";
+    EXPECT_EQ(RecordFromJson(empty).note_revision, 0);
+}
+
 TEST(GuidanceRecord, CarriesTheSearchedCorpusAndFloor) {
     const Results back = FromJson(ToJson(Sample()));
     EXPECT_EQ(back.floor, 0.85);
     EXPECT_EQ(back.considered, 42);
     ASSERT_EQ(back.searched.size(), 1u);
-    EXPECT_EQ(back.searched[0].id, "nice-2026-08-25");
-    EXPECT_EQ(back.searched[0].chunks, 22991);
+    EXPECT_EQ(back.searched[0].id, "fixture-nice");
+    EXPECT_EQ(back.searched[0].chunks, 40);
     EXPECT_TRUE(back.searched[0].unavailable.empty());
 }
 

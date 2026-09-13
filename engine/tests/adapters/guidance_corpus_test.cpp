@@ -250,9 +250,6 @@ TEST(CorpusStore, LoadsFromAReadOnlyDirectory) {
     }
     std::string reason;
     const auto store = CorpusStore::Open(dir.path, Embedder(), reason);
-    for (const char* name : {kCorpusFile, kManifestFile}) {
-        SetFileAttributesW((dir.path / name).c_str(), FILE_ATTRIBUTE_NORMAL);
-    }
     ASSERT_NE(store, nullptr) << reason;
     EXPECT_EQ(store->TextAt(0).text, fixture::Chunks(kFixtureDir)[0].text);
 }

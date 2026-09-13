@@ -58,7 +58,7 @@ struct Document {
     std::string detail;           // Note only: concise | standard | detailed
     std::string generated_at;     // ISO 8601 UTC; when the model wrote it
     std::string edited_at;        // ISO 8601 UTC; empty until a person changed it
-    std::int64_t revision = 0;    // Counts every write of this kind, 0 when absent
+    std::int64_t revision = 0;    // Counts every write, 0 when absent or from before schema 6
 };
 
 // Audio is durable within a second and exists to resume a crash: Finalise

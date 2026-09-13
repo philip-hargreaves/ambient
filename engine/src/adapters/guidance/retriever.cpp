@@ -139,7 +139,6 @@ Results Retriever::Search(const std::string& note, int limit) {
 
     auto ordered = ApplyFloor(RankVote(lists, options_.note_weight, k), options_.floor);
     out.considered = ordered.considered;
-    out.abstained = ordered.abstained;
     for (const auto& candidate : ordered.kept) {
         if (static_cast<int>(out.shown.size()) >= limit) break;
         const auto& at = where.at(candidate.id);
@@ -164,6 +163,7 @@ Results Retriever::Search(const std::string& note, int limit) {
         result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
         out.shown.push_back(std::move(result));
     }
+    out.abstained = ordered.abstained || (limit > 0 && out.shown.empty());
     return out;
 }
 

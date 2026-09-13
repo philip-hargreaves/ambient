@@ -75,8 +75,9 @@ struct Outcome {
     std::vector<std::string> failed;  // details
     std::thread::id last_thread;
 
-    SearchRequest Request(std::string note, int limit = 3) {
+    SearchRequest Request(std::string note, int limit = 3, std::string session = "") {
         SearchRequest request;
+        request.session = std::move(session);
         request.note = std::move(note);
         request.limit = limit;
         request.on_ready = [this](const Results& results) {
@@ -173,16 +174,85 @@ TEST(GuidanceLane, PrepareReportsHowLoadingEnded) {
     EXPECT_EQ(heard[1].detail, "no embedding model staged");
 }
 
+TEST(GuidanceLane, TheNotesSearchAndATypedQueryWaitApart) {
+    FakeRetriever retriever;
+    retriever.hold = true;
+    Outcome outcome;
+    {
+        GuidanceLane lane(retriever);
+        lane.Run(outcome.Request("typed one"));
+        ASSERT_TRUE(retriever.WaitUntil([&] { return retriever.searched.size() == 1; }));
+        lane.Run(outcome.Request("typed two"));
+        lane.Run(outcome.Request("note", 3, "s1"));
+        lane.Run(outcome.Request("typed three"));
+        retriever.Release();
+        ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.ready.size() == 3; }));
+    }
+    EXPECT_EQ(retriever.searched, (std::vector<std::string>{"typed one", "note", "typed three"}));
+    EXPECT_EQ(outcome.failed, (std::vector<std::string>{"superseded"}));
+}
+
+TEST(GuidanceLane, NoteSearchesForDifferentSessionsBothRun) {
+    FakeRetriever retriever;
+    retriever.hold = true;
+    Outcome outcome;
+    {
+        GuidanceLane lane(retriever);
+        lane.Run(outcome.Request("typed"));
+        ASSERT_TRUE(retriever.WaitUntil([&] { return retriever.searched.size() == 1; }));
+        lane.Run(outcome.Request("note one", 3, "s1"));
+        lane.Run(outcome.Request("note two", 3, "s2"));
+        retriever.Release();
+        ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.ready.size() == 3; }));
+    }
+    EXPECT_EQ(retriever.searched, (std::vector<std::string>{"typed", "note one", "note two"}));
+    EXPECT_TRUE(outcome.failed.empty());
+}
+
+TEST(GuidanceLane, ANewerNoteSearchReplacesOnlyItsOwnSessions) {
+    FakeRetriever retriever;
+    retriever.hold = true;
+    Outcome outcome;
+    {
+        GuidanceLane lane(retriever);
+        lane.Run(outcome.Request("busy"));
+        ASSERT_TRUE(retriever.WaitUntil([&] { return retriever.searched.size() == 1; }));
+        lane.Run(outcome.Request("s1 first", 3, "s1"));
+        lane.Run(outcome.Request("s2 first", 3, "s2"));
+        lane.Run(outcome.Request("s1 second", 3, "s1"));
+        retriever.Release();
+        ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.ready.size() == 3; }));
+    }
+    EXPECT_EQ(retriever.searched, (std::vector<std::string>{"busy", "s1 second", "s2 first"}));
+    EXPECT_EQ(outcome.failed, (std::vector<std::string>{"superseded"}));
+}
+
+TEST(GuidanceLane, AFailureCallbackThatThrowsDoesNotStopTheWorker) {
+    FakeRetriever retriever;
+    retriever.search_throws = true;
+    Outcome outcome;
+    GuidanceLane lane(retriever);
+    SearchRequest throwing = outcome.Request("first");
+    throwing.on_failed = [](const std::string&) { throw std::runtime_error("shell gone"); };
+    lane.Run(std::move(throwing));
+    lane.Run(outcome.Request("second"));
+    ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.failed.size() == 1; }));
+    EXPECT_EQ(outcome.failed[0], "corpus gone");
+}
+
 TEST(GuidanceLane, PrepareRunsOnceOnTheWorker) {
     FakeRetriever retriever;
-    GuidanceLane lane(retriever);
-    lane.Prepare();
-    lane.Prepare();
+    retriever.hold = true;
     Outcome outcome;
+    GuidanceLane lane(retriever);
+    lane.Run(outcome.Request("busy"));
+    ASSERT_TRUE(retriever.WaitUntil([&] { return retriever.searched.size() == 1; }));
+    lane.Prepare();
+    lane.Prepare();
+    retriever.Release();
     lane.Run(outcome.Request("after prepare"));
-    ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.ready.size() == 1; }));
-    EXPECT_GE(retriever.prepares, 1);
-    EXPECT_LE(retriever.prepares, 2);
+    ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.ready.size() == 2; }));
+    EXPECT_EQ(retriever.prepares, 1);
 }
 
 }  // namespace

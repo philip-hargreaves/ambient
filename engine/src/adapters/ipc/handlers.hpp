@@ -86,15 +86,16 @@ json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
 json GuidanceModelJson(const ambient::guidance::Readiness& readiness);
 // The lane request behind every search: results go out as guidance/ready, a
 // failure as guidance/failed, both naming the session (null for free text).
-// With a session the record is stored before the notification. A session
-// erased meanwhile ends the search quietly, any other store error rides on
-// the ready payload rather than withholding the results
+// With a session the record is stored before the notification, which also says
+// whether the note moved during the search. A session erased meanwhile ends
+// the search quietly, any other store error rides on the ready payload rather
+// than withholding the results
 ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
                                                        const std::string& session,
                                                        ambient::store::Document note, int limit,
                                                        Notify notify);
-// session/guidance: the stored record, null when the note was never searched,
-// stale when the note has been written since
+// session/guidance: the stored record, null when the note was never searched
+// or the record cannot be read, stale when the note has been written since
 std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
                                                 const json& params);
 // guidance/search: the stored note of session id, or free text, through the

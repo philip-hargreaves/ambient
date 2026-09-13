@@ -713,7 +713,13 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
     const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
     Sent sent;
-    auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
+    std::string stored_first;
+    auto request = GuidanceSearchRequest(
+        *fixture.store, id, note, 3, [&](const std::string& method, json params) {
+            stored_first =
+                fixture.store->ReadDocument(id, ambient::store::DocumentKind::kGuidance).text;
+            sent.Sink()(method, std::move(params));
+        });
     request.on_ready(results);
     json expected = LoadFixture("guidance-ready.json");
     expected["params"]["id"] = id;
@@ -722,11 +728,25 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     EXPECT_EQ(sent.all[0].second, expected["params"]);
 
     // Stored before it was sent, as the same record
-    const auto stored = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kGuidance);
     json record = sent.all[0].second;
     record.erase("id");
     record.erase("storeError");
-    EXPECT_EQ(json::parse(stored.text), record);
+    record.erase("stale");
+    EXPECT_EQ(json::parse(stored_first), record);
+}
+
+TEST(Handlers, GuidanceReadyIsStaleWhenTheNoteMovedDuringTheSearch) {
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
+    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited meanwhile");
+    request.on_ready(ambient::guidance::Results{});
+    ASSERT_EQ(sent.all.size(), 1u);
+    EXPECT_TRUE(sent.all[0].second["stale"]);
 }
 
 TEST(Handlers, GuidanceForAnErasedSessionIsDroppedQuietly) {
@@ -796,6 +816,7 @@ TEST(Handlers, GuidanceModelMatchesTheFixture) {
     const json fixture = LoadFixture("guidance-model.json");
     EXPECT_EQ(fixture["method"], "guidance/model");
     EXPECT_EQ(GuidanceModelJson(unavailable), fixture["params"]);
+    EXPECT_EQ(GuidanceModelJson(ambient::guidance::Readiness{})["state"], "loading");
 }
 
 TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
@@ -808,8 +829,8 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
          .style = "prose",
          .detail = "standard"});
     EchoRetriever retriever;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(*fixture.store, lane, json{{"id", id}}, sent.Sink());
     ASSERT_TRUE(std::holds_alternative<json>(outcome));
@@ -817,6 +838,8 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
     ASSERT_TRUE(sent.WaitFor(1));
     EXPECT_EQ(sent.all[0].first, "guidance/ready");
     EXPECT_EQ(sent.all[0].second["id"], id);
+    EXPECT_EQ(sent.all[0].second.at("storeError"), nullptr);
+    EXPECT_EQ(sent.all[0].second.at("stale"), false);
     EXPECT_EQ(sent.all[0].second["shown"][0]["trigger"],
               "Six weeks of synovitis in the small joints of both hands.");
     ASSERT_EQ(retriever.searches.size(), 1u);
@@ -826,8 +849,8 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
 TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     SessionStoreFixture fixture;
     EchoRetriever retriever;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(
         *fixture.store, lane, json{{"text", "Chest pain on exertion."}, {"limit", 5}}, sent.Sink());
@@ -835,6 +858,8 @@ TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     ASSERT_TRUE(sent.WaitFor(1));
     EXPECT_EQ(sent.all[0].first, "guidance/ready");
     EXPECT_TRUE(sent.all[0].second["id"].is_null());
+    EXPECT_EQ(sent.all[0].second.at("storeError"), nullptr);
+    EXPECT_EQ(sent.all[0].second.at("stale"), nullptr) << "no note, nothing to be stale against";
     EXPECT_EQ(retriever.searches,
               (std::vector<std::pair<std::string, int>>{{"Chest pain on exertion.", 5}}));
 }
@@ -844,8 +869,8 @@ TEST(Handlers, GuidanceSearchRefusesBadParamsAndAMissingNote) {
     const auto without_note = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(without_note);
     EchoRetriever retriever;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     struct Case {
         json params;
@@ -873,8 +898,8 @@ TEST(Handlers, GuidanceSearchReportsAFailedSearch) {
     SessionStoreFixture fixture;
     EchoRetriever retriever;
     retriever.fail = true;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     const auto outcome =
         HandleGuidanceSearch(*fixture.store, lane, json{{"text", "Chest pain."}}, sent.Sink());
@@ -908,6 +933,26 @@ TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
     fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited");
     EXPECT_TRUE(
         ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}))["guidance"]["stale"]);
+
+    // A search after a rewrite replaces the record and it reads fresh again
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "regenerated"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    ambient::guidance::Results second;
+    second.considered = 1;
+    GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink()).on_ready(second);
+    const json again =
+        ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}))["guidance"];
+    EXPECT_FALSE(again["stale"]);
+    EXPECT_EQ(again["noteRevision"], note.revision);
+    EXPECT_EQ(again["considered"], 1);
+
+    for (const char* broken : {"{ not json", R"({"version": 99})", R"({"shown": [{"text": 5}]})"}) {
+        fixture.store->SaveDocument(id, ambient::store::DocumentKind::kGuidance, {.text = broken});
+        EXPECT_EQ(ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}})),
+                  (json{{"guidance", nullptr}}))
+            << broken;
+    }
 
     const auto unknown = HandleSessionGuidance(*fixture.store, json{{"id", "nope"}});
     ASSERT_TRUE(std::holds_alternative<Error>(unknown));

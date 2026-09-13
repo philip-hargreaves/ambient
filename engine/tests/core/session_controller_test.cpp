@@ -178,11 +178,15 @@ struct RecordingEvents : ISessionEvents {
 
     std::string note_saved_session;
     std::string note_saved_text;
+    std::int64_t note_saved_revision = 0;
+    bool note_saved_throws = false;
 
     void OnNoteSaved(const std::string& session, const store::Document& note) override {
+        if (note_saved_throws) throw std::runtime_error("the lane refused");
         const std::lock_guard<std::mutex> lock(mutex);
         note_saved_session = session;
         note_saved_text = note.text;
+        note_saved_revision = note.revision;
     }
 
     void OnNoteFailed(const std::string& detail) override {
@@ -370,6 +374,7 @@ struct FakeSessionStore : store::ISessionStore {
         if (kind == store::DocumentKind::kNote) {
             calls.push_back("note " + id);
             note = document.text;
+            ++note_revision;
             note_style = document.style;
             note_detail = document.detail;
         } else if (kind == store::DocumentKind::kPatient) {
@@ -399,6 +404,7 @@ struct FakeSessionStore : store::ISessionStore {
             label_typed = true;
             return;
         }
+        if (kind == store::DocumentKind::kNote) ++note_revision;
         (kind == store::DocumentKind::kNote ? note : patient) = text;
     }
 
@@ -408,6 +414,7 @@ struct FakeSessionStore : store::ISessionStore {
         switch (kind) {
             case store::DocumentKind::kNote:
                 document.text = note;
+                document.revision = note_revision;
                 break;
             case store::DocumentKind::kPatient:
                 document.text = patient;
@@ -428,6 +435,7 @@ struct FakeSessionStore : store::ISessionStore {
 
     std::string patient;
     std::string summary;
+    std::int64_t note_revision = 0;
     std::string note_style;
     std::string note_detail;
     std::string label;
@@ -762,6 +770,7 @@ TEST(SessionController, TheNoteFollowsTheSeal) {
     EXPECT_EQ(events.note_ready, "the clinical note");
     EXPECT_EQ(events.note_saved_text, "the clinical note");
     EXPECT_EQ(events.note_saved_session, controller.LastFinalised());
+    EXPECT_EQ(events.note_saved_revision, 1) << "the note as stored, not as generated";
     EXPECT_TRUE(events.note_failed.empty());
     EXPECT_EQ(store.note, "the clinical note");
     const auto calls = store.Calls();
@@ -784,15 +793,33 @@ TEST(SessionController, ARefusedNoteSaveStillReachesTheShellAndFiresNoNoteSaved)
                                  &writer, nullptr, 0);
 
     ASSERT_TRUE(controller.Start());
-    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
     controller.Stop();
 
     ASSERT_TRUE(events.WaitForNote());
     EXPECT_EQ(events.note_ready, "the clinical note");
     EXPECT_TRUE(events.note_saved_session.empty()) << "nothing stored, nothing to search";
     EXPECT_TRUE(store.note.empty());
+}
+
+TEST(SessionController, WhatFollowsTheNoteCannotFailIt) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    events.note_saved_throws = true;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_TRUE(events.note_failed.empty());
+    EXPECT_EQ(store.note, "the clinical note");
 }
 
 TEST(SessionController, TheNoteBringsItsOptionsAndLabel) {

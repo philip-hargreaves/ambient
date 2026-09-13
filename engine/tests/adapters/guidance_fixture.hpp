@@ -1,5 +1,8 @@
 #pragma once
 
+#include <gtest/gtest.h>
+#include <process.h>
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -8,6 +11,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "adapters/guidance/corpus_builder.hpp"
@@ -17,16 +21,26 @@
 // them with any embedder
 namespace ambient::guidance::fixture {
 
-// A fresh temp directory, removed on scope exit
+// One directory per test and process, so parallel runs never share a path
 struct TempDir {
     std::filesystem::path path;
     explicit TempDir(const char* name)
-        : path(std::filesystem::temp_directory_path() / ("ambient-guidance-" + std::string(name))) {
-        std::filesystem::remove_all(path);
+        : path(std::filesystem::temp_directory_path() /
+               ("ambient-guidance-" + std::string(name) + "-" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name() + "-" +
+                std::to_string(_getpid()))) {
+        std::error_code ignored;
+        std::filesystem::remove_all(path, ignored);
         std::filesystem::create_directories(path);
     }
+    // A file a test made read-only would otherwise survive the sweep
     ~TempDir() {
         std::error_code ignored;
+        std::filesystem::recursive_directory_iterator it(path, ignored);
+        for (; it != std::filesystem::recursive_directory_iterator(); it.increment(ignored)) {
+            std::filesystem::permissions(it->path(), std::filesystem::perms::owner_write,
+                                         std::filesystem::perm_options::add, ignored);
+        }
         std::filesystem::remove_all(path, ignored);
     }
 };
