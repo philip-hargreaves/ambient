@@ -71,13 +71,15 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public NoteViewModel Note { get; }
 
+    public GuidanceViewModel Guidance { get; }
+
     public StatusBarViewModel Status { get; }
 
     public ConsultationViewModel(
         IEngineClient engine, IUiDispatcher dispatcher,
         TranscriptViewModel transcript, NoteViewModel note, StatusBarViewModel status,
         Metrics.PerformanceCollector? metrics = null, TimeSpan? readinessPollInterval = null,
-        AppPreferences? preferences = null)
+        AppPreferences? preferences = null, GuidanceViewModel? guidance = null)
     {
         _engine = engine;
         _metrics = metrics;
@@ -85,6 +87,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         _readinessPollInterval = readinessPollInterval ?? TimeSpan.FromSeconds(2);
         Transcript = transcript;
         Note = note;
+        Guidance = guidance ?? new GuidanceViewModel();
         Status = status;
         EngineReady = engine.Connected;
         Note.TranslateRequested = TranslateAsync;
@@ -94,6 +97,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.ReflectRequested = ReflectAsync;
         Note.SaveNoteRequested = SaveNoteAsync;
         Note.SavePatientRequested = SavePatientAsync;
+        Guidance.SearchNoteRequested = SearchGuidanceAsync;
+        Guidance.SearchQueryRequested = SearchGuidanceAsync;
         // Persisted options applied before the change callback is wired,
         // so restoring them is not itself a change
         if (preferences is not null)
@@ -114,6 +119,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             {
                 // An intentional restart (the NPU switch) must not read as a failure
                 Note.TranslationRunning = false;
+                Guidance.ConnectionLost();
                 Status.Log("connection lost");
             }
             else
@@ -122,6 +128,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 // transcription...") is over; resume overwrites this
                 Status.Append("Ready");
                 _ = LoadLanguagesAsync();
+                _ = LoadGuidanceReadinessAsync();
                 _ = ConfigureThenCheckReadinessAsync();
                 if (State == SessionState.Recording)
                 {
@@ -132,7 +139,127 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         if (EngineReady)
         {
             _ = LoadLanguagesAsync();
+            _ = LoadGuidanceReadinessAsync();
             _ = ConfigureThenCheckReadinessAsync();
+        }
+    }
+
+    // Polled rather than only listened for: the embedder loads before the
+    // shell connects, so its notification can be missed
+    private async Task LoadGuidanceReadinessAsync()
+    {
+        var before = (Guidance.Readiness, Guidance.ReadinessDetail, Guidance.RefusedCorpora.Count);
+        try
+        {
+            var corpora = await _engine
+                .RequestAsync("guidance/corpora", null, RequestTimeout)
+                .ConfigureAwait(true);
+            Guidance.ApplyCorpora(corpora);
+        }
+        catch (Exception e)
+        {
+            Guidance.CorporaUnavailable();
+            Status.Log($"guidance/corpora failed: {e.Message}");
+        }
+
+        // Logged on change only: the poll repeats on every model transition
+        if ((Guidance.Readiness, Guidance.ReadinessDetail, Guidance.RefusedCorpora.Count) == before)
+        {
+            return;
+        }
+
+        if (Guidance.ReadinessDetail.Length > 0)
+        {
+            Status.Log($"guidance unavailable: {Guidance.ReadinessDetail}");
+        }
+
+        foreach (var refused in Guidance.RefusedCorpora)
+        {
+            Status.Log($"guidance corpus refused: {refused}");
+        }
+    }
+
+    // Search again on the note as it is now: an unsaved edit is saved first,
+    // and a consultation opened meanwhile is left alone
+    private async Task SearchGuidanceAsync()
+    {
+        var id = _finalisedSessionId;
+        if (State != SessionState.Review || id is null)
+        {
+            return;
+        }
+
+        Guidance.SearchStarted();
+        if (Note.ClinicalNoteText != _loadedNote)
+        {
+            await SaveNoteAsync().ConfigureAwait(true);
+            if (id != _finalisedSessionId)
+            {
+                return;
+            }
+        }
+
+        if (!await RequestAsync("guidance/search", new { id }).ConfigureAwait(true))
+        {
+            Guidance.ApplyFailed();
+        }
+    }
+
+    private async Task SearchGuidanceAsync(string text)
+    {
+        if (!await RequestAsync("guidance/search", new { text, limit = 3 }).ConfigureAwait(true))
+        {
+            Guidance.ApplyQueryFailed();
+        }
+    }
+
+    // Results are keyed to the consultation on screen; a typed query has no id.
+    // A search replaced by a newer one says so and changes nothing
+    private void ApplyGuidance(JsonElement parameters, bool ready)
+    {
+        var detail = Text(parameters, "detail");
+        if (detail == "superseded")
+        {
+            return;
+        }
+
+        var id = parameters.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String
+            ? i.GetString()
+            : null;
+        if (id is null)
+        {
+            if (ready)
+            {
+                Guidance.ApplyQueryReady(parameters);
+            }
+            else
+            {
+                Guidance.ApplyQueryFailed();
+                Status.Log($"guidance search failed: {detail}");
+            }
+
+            return;
+        }
+
+        if (id != _finalisedSessionId)
+        {
+            Status.Log($"guidance for another session dropped: {id}");
+            return;
+        }
+
+        if (ready)
+        {
+            Guidance.ApplyReady(parameters);
+            var storeError = Text(parameters, "storeError");
+            if (storeError.Length > 0)
+            {
+                Status.Log($"guidance not stored: {storeError}");
+            }
+        }
+        else
+        {
+            Guidance.ApplyFailed();
+            Status.Log($"guidance search failed: {detail}");
         }
     }
 
@@ -308,6 +435,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         {
             _regenerating = true;
             Note.BeginRegenerate();
+            Guidance.NoteStarted();
         }
     }
 
@@ -326,25 +454,30 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         {
             _regenerating = true;
             Note.BeginRegenerate();
+            Guidance.NoteStarted();
             State = SessionState.Review;  // insisted: the transcript and note are worth showing
         }
     }
 
+    // An unchanged note is not saved: every write counts as an edit in the
+    // store and would mark the sheet and the guidance stale for nothing. A
+    // consultation opened during the save keeps its own stamps
     public async Task SaveNoteAsync()
     {
-        if (_finalisedSessionId is null)
+        var id = _finalisedSessionId;
+        var text = Note.ClinicalNoteText;
+        if (id is null || text == _loadedNote)
         {
             return;
         }
 
-        var saved = await RequestAsync(
-            "note/update", new { id = _finalisedSessionId, text = Note.ClinicalNoteText })
-            .ConfigureAwait(true);
-        if (saved)
+        var saved = await RequestAsync("note/update", new { id, text }).ConfigureAwait(true);
+        if (saved && id == _finalisedSessionId)
         {
-            _loadedNote = Note.ClinicalNoteText;
+            _loadedNote = text;
             Note.EditedStamp = EditedStamp.Now();
             Note.PatientStale = Note.PatientInfoText.Length > 0;
+            Guidance.MarkStale();
             Status.Append("Note saved");
         }
     }
@@ -390,6 +523,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         _recordingSessionId = null;
         _regenerating = false;
         Note.Reset();
+        Guidance.Reset();
         Note.ReflectAvailable = true;  // stored, so it will still be there
         Note.HasReflection = hasReflection;
         await LoadFinalTranscriptAsync(id).ConfigureAwait(true);
@@ -414,6 +548,17 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         var sheetWritten = Text(patient, "generatedAt");
         Note.PatientStale = noteEdited.Length > 0 && sheetWritten.Length > 0
             && string.CompareOrdinal(noteEdited, sheetWritten) > 0;
+        // What this note was shown, without a model; nothing to read for an empty note
+        if (Note.ClinicalNoteText.Length > 0)
+        {
+            var guidance = await RequestValueAsync("session/guidance", null, new { id })
+                .ConfigureAwait(true);
+            Guidance.LoadStored(
+                guidance is { ValueKind: JsonValueKind.Object } g
+                && g.TryGetProperty("guidance", out var record)
+                    ? record
+                    : null);
+        }
 
         Phase = FinalisePhase.Streaming;  // the panes show, no centre spinner
         State = SessionState.Review;
@@ -421,14 +566,14 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             ? $"Reviewing the consultation from {startedLabel}"
             : "Reviewing a stored consultation");
         return true;
-
-        static string Text(JsonElement? element, string property) =>
-            element is { ValueKind: JsonValueKind.Object } o
-                && o.TryGetProperty(property, out var value)
-                && value.ValueKind == JsonValueKind.String
-                ? value.GetString() ?? ""
-                : "";
     }
+
+    private static string Text(JsonElement? element, string property) =>
+        element is { ValueKind: JsonValueKind.Object } o
+            && o.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
 
     /// <summary>Leaves the review or a refusal: edits saved, the engine told
     /// (which deletes a refused session), panes cleared.</summary>
@@ -442,6 +587,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         await AutosaveReviewAsync().ConfigureAwait(true);
         await RequestAsync("session/close").ConfigureAwait(true);
         Note.Reset();
+        Guidance.Reset();
         Transcript.Clear();
         Phase = FinalisePhase.None;
         _regenerating = false;
@@ -596,6 +742,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Status.SetMicVisible(false);
         Status.SetDecodeActive(true);  // the tail decode keeps the RT figure up
         Note.Apply(NotePipelineEvent.NoteWritingStarted);
+        Guidance.NoteStarted();
         Status.Append("Finalising", busy: true);
         var response = await RequestValueAsync("session/stop", StopTimeout).ConfigureAwait(true);
         if (response is null)
@@ -604,6 +751,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             // the store either way
             State = SessionState.Idle;
             Note.Reset();
+            Guidance.Reset();
             Status.SetDecodeActive(false);
             Status.Append("Stop failed - session kept");
             return;
@@ -758,6 +906,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Note.Apply(NotePipelineEvent.NoteReady);
                 _loadedNote = Note.ClinicalNoteText;
                 State = SessionState.Review;
+                Guidance.NoteReady();
                 if (!_regenerating)
                 {
                     _metrics?.NoteReady(Rate(parameters));
@@ -775,6 +924,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                     || !parameters.TryGetProperty("overridable", out var overridable)
                     || overridable.GetBoolean();
                 Note.Apply(NotePipelineEvent.NoteRefused);
+                Guidance.NoteFailed();
                 State = State == SessionState.Finalising ? SessionState.Refused : SessionState.Review;
                 Status.Append("No note - too short or not enough clinical information");
                 if (_metrics is not null && !_regenerating)
@@ -786,6 +936,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             // The transcript is still usable, so review proceeds without a note
             case "note/failed" when State is SessionState.Finalising or SessionState.Review:
                 Note.Apply(NotePipelineEvent.NoteFailed);
+                Guidance.NoteFailed();
                 State = SessionState.Review;
                 var noteFailure = parameters.ValueKind == JsonValueKind.Object
                     ? parameters.GetProperty("detail").GetString() ?? "failed"
@@ -853,6 +1004,15 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Note.TranslationRunning = false;
                 Status.Append("Translation failed");
                 break;
+            case "guidance/model":
+                _ = LoadGuidanceReadinessAsync();
+                break;
+            case "guidance/ready" when parameters.ValueKind == JsonValueKind.Object:
+                ApplyGuidance(parameters, ready: true);
+                break;
+            case "guidance/failed" when parameters.ValueKind == JsonValueKind.Object:
+                ApplyGuidance(parameters, ready: false);
+                break;
             case "audio.level" when parameters.ValueKind == JsonValueKind.Object:
                 Status.SetMicLevel(
                     parameters.GetProperty("level").GetDouble(),
@@ -869,6 +1029,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Paused = false;
                 ActiveReplay = null;
                 Note.Reset();
+                Guidance.Reset();
                 Status.SetMicVisible(false);
                 Status.SetDecodeActive(false);
                 Status.Append(parameters.ValueKind == JsonValueKind.Object

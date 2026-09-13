@@ -244,8 +244,58 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
             }));
         }
 
+        if (method == "session/note" && StoredNote is not null)
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                text = StoredNote,
+                style = "",
+                detail = "",
+                generatedAt = "2026-09-13T00:00:00Z",
+                editedAt = (string?)null,
+            }));
+        }
+
+        if (method == "guidance/corpora")
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                state = GuidanceState,
+                detail = GuidanceDetail,
+                corpora = GuidanceCorpora.ToArray(),
+            }));
+        }
+
+        if (method == "session/guidance")
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(
+                new { guidance = StoredGuidance }));
+        }
+
         return Task.FromResult(Empty);
     }
+
+    /// <summary>Served by guidance/corpora: the embedder's state, ready by default.</summary>
+    public string GuidanceState { get; set; } = "ready";
+
+    public string? GuidanceDetail { get; set; }
+
+    /// <summary>The corpora guidance/corpora lists; one loaded fixture corpus by default.</summary>
+    public List<object> GuidanceCorpora { get; } =
+    [
+        new
+        {
+            id = "fixture", name = "Fixture guidance corpus", licence = "invented",
+            attribution = "none", source = "text", embedder = "gte-large-int8",
+            sha256 = "", chunks = 40, builtAt = "2026-09-11T00:00:00Z", unavailable = (string?)null,
+        },
+    ];
+
+    /// <summary>Served by session/note when set; the stored note is empty otherwise.</summary>
+    public string? StoredNote { get; set; }
+
+    /// <summary>Served by session/guidance; null until a record is stored.</summary>
+    public JsonElement? StoredGuidance { get; set; }
 
     /// <summary>Turns served by session/transcript after a stop.</summary>
     public List<(string Speaker, string Text)> Transcript { get; } = [];

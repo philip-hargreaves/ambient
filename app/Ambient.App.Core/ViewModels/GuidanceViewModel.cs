@@ -1,0 +1,449 @@
+using System.Collections.ObjectModel;
+using System.Text.Json;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+
+namespace Ambient.App.Core.ViewModels;
+
+/// <summary>Whether the engine can search at all: the embedder and the installed corpora.</summary>
+public enum GuidanceReadiness
+{
+    Loading,
+    Ready,
+    NoCorpus,
+    Unavailable,
+}
+
+/// <summary>Where the note's own search has got to.</summary>
+public enum GuidanceSection
+{
+    Hidden,
+    FollowsNote,
+    Searching,
+    Results,
+    NothingMatched,
+    NoCorpusAtSearch,
+    Failed,
+    NotSearched,
+}
+
+/// <summary>
+/// The Guidelines section under the note. The consultation view model owns the
+/// engine and feeds this from the wire; nothing here talks to it.
+/// </summary>
+public sealed partial class GuidanceViewModel : ObservableObject
+{
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible), nameof(NoCorpora),
+        nameof(QueryBoxEnabled), nameof(SearchEnabled))]
+    [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
+    public partial GuidanceReadiness Readiness { get; private set; } = GuidanceReadiness.Loading;
+
+    /// <summary>The loader's reason when unavailable, for the log; never shown.</summary>
+    public string ReadinessDetail { get; private set; } = "";
+
+    /// <summary>Corpora the engine refused, as "id: reason", for the log.</summary>
+    public IReadOnlyList<string> RefusedCorpora { get; private set; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Visible), nameof(Searching), nameof(Failed),
+        nameof(NotSearched), nameof(HasRecord), nameof(StateCaption), nameof(CaptionVisible),
+        nameof(SearchAgainVisible), nameof(QueryBoxEnabled), nameof(SearchEnabled))]
+    [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
+    public partial GuidanceSection Section { get; private set; } = GuidanceSection.Hidden;
+
+    /// <summary>The note has been written since this guidance was found.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchAgainVisible))]
+    public partial bool Stale { get; private set; }
+
+    /// <summary>
+    /// The engine showed these results but could not keep them with the session.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool NotStored { get; private set; }
+
+    /// <summary>Who the shown guidance is from: the attributions of corpora with a card.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AttributionVisible))]
+    public partial string Attribution { get; private set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchEnabled))]
+    [NotifyCanExecuteChangedFor(nameof(SearchQueryCommand))]
+    public partial string Query { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(QueryCaption), nameof(QueryCaptionVisible),
+        nameof(QueryBoxEnabled), nameof(SearchEnabled))]
+    [NotifyCanExecuteChangedFor(nameof(SearchQueryCommand))]
+    public partial bool QuerySearching { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(QueryCaption), nameof(QueryCaptionVisible))]
+    public partial bool QueryFailed { get; private set; }
+
+    /// <summary>
+    /// The query's group first while one shows, then one per sentence, the whole note last.
+    /// </summary>
+    public ObservableCollection<GuidanceGroup> Groups { get; } = [];
+
+    /// <summary>Set by the consultation view model, which owns the engine.</summary>
+    public Func<Task>? SearchNoteRequested { get; set; }
+
+    public Func<string, Task>? SearchQueryRequested { get; set; }
+
+    private List<GuidanceCard> _noteCards = [];
+    private List<GuidanceCard>? _queryCards;
+    private string _queryText = "";
+
+    public bool Visible => Section != GuidanceSection.Hidden;
+
+    public bool Searching => Section == GuidanceSection.Searching;
+
+    public bool Failed => Section == GuidanceSection.Failed;
+
+    public bool NotSearched => Section == GuidanceSection.NotSearched;
+
+    public bool NoCorpora => Readiness == GuidanceReadiness.NoCorpus;
+
+    public bool HasRecord => Section is GuidanceSection.Results
+        or GuidanceSection.NothingMatched or GuidanceSection.NoCorpusAtSearch;
+
+    public bool CardsVisible => Groups.Count > 0;
+
+    public bool AttributionVisible => Attribution.Length > 0;
+
+    public bool SearchAgainVisible => Stale && !Searching;
+
+    /// <summary>The box waits while either search runs; the button also needs a query.</summary>
+    public bool QueryBoxEnabled => Readiness == GuidanceReadiness.Ready && Visible
+        && !Searching && !QuerySearching;
+
+    public bool SearchEnabled => QueryBoxEnabled && Query.Trim().Length > 0;
+
+    public bool CaptionVisible => StateCaption.Length > 0;
+
+    // What the section says when it has nothing to show: the search's own
+    // state, or why the engine cannot search yet
+    public string StateCaption => Section switch
+    {
+        GuidanceSection.Hidden or GuidanceSection.Results => "",
+        GuidanceSection.NothingMatched => "Nothing in the installed guidance matches this note",
+        GuidanceSection.NoCorpusAtSearch =>
+            "No guideline documents were installed when this note was searched",
+        GuidanceSection.Failed => "Guidance could not be searched - see the status bar",
+        _ when Readiness != GuidanceReadiness.Ready => Readiness switch
+        {
+            GuidanceReadiness.Loading => "Loading the guidance model",
+            GuidanceReadiness.NoCorpus => "No guideline documents are installed",
+            _ => "Guidance is unavailable on this computer - see Settings",
+        },
+        GuidanceSection.FollowsNote => "Guidance follows the note",
+        GuidanceSection.Searching => "Searching the installed guidance",
+        _ => "Guidance was not searched for this consultation",
+    };
+
+    public string QueryCaption => QuerySearching ? "Searching"
+        : QueryFailed ? "Search failed - see the status bar"
+        : _queryCards is { Count: 0 } ? "No match in the installed guidance"
+        : "";
+
+    public bool QueryCaptionVisible => QueryCaption.Length > 0;
+
+    [RelayCommand(CanExecute = nameof(CanSearchNote))]
+    private Task SearchNote() => SearchNoteRequested?.Invoke() ?? Task.CompletedTask;
+
+    private bool CanSearchNote() => SearchNoteRequested is not null
+        && Readiness == GuidanceReadiness.Ready && !Searching
+        && Section is not (GuidanceSection.Hidden or GuidanceSection.FollowsNote);
+
+    [RelayCommand(CanExecute = nameof(SearchEnabled))]
+    private Task SearchQuery()
+    {
+        _queryText = Query.Trim();
+        _queryCards = null;
+        QueryFailed = false;
+        QuerySearching = true;
+        ShowQueryGroup();
+        return SearchQueryRequested?.Invoke(_queryText) ?? Task.CompletedTask;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanClearQuery))]
+    private void ClearQuery()
+    {
+        _queryText = "";
+        _queryCards = null;
+        QuerySearching = false;
+        QueryFailed = false;
+        ShowQueryGroup();
+    }
+
+    private bool CanClearQuery() => _queryText.Length > 0;
+
+    public void Reset()
+    {
+        _noteCards = [];
+        Stale = false;
+        NotStored = false;
+        Attribution = "";
+        Query = "";
+        Section = GuidanceSection.Hidden;
+        ClearQuery();
+        ShowNoteGroups();
+    }
+
+    /// <summary>The note is being written; its search follows.</summary>
+    public void NoteStarted()
+    {
+        _noteCards = [];
+        Stale = false;
+        NotStored = false;
+        Attribution = "";
+        Section = GuidanceSection.FollowsNote;
+        ShowNoteGroups();
+    }
+
+    /// <summary>The note arrived; a result or failure that beat it stands.</summary>
+    public void NoteReady()
+    {
+        if (Section == GuidanceSection.FollowsNote)
+        {
+            Section = GuidanceSection.Searching;
+        }
+    }
+
+    public void NoteFailed() => Section = GuidanceSection.Hidden;
+
+    /// <summary>The consultation view model has accepted a search-again request.</summary>
+    public void SearchStarted()
+    {
+        Stale = false;
+        Section = GuidanceSection.Searching;
+    }
+
+    public void MarkStale()
+    {
+        if (HasRecord)
+        {
+            Stale = true;
+        }
+    }
+
+    /// <summary>A reopened session's record, or null when it was never searched.</summary>
+    public void LoadStored(JsonElement? guidance)
+    {
+        NotStored = false;
+        if (guidance is not { ValueKind: JsonValueKind.Object } record)
+        {
+            _noteCards = [];
+            Stale = false;
+            Attribution = "";
+            Section = GuidanceSection.NotSearched;
+            ShowNoteGroups();
+            return;
+        }
+
+        ApplyRecord(record);
+        Stale = Flag(record, "stale");
+    }
+
+    /// <summary>The note's search came back, for the consultation on screen.</summary>
+    public void ApplyReady(JsonElement result)
+    {
+        ApplyRecord(result);
+        Stale = Flag(result, "stale");
+        NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
+    }
+
+    public void ApplyFailed() => Section = GuidanceSection.Failed;
+
+    // A query reply after Clear or a new consultation belongs to nothing on screen
+    public void ApplyQueryReady(JsonElement result)
+    {
+        if (!QuerySearching)
+        {
+            return;
+        }
+
+        _queryCards = Cards(result);
+        QuerySearching = false;
+        QueryFailed = false;
+        ShowQueryGroup();
+    }
+
+    public void ApplyQueryFailed()
+    {
+        if (!QuerySearching)
+        {
+            return;
+        }
+
+        QuerySearching = false;
+        QueryFailed = true;
+        ShowQueryGroup();
+    }
+
+    /// <summary>guidance/corpora: the embedder's state and what it can search.</summary>
+    public void ApplyCorpora(JsonElement corpora)
+    {
+        ReadinessDetail = GuidanceCard.Field(corpora, "detail");
+        var refused = new List<string>();
+        var loaded = 0;
+        if (corpora.TryGetProperty("corpora", out var list)
+            && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var corpus in list.EnumerateArray())
+            {
+                var reason = GuidanceCard.Field(corpus, "unavailable");
+                if (reason.Length > 0)
+                {
+                    refused.Add($"{GuidanceCard.Field(corpus, "id")}: {reason}");
+                }
+                else
+                {
+                    loaded++;
+                }
+            }
+        }
+
+        RefusedCorpora = refused;
+        Readiness = GuidanceCard.Field(corpora, "state") switch
+        {
+            "loading" => GuidanceReadiness.Loading,
+            "ready" => loaded > 0 ? GuidanceReadiness.Ready : GuidanceReadiness.NoCorpus,
+            _ => GuidanceReadiness.Unavailable,
+        };
+    }
+
+    /// <summary>The poll itself failed, so there is nothing to wait for.</summary>
+    public void CorporaUnavailable()
+    {
+        ReadinessDetail = "";
+        RefusedCorpora = [];
+        Readiness = GuidanceReadiness.Unavailable;
+    }
+
+    /// <summary>Searches in flight when the engine went never answer; the cards stay.</summary>
+    public void ConnectionLost()
+    {
+        if (Searching)
+        {
+            Section = _noteCards.Count > 0
+                ? GuidanceSection.Results
+                : GuidanceSection.NotSearched;
+        }
+
+        ApplyQueryFailed();
+    }
+
+    private void ApplyRecord(JsonElement record)
+    {
+        _noteCards = Cards(record);
+        Attribution = string.Join(" · ", Attributions(record, _noteCards));
+        Section = _noteCards.Count > 0 ? GuidanceSection.Results
+            : SearchedCount(record) > 0 ? GuidanceSection.NothingMatched
+            : GuidanceSection.NoCorpusAtSearch;
+        ShowNoteGroups();
+    }
+
+    // Only the query group is replaced, so the note's cards keep their place
+    private void ShowQueryGroup()
+    {
+        if (Groups.Count > 0 && Groups[0].IsQuery)
+        {
+            Groups.RemoveAt(0);
+        }
+
+        if (_queryText.Length > 0)
+        {
+            Groups.Insert(0, GuidanceGroup.ForQuery(_queryText, _queryCards ?? []));
+        }
+
+        GroupsChanged();
+    }
+
+    // Sentence groups in result order, the whole-note group last, after the query's
+    private void ShowNoteGroups()
+    {
+        var keep = Groups.Count > 0 && Groups[0].IsQuery ? 1 : 0;
+        while (Groups.Count > keep)
+        {
+            Groups.RemoveAt(Groups.Count - 1);
+        }
+
+        var byTrigger = new Dictionary<string, List<GuidanceCard>>(StringComparer.Ordinal);
+        var order = new List<string>();
+        foreach (var card in _noteCards)
+        {
+            if (!byTrigger.TryGetValue(card.Trigger, out var cards))
+            {
+                cards = [];
+                byTrigger[card.Trigger] = cards;
+                order.Add(card.Trigger);
+            }
+
+            cards.Add(card);
+        }
+
+        foreach (var trigger in order.OrderBy(t => t.Length == 0 ? 1 : 0))
+        {
+            Groups.Add(GuidanceGroup.ForTrigger(trigger, byTrigger[trigger]));
+        }
+
+        GroupsChanged();
+    }
+
+    private void GroupsChanged()
+    {
+        OnPropertyChanged(nameof(CardsVisible));
+        OnPropertyChanged(nameof(QueryCaption));
+        OnPropertyChanged(nameof(QueryCaptionVisible));
+        ClearQueryCommand.NotifyCanExecuteChanged();
+    }
+
+    // The source label needs the corpus name, which only the searched list carries
+    private static List<GuidanceCard> Cards(JsonElement record)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var corpus in Searched(record))
+        {
+            names[GuidanceCard.Field(corpus, "id")] = GuidanceCard.Field(corpus, "name");
+        }
+
+        var cards = new List<GuidanceCard>();
+        if (record.TryGetProperty("shown", out var shown) && shown.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var result in shown.EnumerateArray())
+            {
+                var label = GuidanceCard.Field(result, "source") == "nice" ? "NICE"
+                    : names.GetValueOrDefault(GuidanceCard.Field(result, "corpus"), "");
+                cards.Add(GuidanceCard.From(result, label));
+            }
+        }
+
+        return cards;
+    }
+
+    // Distinct, in searched order, for the corpora that put a card on screen
+    private static IEnumerable<string> Attributions(JsonElement record, List<GuidanceCard> cards)
+    {
+        var shown = cards.Select(c => c.Corpus).ToHashSet(StringComparer.Ordinal);
+        return Searched(record)
+            .Where(c => shown.Contains(GuidanceCard.Field(c, "id")))
+            .Select(c => GuidanceCard.Field(c, "attribution"))
+            .Where(a => a.Length > 0)
+            .Distinct(StringComparer.Ordinal);
+    }
+
+    private static List<JsonElement> Searched(JsonElement record) =>
+        record.TryGetProperty("searched", out var searched)
+        && searched.ValueKind == JsonValueKind.Array
+            ? [.. searched.EnumerateArray()]
+            : [];
+
+    private static int SearchedCount(JsonElement record) => Searched(record).Count;
+
+    private static bool Flag(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
+}

@@ -79,6 +79,7 @@ public partial class App : Application
             Path.Combine(localState, "metrics.jsonl")));
         services.AddSingleton<TranscriptViewModel>();
         services.AddSingleton<NoteViewModel>();
+        services.AddSingleton<GuidanceViewModel>();
         services.AddSingleton<StatusBarViewModel>();
         services.AddSingleton<MicViewModel>();
         services.AddSingleton<ConsultationViewModel>();
