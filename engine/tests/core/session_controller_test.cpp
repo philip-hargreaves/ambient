@@ -179,10 +179,10 @@ struct RecordingEvents : ISessionEvents {
     std::string note_saved_session;
     std::string note_saved_text;
 
-    void OnNoteSaved(const std::string& session, const std::string& text) override {
+    void OnNoteSaved(const std::string& session, const store::Document& note) override {
         const std::lock_guard<std::mutex> lock(mutex);
         note_saved_session = session;
-        note_saved_text = text;
+        note_saved_text = note.text;
     }
 
     void OnNoteFailed(const std::string& detail) override {
@@ -302,6 +302,7 @@ struct FakeSessionStore : store::ISessionStore {
     std::vector<asr::Turn> turns;
     std::uint64_t lost = 0;
     bool refuse_begin = false;
+    bool refuse_documents = false;
     int begins = 0;
 
     store::SessionId Begin(const store::SessionMeta& meta) override {
@@ -365,6 +366,7 @@ struct FakeSessionStore : store::ISessionStore {
     void SaveDocument(const store::SessionId& id, store::DocumentKind kind,
                       const store::Document& document) override {
         const std::lock_guard<std::mutex> lock(mutex);
+        if (refuse_documents) throw store::StoreError(store::StoreCode::kFull, "disk full");
         if (kind == store::DocumentKind::kNote) {
             calls.push_back("note " + id);
             note = document.text;
@@ -767,6 +769,30 @@ TEST(SessionController, TheNoteFollowsTheSeal) {
     ASSERT_EQ(writer.calls.size(), 1u);
     EXPECT_FALSE(writer.calls[0].empty()) << "the writer gets the transcript";
     EXPECT_GE(writer.prepares.load(), 1) << "the weights warm while the session records";
+}
+
+TEST(SessionController, ARefusedNoteSaveStillReachesTheShellAndFiresNoNoteSaved) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.refuse_documents = true;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_TRUE(events.note_saved_session.empty()) << "nothing stored, nothing to search";
+    EXPECT_TRUE(store.note.empty());
 }
 
 TEST(SessionController, TheNoteBringsItsOptionsAndLabel) {

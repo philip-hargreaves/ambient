@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <nlohmann/json.hpp>
 
 #include "ports/guidance_retriever.hpp"
@@ -19,5 +20,14 @@ json ToJson(const Results& results);
 
 Corpus CorpusFromJson(const json& j);
 Results FromJson(const json& j);
+
+// A search kept with its session, tied to the note revision it ran on
+struct Record {
+    Results results;
+    std::int64_t note_revision = 0;
+};
+
+json ToJson(const Record& record);
+Record RecordFromJson(const json& j);
 
 }  // namespace ambient::guidance

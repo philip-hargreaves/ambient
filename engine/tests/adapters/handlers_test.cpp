@@ -704,20 +704,60 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     two.score = 0.861;
     results.shown.push_back(two);
 
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
+    request.on_ready(results);
+    json expected = LoadFixture("guidance-ready.json");
+    expected["params"]["id"] = id;
+    ASSERT_EQ(sent.all.size(), 1u);
+    EXPECT_EQ(expected["method"], sent.all[0].first);
+    EXPECT_EQ(sent.all[0].second, expected["params"]);
+
+    // Stored before it was sent, as the same record
+    const auto stored = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kGuidance);
+    json record = sent.all[0].second;
+    record.erase("id");
+    record.erase("storeError");
+    EXPECT_EQ(json::parse(stored.text), record);
+}
+
+TEST(Handlers, GuidanceForAnErasedSessionIsDroppedQuietly) {
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
+    fixture.store->Delete(id);
+    request.on_ready(ambient::guidance::Results{});
+    EXPECT_TRUE(sent.all.empty());
+}
+
+TEST(Handlers, GuidanceTheStoreRefusesStillArrivesWithTheReason) {
+    SessionStoreFixture fixture;
+    const auto recording = fixture.store->Begin({16000, "", ""});
     Sent sent;
     auto request =
-        GuidanceSearchRequest("a1b2c3d4e5f60718293a4b5c6d7e8f90", "note", 3, sent.Sink());
-    request.on_ready(results);
-    const json fixture = LoadFixture("guidance-ready.json");
+        GuidanceSearchRequest(*fixture.store, recording, {.text = "note"}, 3, sent.Sink());
+    request.on_ready(ambient::guidance::Results{});
     ASSERT_EQ(sent.all.size(), 1u);
-    EXPECT_EQ(fixture["method"], sent.all[0].first);
-    EXPECT_EQ(sent.all[0].second, fixture["params"]);
+    EXPECT_EQ(sent.all[0].first, "guidance/ready");
+    EXPECT_EQ(sent.all[0].second["id"], recording);
+    EXPECT_NE(sent.all[0].second["storeError"].get<std::string>().find("still recording"),
+              std::string::npos);
 }
 
 TEST(Handlers, GuidanceFailedMatchesTheFixture) {
+    SessionStoreFixture sessions;
     Sent sent;
-    auto request =
-        GuidanceSearchRequest("a1b2c3d4e5f60718293a4b5c6d7e8f90", "note", 3, sent.Sink());
+    auto request = GuidanceSearchRequest(*sessions.store, "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+                                         {.text = "note"}, 3, sent.Sink());
     request.on_failed("guidance embedder gte-large-int8: tokenizer ignores max_length");
     const json fixture = LoadFixture("guidance-failed.json");
     ASSERT_EQ(sent.all.size(), 1u);
@@ -829,6 +869,35 @@ TEST(Handlers, GuidanceSearchReportsAFailedSearch) {
     EXPECT_EQ(sent.all[0].first, "guidance/failed");
     EXPECT_EQ(sent.all[0].second["detail"], "no embedding model staged");
     EXPECT_TRUE(sent.all[0].second["id"].is_null());
+}
+
+TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    EXPECT_EQ(ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}})),
+              (json{{"guidance", nullptr}}));
+
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const json expected = LoadFixture("session-guidance.json")["result"];
+    json record = expected["guidance"];
+    record.erase("generatedAt");
+    record.erase("stale");
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kGuidance,
+                                {.text = record.dump()});
+
+    json result = ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}));
+    EXPECT_TRUE(result["guidance"]["generatedAt"].is_string());
+    result["guidance"]["generatedAt"] = expected["guidance"]["generatedAt"];
+    EXPECT_EQ(result, expected);
+
+    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited");
+    EXPECT_TRUE(
+        ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}))["guidance"]["stale"]);
+
+    const auto unknown = HandleSessionGuidance(*fixture.store, json{{"id", "nope"}});
+    ASSERT_TRUE(std::holds_alternative<Error>(unknown));
+    EXPECT_EQ(std::get<Error>(unknown).code, kSessionError);
 }
 
 }  // namespace

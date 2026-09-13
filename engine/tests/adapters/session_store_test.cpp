@@ -294,11 +294,13 @@ TEST(SessionStore, EveryDocumentKindRoundTrips) {
     store.Finalise(id);
     store.SaveDocument(id, DocumentKind::kTranslation, {.text = "Twój łokieć", .language = "pl"});
     store.SaveDocument(id, DocumentKind::kLabel, {.text = "Elbow swelling"});
+    store.SaveDocument(id, DocumentKind::kGuidance, {.text = R"({"version":1})"});
 
     const Document translation = store.ReadDocument(id, DocumentKind::kTranslation);
     EXPECT_EQ(translation.text, "Twój łokieć");
     EXPECT_EQ(translation.language, "pl");
     EXPECT_EQ(store.ReadDocument(id, DocumentKind::kLabel).text, "Elbow swelling");
+    EXPECT_EQ(store.ReadDocument(id, DocumentKind::kGuidance).text, R"({"version":1})");
     EXPECT_EQ(store.ReadDocument(id, DocumentKind::kNote).text, "");
 }
 
@@ -1060,6 +1062,8 @@ TEST(SessionStore, RewritingADocumentNeverReusesANonce) {
     record();
 
     EXPECT_EQ(sequences, (std::vector<std::int64_t>{1, 2, 3}));
+    EXPECT_EQ(store.ReadDocument(id, DocumentKind::kNote).revision, 3);
+    EXPECT_EQ(store.ReadDocument(id, DocumentKind::kPatient).revision, 0) << "absent";
     EXPECT_NE(payloads[0], payloads[1]) << "the same text, a different IV";
     EXPECT_NE(payloads[1], payloads[2]);
     EXPECT_NE(payloads[0], payloads[2]);

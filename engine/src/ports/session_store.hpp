@@ -48,8 +48,8 @@ struct SessionSeed {
 };
 
 // The texts a finalised session holds, one of each; a rewrite replaces. Summary and reflection are
-// appraisal documents, not the clinical record
-enum class DocumentKind { kNote, kPatient, kTranslation, kLabel, kSummary, kReflection };
+// appraisal documents, not the clinical record. Guidance is what the note's search showed
+enum class DocumentKind { kNote, kPatient, kTranslation, kLabel, kSummary, kReflection, kGuidance };
 
 struct Document {
     std::string text;             // Empty when the session has no such document
@@ -58,6 +58,7 @@ struct Document {
     std::string detail;           // Note only: concise | standard | detailed
     std::string generated_at;     // ISO 8601 UTC; when the model wrote it
     std::string edited_at;        // ISO 8601 UTC; empty until a person changed it
+    std::int64_t revision = 0;    // Counts every write of this kind, 0 when absent
 };
 
 // Audio is durable within a second and exists to resume a crash: Finalise

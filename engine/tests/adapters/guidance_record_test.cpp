@@ -75,6 +75,15 @@ TEST(GuidanceRecord, RoundsTheScore) {
     EXPECT_EQ(FromJson(ToJson(Sample())).shown[0].score, 0.897);
 }
 
+TEST(GuidanceRecord, CarriesTheNoteRevision) {
+    const Record record{Sample(), 7};
+    const json wire = ToJson(record);
+    EXPECT_EQ(wire["noteRevision"], 7);
+    const Record back = RecordFromJson(wire);
+    EXPECT_EQ(back.note_revision, 7);
+    EXPECT_EQ(ToJson(back), wire);
+}
+
 TEST(GuidanceRecord, CarriesTheSearchedCorpusAndFloor) {
     const Results back = FromJson(ToJson(Sample()));
     EXPECT_EQ(back.floor, 0.85);

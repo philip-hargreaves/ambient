@@ -117,4 +117,19 @@ Results FromJson(const json& j) {
     return out;
 }
 
+json ToJson(const Record& record) {
+    json body = ToJson(record.results);
+    body["noteRevision"] = record.note_revision;
+    return body;
+}
+
+Record RecordFromJson(const json& j) {
+    Record record;
+    record.results = FromJson(j);
+    if (const auto it = j.find("noteRevision"); it != j.end() && it->is_number_integer()) {
+        record.note_revision = it->get<std::int64_t>();
+    }
+    return record;
+}
+
 }  // namespace ambient::guidance

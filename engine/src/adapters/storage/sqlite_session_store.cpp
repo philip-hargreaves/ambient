@@ -43,6 +43,8 @@ KindSpec SpecFor(DocumentKind kind) {
             return {"summary", Domain::kSummary};
         case DocumentKind::kReflection:
             return {"reflection", Domain::kReflection};
+        case DocumentKind::kGuidance:
+            return {"guidance", Domain::kGuidance};
     }
     throw std::invalid_argument("unknown document kind");
 }
@@ -390,9 +392,9 @@ std::vector<SessionSummary> SqliteSessionStore::ListSessions() {
     std::vector<SessionSummary> sessions;
     Db::Stmt select = db_.Prepare(
         "SELECT s.id, s.started_at, s.ended_at, s.state, s.sample_rate, k.wrapped, l.payload,"
-        // Label, summary and reflection are not edits to the record
+        // Label, summary, reflection and guidance are not edits to the record
         " (SELECT max(edited_at) FROM documents d WHERE d.session_id = s.id"
-        "  AND d.kind NOT IN ('label', 'summary', 'reflection')),"
+        "  AND d.kind NOT IN ('label', 'summary', 'reflection', 'guidance')),"
         // The audio's length outlives the audio: the turns' end is plaintext
         " (SELECT max(first_frame + frame_count) FROM turns t WHERE t.session_id = s.id),"
         " EXISTS(SELECT 1 FROM documents r WHERE r.session_id = s.id"
@@ -585,6 +587,7 @@ Document SqliteSessionStore::ReadDocumentLocked(const SessionId& id, DocumentKin
         document.language = select.ColumnText(0);
         document.generated_at = select.ColumnText(2);
         document.edited_at = select.ColumnText(3);
+        document.revision = select.ColumnInt64(6);
         if (kind == DocumentKind::kNote) {
             document.style = select.ColumnText(4);
             document.detail = select.ColumnText(5);

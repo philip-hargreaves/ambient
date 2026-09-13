@@ -745,11 +745,17 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
     });
 }
 
-json GuidanceResultsJson(const std::string& session, const ambient::guidance::Results& results) {
-    json body = ambient::guidance::ToJson(results);
+namespace {
+
+json GuidanceReadyJson(const std::string& session, const ambient::guidance::Record& record,
+                       const std::string& store_error) {
+    json body = ambient::guidance::ToJson(record);
     body["id"] = NullWhenEmpty(session);
+    body["storeError"] = NullWhenEmpty(store_error);
     return body;
 }
+
+}  // namespace
 
 json GuidanceCorporaJson(const std::vector<ambient::guidance::Corpus>& corpora) {
     json list = json::array();
@@ -757,13 +763,34 @@ json GuidanceCorporaJson(const std::vector<ambient::guidance::Corpus>& corpora) 
     return json{{"corpora", list}};
 }
 
-ambient::guidance::SearchRequest GuidanceSearchRequest(const std::string& session, std::string note,
-                                                       int limit, Notify notify) {
+ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
+                                                       const std::string& session,
+                                                       ambient::store::Document note, int limit,
+                                                       Notify notify) {
     ambient::guidance::SearchRequest request;
-    request.note = std::move(note);
+    request.note = std::move(note.text);
     request.limit = limit;
-    request.on_ready = [session, notify](const ambient::guidance::Results& results) {
-        notify("guidance/ready", GuidanceResultsJson(session, results));
+    const auto revision = note.revision;
+    request.on_ready = [&sessions, session, revision,
+                        notify](const ambient::guidance::Results& results) {
+        const ambient::guidance::Record record{results, revision};
+        std::string store_error;
+        if (!session.empty()) {
+            try {
+                sessions.SaveDocument(session, ambient::store::DocumentKind::kGuidance,
+                                      {.text = ambient::guidance::ToJson(record).dump()});
+            } catch (const ambient::store::StoreError& e) {
+                if (e.Code() == ambient::store::StoreCode::kNotFound) {
+                    std::fprintf(stderr, "ambient-engine: guidance for %s dropped, session gone\n",
+                                 session.c_str());
+                    return;
+                }
+                store_error = e.what();
+            } catch (const std::exception& e) {
+                store_error = e.what();
+            }
+        }
+        notify("guidance/ready", GuidanceReadyJson(session, record, store_error));
     };
     request.on_failed = [session, notify](const std::string& detail) {
         notify("guidance/failed", json{{"id", NullWhenEmpty(session)}, {"detail", detail}});
@@ -783,25 +810,45 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
         limit = params["limit"].get<int>();
     }
     std::string session;
-    std::string note;
+    ambient::store::Document note;
     if (params.contains("text")) {
         if (!params["text"].is_string()) {
             return Error{kInvalidParams, "Invalid params", json("text must be a string")};
         }
-        note = params["text"].get<std::string>();
+        note.text = params["text"].get<std::string>();
     } else {
         const auto id = IdFrom(params);
         if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
         session = std::get<std::string>(id);
         try {
-            note = sessions.ReadDocument(session, ambient::store::DocumentKind::kNote).text;
+            note = sessions.ReadDocument(session, ambient::store::DocumentKind::kNote);
         } catch (const std::exception& e) {
             return Error{kSessionError, "Session error", json(e.what())};
         }
     }
-    if (note.empty()) return Error{kSessionError, "Session error", json("no note to search")};
-    lane.Run(GuidanceSearchRequest(session, std::move(note), limit, notify));
+    if (note.text.empty()) return Error{kSessionError, "Session error", json("no note to search")};
+    lane.Run(GuidanceSearchRequest(sessions, session, std::move(note), limit, notify));
     return json::object();
+}
+
+std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
+                                                const json& params) {
+    const auto id = IdFrom(params);
+    if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
+    try {
+        using ambient::store::DocumentKind;
+        const auto& session = std::get<std::string>(id);
+        const auto stored = sessions.ReadDocument(session, DocumentKind::kGuidance);
+        if (stored.text.empty()) return json{{"guidance", nullptr}};
+        const auto record = ambient::guidance::RecordFromJson(json::parse(stored.text));
+        json guidance = ambient::guidance::ToJson(record);
+        guidance["generatedAt"] = NullWhenEmpty(stored.generated_at);
+        guidance["stale"] =
+            record.note_revision != sessions.ReadDocument(session, DocumentKind::kNote).revision;
+        return json{{"guidance", guidance}};
+    } catch (const std::exception& e) {
+        return Error{kSessionError, "Session error", json(e.what())};
+    }
 }
 
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
@@ -815,6 +862,9 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
     });
     server.RegisterMethod("guidance/corpora", [&retriever](const json&) {
         return GuidanceCorporaJson(retriever.Corpora());
+    });
+    server.RegisterMethod("session/guidance", [&sessions](const json& params) {
+        return HandleSessionGuidance(sessions, params);
     });
 }
 

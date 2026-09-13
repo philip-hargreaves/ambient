@@ -18,6 +18,7 @@ enum class Domain : std::uint8_t {
     kLabel = 5,
     kSummary = 6,
     kReflection = 7,
+    kGuidance = 8,
 };
 
 // AES-256-GCM per session; IV = domain + sequence, both authenticated.

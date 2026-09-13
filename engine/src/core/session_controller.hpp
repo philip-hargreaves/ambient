@@ -60,8 +60,8 @@ class ISessionEvents {
     virtual void OnNotePartial(const std::string&) {}
     virtual void OnNoteReady(const std::string&) {}
     virtual void OnNoteFailed(const std::string&) {}
-    // The stored note with its session, for work that follows the note
-    virtual void OnNoteSaved(const std::string& /*session*/, const std::string& /*note*/) {}
+    // The note as stored, with its revision, for work that follows the note
+    virtual void OnNoteSaved(const std::string& /*session*/, const store::Document& /*note*/) {}
 
     // The store could not write (disk full, I/O); recording continues
     virtual void OnStorageFault(const std::string& /*detail*/) {}
@@ -1093,17 +1093,20 @@ class SessionController {
         return words;
     }
 
-    // A store refusal never costs the note: the text still reaches the shell
-    void SaveNote(const store::SessionId& id, const std::string& text,
-                  const note::NoteOptions& options) {
+    // A store refusal never costs the note: the text still reaches the shell.
+    // Returns the note as stored, nothing when the store refused it
+    std::optional<store::Document> SaveNote(const store::SessionId& id, const std::string& text,
+                                            const note::NoteOptions& options) {
         try {
             store::Document document;
             document.text = text;
             document.style = options.style;
             document.detail = options.detail;
             store_.SaveDocument(id, store::DocumentKind::kNote, document);
+            return store_.ReadDocument(id, store::DocumentKind::kNote);
         } catch (const std::exception& e) {
             StoreFailed("note", e);
+            return std::nullopt;
         }
     }
 
@@ -1205,8 +1208,9 @@ class SessionController {
                     events_.OnNoteRefused(*reason, true);
                     return;  // no note, no sheet, no label, and the print learns nothing
                 }
-                SaveNote(id, note, options);
-                events_.OnNoteSaved(id, note);
+                if (const auto stored = SaveNote(id, note, options)) {
+                    events_.OnNoteSaved(id, *stored);
+                }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     refused_ = false;
