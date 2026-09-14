@@ -115,7 +115,7 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
     auto retriever = root.Make();
     const auto note = NoteText("joint-referral");
     EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kLoading);
-    const auto results = retriever->Search(note, 3);
+    const auto results = retriever->Search(note, 3, SearchMode::kNote);
     EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kReady);
     ASSERT_FALSE(results.shown.empty());
     EXPECT_LE(results.shown.size(), 3u);
@@ -161,8 +161,10 @@ TEST(Retriever, AbstainsWhenTheGuardDropsEveryMatch) {
     options.floor = 0.2;
     Retriever retriever([] { return std::make_unique<WordEmbedder>(); }, dir.path, options);
 
-    EXPECT_EQ(retriever.Search("Fever offered paracetamol.", 3).shown.size(), 1u);
-    const auto guarded = retriever.Search("Adult man aged 45 with fever offered paracetamol.", 3);
+    EXPECT_EQ(retriever.Search("Fever offered paracetamol.", 3, SearchMode::kNote).shown.size(),
+              1u);
+    const auto guarded =
+        retriever.Search("Adult man aged 45 with fever offered paracetamol.", 3, SearchMode::kNote);
     EXPECT_EQ(guarded.considered, 1);
     EXPECT_TRUE(guarded.shown.empty());
     EXPECT_TRUE(guarded.abstained) << "the population guard emptied the list";
@@ -174,7 +176,7 @@ TEST(Retriever, MergesHitsFromEveryCorpusIntoOneList) {
     const auto note =
         "Synovitis of the small joints of both hands with morning stiffness. "
         "Also reports frequent migraine with aura and asks about a triptan.";
-    const auto results = retriever->Search(note, 6);
+    const auto results = retriever->Search(note, 6, SearchMode::kNote);
     bool from_a = false, from_b = false;
     for (const auto& r : results.shown) {
         from_a |= r.corpus == "fixture-a";
@@ -187,7 +189,7 @@ TEST(Retriever, MergesHitsFromEveryCorpusIntoOneList) {
 TEST(Retriever, AbstainsWhenNothingClearsTheFloor) {
     Root root;
     auto retriever = root.Make(0.999);
-    const auto results = retriever->Search(NoteText("joint-referral"), 3);
+    const auto results = retriever->Search(NoteText("joint-referral"), 3, SearchMode::kNote);
     EXPECT_TRUE(results.abstained);
     EXPECT_TRUE(results.shown.empty());
     EXPECT_GT(results.considered, 0);
@@ -196,16 +198,36 @@ TEST(Retriever, AbstainsWhenNothingClearsTheFloor) {
 TEST(Retriever, LimitBoundsWhatIsShown) {
     Root root;
     auto retriever = root.Make();
-    EXPECT_EQ(retriever->Search(NoteText("joint-referral"), 1).shown.size(), 1u);
-    EXPECT_TRUE(retriever->Search(NoteText("joint-referral"), 0).shown.empty());
+    EXPECT_EQ(retriever->Search(NoteText("joint-referral"), 1, SearchMode::kNote).shown.size(), 1u);
+    EXPECT_TRUE(retriever->Search(NoteText("joint-referral"), 0, SearchMode::kNote).shown.empty());
 }
 
 TEST(Retriever, AnEmptyNoteAbstainsWithoutEmbedding) {
     Root root;
     auto retriever = root.Make();
-    const auto results = retriever->Search("  ", 3);
+    const auto results = retriever->Search("  ", 3, SearchMode::kNote);
     EXPECT_TRUE(results.abstained);
     EXPECT_EQ(results.considered, 0);
+}
+
+TEST(Retriever, ATypedQueryIsSearchedWholeAtAnyLength) {
+    Root root;
+    auto retriever = root.Make();
+    const auto as_note = retriever->Search("persistent synovitis", 3, SearchMode::kNote);
+    EXPECT_TRUE(as_note.abstained);
+    EXPECT_EQ(as_note.considered, 0);
+    const auto as_query = retriever->Search("persistent synovitis", 3, SearchMode::kQuery);
+    EXPECT_GT(as_query.considered, 0);
+    ASSERT_FALSE(as_query.shown.empty());
+    EXPECT_EQ(as_query.shown[0].code, "fx100");
+    EXPECT_TRUE(as_query.shown[0].trigger.empty());
+
+    const auto two_sentences = retriever->Search(
+        "Synovitis of the small joints of both hands. Migraine with aura and asks about a triptan.",
+        6, SearchMode::kQuery);
+    ASSERT_FALSE(two_sentences.shown.empty());
+    for (const auto& r : two_sentences.shown) EXPECT_TRUE(r.trigger.empty()) << "split as a note";
+    EXPECT_TRUE(retriever->Search("  ", 3, SearchMode::kQuery).abstained);
 }
 
 TEST(Retriever, TheWholeNoteIsTheTriggerWhenEverySentenceIsFiltered) {
@@ -214,7 +236,7 @@ TEST(Retriever, TheWholeNoteIsTheTriggerWhenEverySentenceIsFiltered) {
     const auto results = retriever->Search(
         "No persistent synovitis of the small joints of the hands. "
         "Denies any urgent referral to a specialist.",
-        3);
+        3, SearchMode::kNote);
     ASSERT_FALSE(results.shown.empty());
     for (const auto& r : results.shown) EXPECT_TRUE(r.trigger.empty());
 }
@@ -229,7 +251,7 @@ TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {
         std::filesystem::temp_directory_path());
     for (int attempt = 0; attempt < 2; ++attempt) {
         try {
-            retriever.Search("Chest pain on exertion.", 3);
+            retriever.Search("Chest pain on exertion.", 3, SearchMode::kNote);
             FAIL() << "search succeeded without an embedder";
         } catch (const std::runtime_error& e) {
             EXPECT_STREQ(e.what(), "no embedding model staged");
@@ -247,7 +269,7 @@ TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
     retriever.Prepare();
     EXPECT_TRUE(retriever.Corpora().empty());
     EXPECT_EQ(retriever.Status().phase, Readiness::Phase::kReady) << "loaded, nothing installed";
-    const auto results = retriever.Search("Chest pain on exertion.", 3);
+    const auto results = retriever.Search("Chest pain on exertion.", 3, SearchMode::kNote);
     EXPECT_TRUE(results.shown.empty());
     EXPECT_FALSE(results.abstained);
     EXPECT_EQ(results.considered, 0);

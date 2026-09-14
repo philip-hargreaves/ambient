@@ -141,8 +141,8 @@ TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {
         Retriever ordering(lend, dir / "corpora", unfloored);
         Retriever shipped(lend, dir / "corpora");
         for (const auto& note : fixture::Notes(kFixtureDir)) {
-            const auto results = ordering.Search(note.text, 3);
-            const auto floored = shipped.Search(note.text, 3);
+            const auto results = ordering.Search(note.text, 3, SearchMode::kNote);
+            const auto floored = shipped.Search(note.text, 3, SearchMode::kNote);
             std::vector<std::string> ids;
             for (const auto& r : results.shown) ids.push_back(r.chunk_id);
             if (note.expected.empty()) {

@@ -34,7 +34,7 @@ class Retriever : public IGuidanceRetriever {
               RetrieverOptions options = {});
 
     void Prepare() override;
-    Results Search(const std::string& note, int limit) override;
+    Results Search(const std::string& text, int limit, SearchMode mode) override;
     std::vector<Corpus> Corpora() override;
     Readiness Status() override;
 

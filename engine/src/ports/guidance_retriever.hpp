@@ -37,7 +37,7 @@ struct Result {
     std::string source;        // the corpus source, "nice"/"text"/"upload"
     std::string citation;      // code, number and title on one line, for the clipboard
     double score = 0;
-    std::string trigger;  // the note sentence that found it, empty when the note as a whole did
+    std::string trigger;  // the note sentence that found it, empty for the whole note or a query
 };
 
 struct Results {
@@ -55,6 +55,11 @@ struct Readiness {
     std::string detail;  // the loader's reason when unavailable
 };
 
+// A note is split into sentences, negated ones dropped, and searched sentence
+// by sentence with the whole note as one more query; a typed query is one
+// query at any length. The floor and the population guard apply to both
+enum class SearchMode { kNote, kQuery };
+
 // Retrieval for the Guidelines feature: the note in, the recommendations to
 // show out, already filtered, ordered and thresholded. Retrieved text never
 // enters a generated document. Uploads arrive later; until then the two
@@ -67,7 +72,7 @@ class IGuidanceRetriever {
     // safe to call repeatedly
     virtual void Prepare() {}
 
-    virtual Results Search(const std::string& note, int limit) = 0;
+    virtual Results Search(const std::string& text, int limit, SearchMode mode) = 0;
 
     virtual std::vector<Corpus> Corpora() = 0;
 

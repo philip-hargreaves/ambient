@@ -25,6 +25,7 @@ struct FakeRetriever : IGuidanceRetriever {
     bool search_throws = false;
     int prepares = 0;
     std::vector<std::string> searched;
+    std::vector<SearchMode> modes;
 
     void Prepare() override {
         std::lock_guard<std::mutex> lock(mutex);
@@ -32,11 +33,12 @@ struct FakeRetriever : IGuidanceRetriever {
         changed.notify_all();
         if (prepare_throws) throw std::runtime_error("no embedding model staged");
     }
-    Results Search(const std::string& note, int limit) override {
+    Results Search(const std::string& note, int limit, SearchMode mode) override {
         std::unique_lock<std::mutex> lock(mutex);
         if (prepare_throws) throw std::runtime_error("no embedding model staged");
         if (search_throws) throw std::runtime_error("corpus gone");
         searched.push_back(note);
+        modes.push_back(mode);
         changed.notify_all();
         changed.wait(lock, [this] { return !hold; });
         Results results;
@@ -189,6 +191,8 @@ TEST(GuidanceLane, TheNotesSearchAndATypedQueryWaitApart) {
         ASSERT_TRUE(outcome.WaitUntil([&] { return outcome.ready.size() == 3; }));
     }
     EXPECT_EQ(retriever.searched, (std::vector<std::string>{"typed one", "note", "typed three"}));
+    EXPECT_EQ(retriever.modes,
+              (std::vector<SearchMode>{SearchMode::kQuery, SearchMode::kNote, SearchMode::kQuery}));
     EXPECT_EQ(outcome.failed, (std::vector<std::string>{"superseded"}));
 }
 

@@ -609,7 +609,8 @@ struct EchoRetriever : ambient::guidance::IGuidanceRetriever {
     std::vector<std::pair<std::string, int>> searches;
     bool fail = false;
 
-    ambient::guidance::Results Search(const std::string& note, int limit) override {
+    ambient::guidance::Results Search(const std::string& note, int limit,
+                                      ambient::guidance::SearchMode) override {
         {
             const std::lock_guard<std::mutex> lock(mutex);
             searches.emplace_back(note, limit);

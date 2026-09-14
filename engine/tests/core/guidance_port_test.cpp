@@ -55,7 +55,7 @@ TEST(GuidanceFixture, EveryExpectedIdExistsAndTheHardCasesArePresent) {
 
 // The port's defaults and nothing else
 struct StubRetriever : IGuidanceRetriever {
-    Results Search(const std::string&, int) override {
+    Results Search(const std::string&, int, SearchMode) override {
         return {};
     }
     std::vector<Corpus> Corpora() override {

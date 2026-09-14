@@ -91,7 +91,7 @@ void Retriever::Load() {
     }
 }
 
-Results Retriever::Search(const std::string& note, int limit) {
+Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
     Results out;
@@ -103,7 +103,13 @@ Results Retriever::Search(const std::string& note, int limit) {
             out.searched.push_back(item.corpus);
         }
     }
-    const auto queries = SubQueries(note);
+    const std::string whole(detail::Trim(text));
+    std::vector<std::string> queries;
+    if (mode == SearchMode::kQuery) {
+        if (!whole.empty()) queries.push_back(whole);
+    } else {
+        queries = SubQueries(text);
+    }
     if (queries.empty()) {
         out.abstained = true;
         return out;
@@ -112,7 +118,6 @@ Results Retriever::Search(const std::string& note, int limit) {
 
     // Every corpus shares the embedder, so one sub-query's hits from all of them
     // sort into one list before the vote
-    const std::string whole(detail::Trim(note));
     const int k = options_.union_size;
     std::map<std::string, Located> where;
     std::vector<SubQueryHits> lists;
@@ -144,7 +149,7 @@ Results Retriever::Search(const std::string& note, int limit) {
         const auto& at = where.at(candidate.id);
         auto* store = stores[at.corpus];
         auto chunk = store->TextAt(at.ord);
-        if (PopulationConflict(note, chunk.text)) continue;
+        if (PopulationConflict(text, chunk.text)) continue;
         const auto& cite = store->CiteAt(at.ord);
         Result result;
         result.corpus = store->Info().id;
