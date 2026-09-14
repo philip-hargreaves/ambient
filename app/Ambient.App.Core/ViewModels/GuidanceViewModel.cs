@@ -83,10 +83,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(QueryCaption), nameof(QueryCaptionVisible))]
     public partial bool QueryFailed { get; private set; }
 
-    /// <summary>
-    /// The query's group first while one shows, then one per sentence, the whole note last.
-    /// </summary>
-    public ObservableCollection<GuidanceGroup> Groups { get; } = [];
+    /// <summary>A typed query's cards while one shows; otherwise the note's.</summary>
+    public ObservableCollection<GuidanceCard> Cards { get; } = [];
 
     /// <summary>Set by the consultation view model, which owns the engine.</summary>
     public Func<Task>? SearchNoteRequested { get; set; }
@@ -110,7 +108,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public bool HasRecord => Section is GuidanceSection.Results
         or GuidanceSection.NothingMatched or GuidanceSection.NoCorpusAtSearch;
 
-    public bool CardsVisible => Groups.Count > 0;
+    public bool CardsVisible => Cards.Count > 0;
 
     public bool AttributionVisible => Attribution.Length > 0;
 
@@ -122,7 +120,12 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public bool SearchEnabled => QueryBoxEnabled && Query.Trim().Length > 0;
 
-    public bool CaptionVisible => StateCaption.Length > 0;
+    public bool CaptionVisible => StateCaption.Length > 0 && !QueryShown;
+
+    /// <summary>A typed query is on screen in place of the note's cards.</summary>
+    public bool QueryShown => _queryText.Length > 0;
+
+    public string QueryHeader => QueryShown ? $"Search: '{_queryText}'" : "";
 
     // What the section says when it has nothing to show: the search's own
     // state, or why the engine cannot search yet
@@ -146,8 +149,13 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public string QueryCaption => QuerySearching ? "Searching"
         : QueryFailed ? "Search failed - see the status bar"
-        : _queryCards is { Count: 0 } ? "No match in the installed guidance"
-        : "";
+        : _queryCards is null ? ""
+        : _queryCards.Count switch
+        {
+            0 => "No match in the installed guidance",
+            1 => "1 result",
+            var n => $"{n} results",
+        };
 
     public bool QueryCaptionVisible => QueryCaption.Length > 0;
 
@@ -165,21 +173,19 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _queryCards = null;
         QueryFailed = false;
         QuerySearching = true;
-        ShowQueryGroup();
+        QueryChanged();
         return SearchQueryRequested?.Invoke(_queryText) ?? Task.CompletedTask;
     }
 
-    [RelayCommand(CanExecute = nameof(CanClearQuery))]
+    [RelayCommand(CanExecute = nameof(QueryShown))]
     private void ClearQuery()
     {
         _queryText = "";
         _queryCards = null;
         QuerySearching = false;
         QueryFailed = false;
-        ShowQueryGroup();
+        QueryChanged();
     }
-
-    private bool CanClearQuery() => _queryText.Length > 0;
 
     public void Reset()
     {
@@ -190,7 +196,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         Query = "";
         Section = GuidanceSection.Hidden;
         ClearQuery();
-        ShowNoteGroups();
     }
 
     /// <summary>The note is being written; its search follows.</summary>
@@ -201,7 +206,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         NotStored = false;
         Attribution = "";
         Section = GuidanceSection.FollowsNote;
-        ShowNoteGroups();
+        ShowCards();
     }
 
     /// <summary>The note arrived; a result or failure that beat it stands.</summary>
@@ -240,7 +245,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
             Stale = false;
             Attribution = "";
             Section = GuidanceSection.NotSearched;
-            ShowNoteGroups();
+            ShowCards();
             return;
         }
 
@@ -266,10 +271,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
             return;
         }
 
-        _queryCards = Cards(result);
+        _queryCards = ReadCards(result);
         QuerySearching = false;
         QueryFailed = false;
-        ShowQueryGroup();
+        QueryChanged();
     }
 
     public void ApplyQueryFailed()
@@ -281,7 +286,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
         QuerySearching = false;
         QueryFailed = true;
-        ShowQueryGroup();
     }
 
     /// <summary>guidance/corpora: the embedder's state and what it can search.</summary>
@@ -324,7 +328,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         Readiness = GuidanceReadiness.Unavailable;
     }
 
-    /// <summary>Searches in flight when the engine went never answer; the cards stay.</summary>
+    /// <summary>Searches in flight when the engine went never finish; the cards stay.</summary>
     public void ConnectionLost()
     {
         if (Searching)
@@ -339,71 +343,46 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     private void ApplyRecord(JsonElement record)
     {
-        _noteCards = Cards(record);
+        _noteCards = ReadCards(record);
         Attribution = string.Join(" · ", Attributions(record, _noteCards));
         Section = _noteCards.Count > 0 ? GuidanceSection.Results
             : SearchedCount(record) > 0 ? GuidanceSection.NothingMatched
             : GuidanceSection.NoCorpusAtSearch;
-        ShowNoteGroups();
+        ShowCards();
     }
 
-    // Only the query group is replaced, so the note's cards keep their place
-    private void ShowQueryGroup()
+    private void QueryChanged()
     {
-        if (Groups.Count > 0 && Groups[0].IsQuery)
-        {
-            Groups.RemoveAt(0);
-        }
-
-        if (_queryText.Length > 0)
-        {
-            Groups.Insert(0, GuidanceGroup.ForQuery(_queryText, _queryCards ?? []));
-        }
-
-        GroupsChanged();
-    }
-
-    // Sentence groups in result order, the whole-note group last, after the query's
-    private void ShowNoteGroups()
-    {
-        var keep = Groups.Count > 0 && Groups[0].IsQuery ? 1 : 0;
-        while (Groups.Count > keep)
-        {
-            Groups.RemoveAt(Groups.Count - 1);
-        }
-
-        var byTrigger = new Dictionary<string, List<GuidanceCard>>(StringComparer.Ordinal);
-        var order = new List<string>();
-        foreach (var card in _noteCards)
-        {
-            if (!byTrigger.TryGetValue(card.Trigger, out var cards))
-            {
-                cards = [];
-                byTrigger[card.Trigger] = cards;
-                order.Add(card.Trigger);
-            }
-
-            cards.Add(card);
-        }
-
-        foreach (var trigger in order.OrderBy(t => t.Length == 0 ? 1 : 0))
-        {
-            Groups.Add(GuidanceGroup.ForTrigger(trigger, byTrigger[trigger]));
-        }
-
-        GroupsChanged();
-    }
-
-    private void GroupsChanged()
-    {
-        OnPropertyChanged(nameof(CardsVisible));
+        OnPropertyChanged(nameof(QueryShown));
+        OnPropertyChanged(nameof(QueryHeader));
         OnPropertyChanged(nameof(QueryCaption));
         OnPropertyChanged(nameof(QueryCaptionVisible));
+        OnPropertyChanged(nameof(CaptionVisible));
         ClearQueryCommand.NotifyCanExecuteChanged();
+        ShowCards();
+    }
+
+    // A typed query stands in for the note's cards until it is cleared. The
+    // note's keep result order within each sentence, whole-note matches last
+    private void ShowCards()
+    {
+        Cards.Clear();
+        IEnumerable<GuidanceCard> shown = QueryShown
+            ? _queryCards ?? []
+            : _noteCards
+                .GroupBy(c => c.Trigger, StringComparer.Ordinal)
+                .OrderBy(g => g.Key.Length == 0 ? 1 : 0)
+                .SelectMany(g => g);
+        foreach (var card in shown)
+        {
+            Cards.Add(card);
+        }
+
+        OnPropertyChanged(nameof(CardsVisible));
     }
 
     // The source label needs the corpus name, which only the searched list carries
-    private static List<GuidanceCard> Cards(JsonElement record)
+    private static List<GuidanceCard> ReadCards(JsonElement record)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var corpus in Searched(record))

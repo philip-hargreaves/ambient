@@ -15,6 +15,13 @@ public sealed partial class NotePaneView : UserControl
         InitializeComponent();
         NoteHost.Content = note;
         PatientHost.Content = patient;
+        Tabs.Loaded += (_, _) => Fit();
+        Tabs.SizeChanged += (_, _) => Fit();
+        void Fit()
+        {
+            note.FitTabContent(Tabs);
+            patient.FitTabContent(Tabs);
+        }
     }
 
     public NoteViewModel ViewModel { get; }

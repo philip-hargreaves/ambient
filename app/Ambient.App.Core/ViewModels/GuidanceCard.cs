@@ -29,9 +29,17 @@ public sealed record GuidanceCard(
 
     public bool TagVisible => UpdateTag.Length > 0;
 
-    public bool SectionVisible => Section.Length > 0;
-
     public bool SourceLabelVisible => SourceLabel.Length > 0;
+
+    /// <summary>Title and section path on one line; the wire's " > " reads as "›".</summary>
+    public string Context => Section.Length > 0
+        ? $"{Title} › {Section.Replace(" > ", " › ", StringComparison.Ordinal)}"
+        : Title;
+
+    /// <summary>The note sentence that found this card; empty when the whole note did.</summary>
+    public string Matched => Trigger.Length > 0 ? $"Matched: {Trigger}" : "";
+
+    public bool MatchedVisible => Trigger.Length > 0;
 
     /// <summary>
     /// "Last updated 12 Oct 2020" from any ISO 8601 date; empty when the guideline gives none.

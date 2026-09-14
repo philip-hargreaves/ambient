@@ -5,10 +5,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid Padding="0,10,0,8" RowSpacing="10">
+        <!-- The note sizes to its text (capped in code where a host bounds
+             the editor) and guidance takes what is left, scrolling inside;
+             a page that scrolls leaves both to their content -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- Top right produces the document; bottom left takes it away;
@@ -138,6 +142,12 @@
                 </Button>
             </StackPanel>
         </Grid>
+
+        <ContentControl
+            x:Name="GuidanceHost"
+            Grid.Row="3"
+            HorizontalContentAlignment="Stretch"
+            VerticalContentAlignment="Stretch" />
 
         <!-- An edited note is the clinician's wording; Regenerate asks
              before replacing it -->

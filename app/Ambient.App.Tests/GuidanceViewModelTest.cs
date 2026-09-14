@@ -122,7 +122,7 @@ public class GuidanceViewModelTest
 
         var guidance = session.Guidance;
         Assert.Equal(GuidanceSection.Results, guidance.Section);
-        Assert.Equal(2, guidance.Groups.Single().Cards.Count);
+        Assert.Equal(2, guidance.Cards.Count);
         Assert.False(guidance.Stale);
         Assert.True(guidance.HasRecord);
         Assert.Equal("Fixture attribution", guidance.Attribution);
@@ -168,12 +168,16 @@ public class GuidanceViewModelTest
         var (session, _, _) = await ReopenedAsync(Fixtures.Load("session-guidance.json")
             .GetProperty("result").GetProperty("guidance"));
 
-        var card = session.Guidance.Groups.Single().Cards.Single();
+        var card = session.Guidance.Cards.Single();
         Assert.Equal("FX100 1.1.1", card.Reference);
         Assert.Equal("[2009, amended 2018]", card.Tag);
         Assert.Equal("Last updated 12 Oct 2020", card.LastUpdatedLabel);
         Assert.Equal("NICE", card.SourceLabel);
         Assert.True(card.CanOpen);
+        Assert.Equal(
+            "Fictional inflammatory joint disease: assessment and management"
+            + " › 1.1 Referral, diagnosis and investigations › Referral from primary care",
+            card.Context);
     }
 
     [Fact]
@@ -185,9 +189,9 @@ public class GuidanceViewModelTest
         guidance.ApplyReady(Fixtures.Load("guidance-ready.json").GetProperty("params"));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
         Assert.Equal("none", guidance.Attribution);
-        var cards = guidance.Groups.SelectMany(g => g.Cards).ToList();
+        var cards = guidance.Cards;
         Assert.Equal(["NICE", "Fixture guidance corpus"], cards.Select(c => c.SourceLabel));
-        Assert.Equal("For the note as a whole", guidance.Groups[^1].Header);
+        Assert.False(cards[^1].MatchedVisible, "the whole-note match comes last");
         Assert.False(cards[1].CanOpen);
 
         guidance.ApplyCorpora(Fixtures.Load("guidance-corpora.json").GetProperty("result"));
@@ -252,7 +256,7 @@ public class GuidanceViewModelTest
         engine.RaiseNotification("guidance/ready", Ready("other", [Result("fx100-1_1_1")]));
 
         Assert.Equal(GuidanceSection.Searching, session.Guidance.Section);
-        Assert.Empty(session.Guidance.Groups);
+        Assert.Empty(session.Guidance.Cards);
         Assert.Contains(
             session.Status.LogEntries, e => e.Contains("other", StringComparison.Ordinal));
     }
@@ -317,7 +321,7 @@ public class GuidanceViewModelTest
 
         Assert.False(session.Guidance.QuerySearching);
         Assert.Equal("Search failed - see the status bar", session.Guidance.QueryCaption);
-        Assert.True(session.Guidance.Groups.Single().IsQuery);
+        Assert.True(session.Guidance.QueryShown);
     }
 
     [Fact]
@@ -368,7 +372,7 @@ public class GuidanceViewModelTest
         await note.RegenerateCommand.ExecuteAsync(null);
         Assert.Equal(GuidanceSection.FollowsNote, session.Guidance.Section);
         Assert.False(session.Guidance.Stale);
-        Assert.Empty(session.Guidance.Groups);
+        Assert.Empty(session.Guidance.Cards);
 
         engine.RaiseNotification("note/ready",
             JsonSerializer.SerializeToElement(new { text = "rewritten" }));
@@ -420,11 +424,10 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public async Task ATypedQueryShowsItsOwnGroupFirstAndClearRemovesIt()
+    public async Task ATypedQueryStandsInForTheNotesCardsUntilCleared()
     {
         var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
         var guidance = session.Guidance;
-        var noteGroup = guidance.Groups.Single();
 
         guidance.Query = "gout flare";
         Assert.True(guidance.SearchEnabled);
@@ -436,21 +439,28 @@ public class GuidanceViewModelTest
             r => r.Method == "guidance/search"
                 && r.Params.Contains("\"text\":\"gout flare\"", StringComparison.Ordinal));
 
+        Assert.True(guidance.QueryShown);
+        Assert.Equal("Search: 'gout flare'", guidance.QueryHeader);
+        Assert.Empty(guidance.Cards);
+
         engine.RaiseNotification("guidance/ready",
             Ready(null, [Result("fx200-1_1_1"), Result("fx200-1_1_2")], stale: null));
-        Assert.Equal(2, guidance.Groups.Count);
-        Assert.True(guidance.Groups[0].IsQuery);
-        Assert.Equal("Search: 'gout flare'", guidance.Groups[0].Header);
-        Assert.Equal(2, guidance.Groups[0].Cards.Count);
-        Assert.Same(noteGroup, guidance.Groups[1]);
+        Assert.Equal("2 results", guidance.QueryCaption);
+        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], guidance.Cards.Select(c => c.ChunkId));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
 
+        // The note's own result lands behind the query and shows only after Clear
+        engine.RaiseNotification("guidance/ready",
+            Ready("abc", [Result("fx100-1_1_2"), Result("fx100-1_1_3")]));
+        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], guidance.Cards.Select(c => c.ChunkId));
+
         guidance.ClearQueryCommand.Execute(null);
-        Assert.Same(noteGroup, guidance.Groups.Single());
+        Assert.False(guidance.QueryShown);
+        Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], guidance.Cards.Select(c => c.ChunkId));
     }
 
     [Fact]
-    public async Task AQueryWithNoMatchSaysSoInItsOwnGroup()
+    public async Task AQueryWithNoMatchSaysSoAndHidesTheNoteCaption()
     {
         var (session, engine, _) = await ReopenedAsync();
         session.Guidance.Query = "nothing here";
@@ -459,11 +469,17 @@ public class GuidanceViewModelTest
         engine.RaiseNotification("guidance/ready", Ready(null, [], stale: null));
 
         Assert.Equal("No match in the installed guidance", session.Guidance.QueryCaption);
+        Assert.False(session.Guidance.QuerySearching);
+        Assert.Empty(session.Guidance.Cards);
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
+        Assert.False(session.Guidance.CaptionVisible, "the query bar replaces the note caption");
+
+        session.Guidance.ClearQueryCommand.Execute(null);
+        Assert.True(session.Guidance.CaptionVisible);
     }
 
     [Fact]
-    public async Task ATypedQueryFailureShowsInItsGroupWithTheDetailLogged()
+    public async Task ATypedQueryFailureShowsInTheQueryBarWithTheDetailLogged()
     {
         var (session, engine, _) = await ReopenedAsync();
         session.Guidance.Query = "gout";
@@ -487,14 +503,14 @@ public class GuidanceViewModelTest
 
         engine.RaiseNotification("guidance/ready", Ready(null, [], stale: null));
         Assert.Equal("", session.Guidance.QueryCaption);
-        Assert.False(session.Guidance.Groups.Single().IsQuery);
+        Assert.False(session.Guidance.QueryShown);
 
         session.Guidance.Query = "gout";
         await session.Guidance.SearchQueryCommand.ExecuteAsync(null);
         await session.CloseReviewAsync();
         engine.RaiseNotification("guidance/failed", Failed(null, "late"));
         Assert.Equal("", session.Guidance.QueryCaption);
-        Assert.Empty(session.Guidance.Groups);
+        Assert.Empty(session.Guidance.Cards);
     }
 
     [Fact]
@@ -538,7 +554,7 @@ public class GuidanceViewModelTest
         engine.RaiseNotification("guidance/ready",
             Ready("s1", [Result("gout-1", source: "text")], searched: false));
 
-        var card = session.Guidance.Groups.Single().Cards.Single();
+        var card = session.Guidance.Cards.Single();
         Assert.Equal(GuidanceSection.Results, session.Guidance.Section);
         Assert.False(card.SourceLabelVisible);
         Assert.False(session.Guidance.AttributionVisible);
@@ -633,7 +649,7 @@ public class GuidanceViewModelTest
         await session.CloseReviewAsync();
 
         Assert.Equal(GuidanceSection.Hidden, session.Guidance.Section);
-        Assert.Empty(session.Guidance.Groups);
+        Assert.Empty(session.Guidance.Cards);
         Assert.False(session.Guidance.Stale);
     }
 
@@ -653,27 +669,29 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public void CardsAndGroupsDisplayAsTheGuidelineWrites()
+    public void CardsDisplayAsTheGuidelineWrites()
     {
         var card = GuidanceCard.From(JsonSerializer.SerializeToElement(
             Result("fx100-1_1_1", number: "", section: "", updateTag: "2015")), "NICE");
         Assert.Equal("FX100", card.Reference);
         Assert.Equal("[2015]", card.Tag);
-        Assert.False(card.SectionVisible);
         Assert.False(card.LastUpdatedVisible);
         Assert.Equal("Open FX100", card.OpenName);
+        Assert.Equal("Fictional guideline", card.Context);
 
         var stamped = GuidanceCard.From(JsonSerializer.SerializeToElement(
             Result("fx100-1_1_1", lastUpdated: "2020-10-12T09:30:00Z")), "NICE");
         Assert.Equal("Last updated 12 Oct 2020", stamped.LastUpdatedLabel);
-        Assert.Null(GuidanceGroup.ForTrigger("", [card]).HeaderTip);
+        Assert.Equal("Fictional guideline › 1.1 Referral", stamped.Context);
+        Assert.Equal("Matched: A sentence of the note.", stamped.Matched);
 
-        Assert.Equal("For the note as a whole", GuidanceGroup.ForTrigger("", [card]).Header);
-        Assert.Equal("For: 'Fever.'", GuidanceGroup.ForTrigger("Fever.", [card]).Header);
+        var whole = GuidanceCard.From(
+            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE");
+        Assert.False(whole.MatchedVisible);
     }
 
     [Fact]
-    public async Task TheWholeNoteGroupComesLast()
+    public async Task TheWholeNoteMatchesComeLast()
     {
         var (session, engine) = await AfterNoteAsync();
 
@@ -684,10 +702,7 @@ public class GuidanceViewModelTest
             Result("fx100-1_1_3", trigger: ""),
         ]));
 
-        var groups = session.Guidance.Groups;
-        Assert.Equal(2, groups.Count);
-        Assert.Equal("For: 'Second sentence.'", groups[0].Header);
-        Assert.Equal("For the note as a whole", groups[1].Header);
-        Assert.Equal(2, groups[1].Cards.Count);
+        Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"],
+            session.Guidance.Cards.Select(c => c.ChunkId));
     }
 }

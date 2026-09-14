@@ -5,9 +5,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid Padding="0,10,0,8" RowSpacing="10">
+        <!-- The sheet sizes to its text (capped in code where a host bounds the
+             editor), the actions follow it, and a translation takes what is left -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <!-- Opened to a star share in code when a translation exists;
                  a collapsed star row would still claim its share -->
@@ -148,6 +150,7 @@
             <TextBox
                 Grid.Row="1"
                 MinHeight="120"
+                VerticalAlignment="Top"
                 IsReadOnly="True"
                 Style="{StaticResource DocumentTextBox}"
                 Text="{x:Bind ViewModel.TranslationText, Mode=OneWay}" />

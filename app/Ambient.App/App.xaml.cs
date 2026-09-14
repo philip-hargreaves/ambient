@@ -95,6 +95,7 @@ public partial class App : Application
         services.AddTransient<SessionControlsView>();
         services.AddTransient<DemoTrayView>();
         services.AddTransient<TranscriptPaneView>();
+        services.AddTransient<GuidanceSectionView>();
         services.AddTransient<NoteEditorView>();
         services.AddTransient<PatientEditorView>();
         services.AddTransient<NotePaneView>();
