@@ -54,7 +54,8 @@ namespace {
 
 class WireEvents : public ambient::audio::ISessionEvents {
    public:
-    explicit WireEvents(ambient::ipc::PipeServer& server) : server_(server) {}
+    WireEvents(ambient::ipc::PipeServer& server, ambient::store::ISessionStore& sessions)
+        : server_(server), sessions_(sessions) {}
 
     void OnLevel(const ambient::audio::LevelReading& reading) override {
         server_.PushNotification("audio.level",
@@ -153,16 +154,16 @@ class WireEvents : public ambient::audio::ISessionEvents {
     }
 
     // The note's guidance search starts as soon as the note is stored
-    void OnNoteSaved(const std::string& session, const std::string& note) override {
+    void OnNoteSaved(const std::string& session, const ambient::store::Document& note) override {
         if (guidance_ == nullptr) return;
         guidance_->Run(ambient::ipc::GuidanceSearchRequest(
-            session, note, ambient::ipc::kGuidanceLimit,
+            sessions_, session, note, ambient::ipc::kGuidanceLimit,
             [this](const std::string& method, nlohmann::json params) {
                 server_.PushNotification(method, std::move(params));
             }));
     }
 
-    void SetGuidance(ambient::guidance::GuidanceLane* lane) {
+    void SetGuidance(ambient::guidance::IGuidanceLane* lane) {
         guidance_ = lane;
     }
 
@@ -206,8 +207,9 @@ class WireEvents : public ambient::audio::ISessionEvents {
     }
 
     ambient::ipc::PipeServer& server_;
+    ambient::store::ISessionStore& sessions_;
     ambient::translate::ITranslator* translator_ = nullptr;
-    ambient::guidance::GuidanceLane* guidance_ = nullptr;
+    ambient::guidance::IGuidanceLane* guidance_ = nullptr;
     std::mutex throttle_mutex_;
     std::map<std::string, std::chrono::steady_clock::time_point> last_partial_;
     std::map<std::string, ambient::core::ThroughputMeter> meters_;
@@ -278,8 +280,8 @@ int main(int argc, char* argv[]) {
                                                        : std::filesystem::path(corpora_override);
 
         ambient::ipc::PipeServer server(pipe_name);
-        WireEvents events(server);
         ambient::store::SqliteSessionStore session_store(store_root);
+        WireEvents events(server, session_store);
         // A consultation left by closing the app is left all the same
         session_store.EraseUnretained();
         ambient::models::ModelStore model_store(models_root);
@@ -439,7 +441,11 @@ int main(int argc, char* argv[]) {
                 return ambient::guidance::Embedder::Load(model_store);
             },
             corpora_root);
-        ambient::guidance::GuidanceLane guidance_lane(guidance_retriever);
+        ambient::guidance::GuidanceLane guidance_lane(
+            guidance_retriever, [&server](const ambient::guidance::Readiness& readiness) {
+                server.PushNotification("guidance/model",
+                                        ambient::ipc::GuidanceModelJson(readiness));
+            });
         events.SetGuidance(&guidance_lane);
         guidance_lane.Prepare();
         // 10 s, not 3: a Bluetooth microphone link waking measured 1.6-8.8 s

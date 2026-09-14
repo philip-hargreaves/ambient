@@ -15,6 +15,7 @@
 namespace ambient::asr {
 namespace {
 
+// Not in the repo; the test skips without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 
@@ -42,6 +43,9 @@ struct RecordingSink : ITurnSink {
 };
 
 TEST(WhisperReal, TranscribesRealSpeechWithTimingsInsideTheWindow) {
+    if (!std::filesystem::exists(kWav)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const auto frames = First30Seconds(kWav);
     const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
     models::OvRuntime runtime;

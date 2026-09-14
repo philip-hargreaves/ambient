@@ -190,13 +190,13 @@ inline bool PopulationConflict(std::string_view note, std::string_view recommend
     return false;
 }
 
-// "NG100, 1.1 Referral: Rheumatoid arthritis in adults: management"
-inline std::string Citation(std::string_view code, std::string_view section,
+// "NG100 1.1.1, Rheumatoid arthritis in adults: management"
+inline std::string Citation(std::string_view code, std::string_view number,
                             std::string_view title) {
     std::string out(code);
     for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-    if (!section.empty()) out += ", " + std::string(section);
-    if (!title.empty()) out += ": " + std::string(title);
+    if (!number.empty()) out += " " + std::string(number);
+    if (!title.empty()) out += ", " + std::string(title);
     return out;
 }
 

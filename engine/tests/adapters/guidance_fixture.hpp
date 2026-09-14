@@ -1,5 +1,8 @@
 #pragma once
 
+#include <gtest/gtest.h>
+#include <process.h>
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -8,6 +11,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "adapters/guidance/corpus_builder.hpp"
@@ -17,16 +21,26 @@
 // them with any embedder
 namespace ambient::guidance::fixture {
 
-// A fresh temp directory, removed on scope exit
+// One directory per test and process, so parallel runs never share a path
 struct TempDir {
     std::filesystem::path path;
     explicit TempDir(const char* name)
-        : path(std::filesystem::temp_directory_path() / ("ambient-guidance-" + std::string(name))) {
-        std::filesystem::remove_all(path);
+        : path(std::filesystem::temp_directory_path() /
+               ("ambient-guidance-" + std::string(name) + "-" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name() + "-" +
+                std::to_string(_getpid()))) {
+        std::error_code ignored;
+        std::filesystem::remove_all(path, ignored);
         std::filesystem::create_directories(path);
     }
+    // A file a test made read-only would otherwise survive the sweep
     ~TempDir() {
         std::error_code ignored;
+        std::filesystem::recursive_directory_iterator it(path, ignored);
+        for (; it != std::filesystem::recursive_directory_iterator(); it.increment(ignored)) {
+            std::filesystem::permissions(it->path(), std::filesystem::perms::owner_write,
+                                         std::filesystem::perm_options::add, ignored);
+        }
         std::filesystem::remove_all(path, ignored);
     }
 };
@@ -50,10 +64,11 @@ inline std::vector<Chunk> Chunks(const std::filesystem::path& fixture_dir,
         c.code = row.at("code");
         if (!codes.empty() && !codes.count(c.code)) continue;
         c.title = row.at("title");
+        c.number = c.id.substr(c.code.size() + 1);
+        std::replace(c.number.begin(), c.number.end(), '_', '.');
         c.section = row.at("section");
         c.text = row.at("text");
         c.url = "https://example.test/" + c.id;
-        c.source = "text";
         chunks.push_back(std::move(c));
     }
     return chunks;
@@ -83,9 +98,7 @@ inline void WriteMarkdown(const std::filesystem::path& fixture_dir,
                           const std::filesystem::path& docs) {
     std::map<std::string, std::string> per_code;
     for (const auto& chunk : Chunks(fixture_dir)) {
-        auto number = chunk.id.substr(chunk.code.size() + 1);
-        std::replace(number.begin(), number.end(), '_', '.');
-        per_code[chunk.code] += number + " " + chunk.text + "\n\n";
+        per_code[chunk.code] += chunk.number + " " + chunk.text + "\n\n";
     }
     std::filesystem::create_directories(docs);
     for (const auto& [code, text] : per_code) {
@@ -108,11 +121,7 @@ inline void Build(const std::filesystem::path& dir, const std::string& id, IEmbe
     spec.licence = "invented";
     spec.attribution = "none";
     spec.source = "text";
-    spec.embedder_id = identity.id;
-    spec.embedder_rev = identity.rev;
-    spec.query_prefix = identity.query_prefix;
-    spec.max_tokens = identity.max_tokens;
-    spec.dim = identity.dim;
+    spec.embedder = identity;
     spec.built_at = "2026-09-11T00:00:00Z";
     spec.builder = "tests";
     BuildCorpus(dir, spec, chunks, vectors);

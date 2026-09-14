@@ -85,9 +85,9 @@ TEST(PopulationConflict, PregnancyAgeAndSexOnlyWhenTheNoteIsExplicit) {
                                    "Refer children with recurrent infection."));
 }
 
-TEST(Citation, CodeSectionTitle) {
-    EXPECT_EQ(Citation("fx100", "1.1 Referral", "Fictional inflammatory joint disease"),
-              "FX100, 1.1 Referral: Fictional inflammatory joint disease");
+TEST(Citation, CodeNumberTitle) {
+    EXPECT_EQ(Citation("fx100", "1.1.1", "Fictional inflammatory joint disease"),
+              "FX100 1.1.1, Fictional inflammatory joint disease");
     EXPECT_EQ(Citation("ng100", "", ""), "NG100");
 }
 

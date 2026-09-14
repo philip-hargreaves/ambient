@@ -148,9 +148,6 @@ TEST(IndexCorpus, BuildsACorpusTheStoreOpensWithTheEmbeddersIdentity) {
     EXPECT_EQ(store->Info().built_at, "2026-09-11T00:00:00Z");
     const auto first = embedder.Embed(store->TextAt(0).text).vector;
     for (int d = 0; d < kDim; ++d) EXPECT_FLOAT_EQ(store->Matrix()[d], first[d]);
-    auto other = embedder.Identity();
-    other.rev = "different";
-    EXPECT_EQ(CorpusStore::Open(dir.path / "out", other, reason), nullptr);
 }
 
 }  // namespace

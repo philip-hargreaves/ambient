@@ -83,16 +83,31 @@ public class ContractTest
         await raw.WriteAsync(request);
         await raw.FlushAsync();
 
-        var header = new byte[Framing.HeaderBytes];
-        await raw.ReadExactlyAsync(header);
-        var body = new byte[Framing.ReadDeclaredLength(header)];
-        await raw.ReadExactlyAsync(body);
-        using var response = JsonDocument.Parse(body);
+        using var response = await ReadReplyAsync(raw);
 
         Assert.Equal(
             "alive",
             response.RootElement.GetProperty("result").GetProperty("payload").GetString());
         Assert.True(engine.IsRunning);
+    }
+
+    // The embedder may announce itself on a fresh connection first; the reply carries the id
+    private static async Task<JsonDocument> ReadReplyAsync(Stream raw)
+    {
+        while (true)
+        {
+            var header = new byte[Framing.HeaderBytes];
+            await raw.ReadExactlyAsync(header);
+            var body = new byte[Framing.ReadDeclaredLength(header)];
+            await raw.ReadExactlyAsync(body);
+            var frame = JsonDocument.Parse(body);
+            if (frame.RootElement.TryGetProperty("id", out _))
+            {
+                return frame;
+            }
+
+            frame.Dispose();
+        }
     }
 
     [Fact]

@@ -530,4 +530,84 @@ public class SettingsViewModelTest
         Assert.True(bar.MetricsVisible);
         Assert.True(preferences.ShowPerformanceMetrics);
     }
+
+    [Fact]
+    public void InstalledCorporaListWhatTheEngineHas()
+    {
+        var engine = new FakeEngineClient();
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        var corpus = Assert.Single(settings.GuidanceCorpora);
+        Assert.Equal("Fixture guidance corpus", corpus.Name);
+        Assert.Equal("40 passages · 11 Sep 2026", corpus.Detail);
+        Assert.Equal("none", corpus.Attribution);
+        Assert.False(corpus.Refused);
+        Assert.Equal("", settings.GuidanceCaption);
+        Assert.False(settings.GuidanceCaptionVisible);
+    }
+
+    [Fact]
+    public void AnUnavailableGuidanceModelSaysWhyAndListsNothing()
+    {
+        var engine = new FakeEngineClient
+        {
+            GuidanceState = "unavailable",
+            GuidanceDetail = "guidance embedder gte-large-int8: tokenizer ignores max_length",
+        };
+        engine.GuidanceCorpora.Clear();
+
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        Assert.Empty(settings.GuidanceCorpora);
+        Assert.Equal(
+            "Unavailable: guidance embedder gte-large-int8: tokenizer ignores max_length",
+            settings.GuidanceCaption);
+        Assert.True(settings.GuidanceCaptionVisible);
+    }
+
+    [Fact]
+    public void ARefusedCorpusKeepsItsPlaceWithTheReason()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceCorpora.Clear();
+        engine.GuidanceCorpora.Add(new
+        {
+            id = "nice-2026-08",
+            unavailable = "corpus.db sha256 does not match the manifest",
+        });
+
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        var corpus = Assert.Single(settings.GuidanceCorpora);
+        Assert.Equal("nice-2026-08", corpus.Name);
+        Assert.Equal("Not used: corpus.db sha256 does not match the manifest", corpus.Detail);
+        Assert.True(corpus.Refused);
+        Assert.False(corpus.Loaded);
+        Assert.Equal("", settings.GuidanceCaption);
+    }
+
+    [Fact]
+    public void TheListFollowsTheEngineWhenTheGuidanceModelArrives()
+    {
+        var engine = new FakeEngineClient { GuidanceState = "loading" };
+        engine.GuidanceCorpora.Clear();
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        Assert.Equal("Loading", settings.GuidanceCaption);
+
+        engine.GuidanceState = "ready";
+        engine.GuidanceCorpora.Add(new
+        {
+            name = "NICE guidance",
+            licence = "OGL v3",
+            attribution = "Contains public sector information",
+            chunks = 22991,
+            builtAt = "2026-09-11T21:03:17Z",
+        });
+        engine.RaiseNotification("guidance/model");
+
+        var corpus = Assert.Single(settings.GuidanceCorpora);
+        Assert.Equal("22,991 passages · 11 Sep 2026", corpus.Detail);
+        Assert.Equal("Contains public sector information", corpus.Attribution);
+        Assert.Equal("", settings.GuidanceCaption);
+    }
 }

@@ -4,7 +4,6 @@
 #include <map>
 #include <stdexcept>
 
-#include "adapters/guidance/corpus_builder.hpp"
 #include "core/guidance_query.hpp"
 #include "core/guidance_scan.hpp"
 
@@ -83,30 +82,42 @@ void Retriever::Load() {
         loaded_ = std::move(loaded);
         std::lock_guard<std::mutex> lock(corpora_mutex_);
         corpora_ = std::move(corpora);
+        readiness_ = {Readiness::Phase::kReady, ""};
     } catch (const std::exception& e) {
         load_error_ = e.what();
+        std::lock_guard<std::mutex> lock(corpora_mutex_);
+        readiness_ = {Readiness::Phase::kUnavailable, load_error_};
         throw;
     }
 }
 
-Results Retriever::Search(const std::string& note, int limit) {
+Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
     Results out;
-    const auto queries = SubQueries(note);
+    out.floor = options_.floor;
+    std::vector<CorpusStore*> stores;
+    for (auto& item : loaded_) {
+        if (item.store) {
+            stores.push_back(item.store.get());
+            out.searched.push_back(item.corpus);
+        }
+    }
+    const std::string whole(detail::Trim(text));
+    std::vector<std::string> queries;
+    if (mode == SearchMode::kQuery) {
+        if (!whole.empty()) queries.push_back(whole);
+    } else {
+        queries = SubQueries(text);
+    }
     if (queries.empty()) {
         out.abstained = true;
         return out;
-    }
-    std::vector<CorpusStore*> stores;
-    for (auto& item : loaded_) {
-        if (item.store) stores.push_back(item.store.get());
     }
     if (stores.empty()) return out;
 
     // Every corpus shares the embedder, so one sub-query's hits from all of them
     // sort into one list before the vote
-    const std::string whole(detail::Trim(note));
     const int k = options_.union_size;
     std::map<std::string, Located> where;
     std::vector<SubQueryHits> lists;
@@ -133,31 +144,42 @@ Results Retriever::Search(const std::string& note, int limit) {
 
     auto ordered = ApplyFloor(RankVote(lists, options_.note_weight, k), options_.floor);
     out.considered = ordered.considered;
-    out.abstained = ordered.abstained;
     for (const auto& candidate : ordered.kept) {
         if (static_cast<int>(out.shown.size()) >= limit) break;
         const auto& at = where.at(candidate.id);
         auto* store = stores[at.corpus];
         auto chunk = store->TextAt(at.ord);
-        if (PopulationConflict(note, chunk.text)) continue;
+        if (PopulationConflict(text, chunk.text)) continue;
         const auto& cite = store->CiteAt(at.ord);
         Result result;
         result.corpus = store->Info().id;
         result.chunk_id = cite.chunk_id;
-        result.guideline = cite.code;
+        result.code = cite.code;
+        result.number = cite.number;
         result.title = cite.title;
-        result.section = cite.section.empty() ? cite.number : cite.section;
+        result.section = cite.section;
+        result.citation = Citation(cite.code, cite.number, cite.title);
         result.text = std::move(chunk.text);
+        result.url = std::move(chunk.url);
+        result.last_updated = std::move(chunk.last_updated);
+        result.update_tag = std::move(chunk.update_tag);
+        result.source = store->Info().source;
         result.score = candidate.cosine;
-        result.trigger = candidate.trigger;
+        result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
         out.shown.push_back(std::move(result));
     }
+    out.abstained = ordered.abstained || (limit > 0 && out.shown.empty());
     return out;
 }
 
 std::vector<Corpus> Retriever::Corpora() {
     std::lock_guard<std::mutex> lock(corpora_mutex_);
     return corpora_;
+}
+
+Readiness Retriever::Status() {
+    std::lock_guard<std::mutex> lock(corpora_mutex_);
+    return readiness_;
 }
 
 }  // namespace ambient::guidance

@@ -6,18 +6,16 @@
 #include <string>
 #include <vector>
 
+#include "adapters/guidance/embedder.hpp"
 #include "adapters/storage/db.hpp"
 
 namespace ambient::guidance {
 
-// The staged embedder a corpus must have been built with
-struct EmbedderIdentity {
-    std::string id;
-    std::string rev;  // sha256 of the weights
-    int dim = 0;
-    int max_tokens = 0;
-    std::string query_prefix;
-};
+inline constexpr std::uint32_t kCorpusApplicationId = 0x414D4247;  // "AMBG"
+inline constexpr int kCorpusFormat = 1;
+inline constexpr int kShardVectors = 256;  // 1 MB a shard at 1024 dimensions
+inline constexpr const char* kCorpusFile = "corpus.db";
+inline constexpr const char* kManifestFile = "manifest.json";
 
 struct CorpusInfo {
     std::string id;
@@ -39,7 +37,6 @@ struct Cite {
     std::string chunk_id;
     std::string code;
     std::string title;
-    std::string chapter;
     std::string number;
     std::string section;
 };

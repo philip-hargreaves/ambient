@@ -190,6 +190,8 @@
                 MaxWidth="760"
                 HorizontalAlignment="Center">
                 <TabView
+                    x:Name="NarrowTabs"
+                    VerticalAlignment="Stretch"
                     CanDragTabs="False"
                     CanReorderTabs="False"
                     IsAddTabButtonVisible="False"

@@ -6,11 +6,11 @@
 
 #include "adapters/audio/capture_devices.hpp"
 #include "adapters/diarisation/anchor_store.hpp"
-#include "adapters/guidance/guidance_lane.hpp"
 #include "adapters/ipc/messages.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "core/session_controller.hpp"
+#include "ports/guidance_lane.hpp"
 #include "ports/note_lane.hpp"
 
 namespace ambient::models {
@@ -79,20 +79,33 @@ json HandleDemoClear(ambient::store::ISessionStore& sessions);
 // Guidance: the panel shows the top three
 inline constexpr int kGuidanceLimit = 3;
 using Notify = std::function<void(const std::string& method, json params)>;
-json GuidanceResultsJson(const std::string& session, const ambient::guidance::Results& results);
-json GuidanceCorporaJson(const std::vector<ambient::guidance::Corpus>& corpora);
+// guidance/corpora: whether the embedder is loading, ready or unavailable, and
+// every corpus directory. guidance/model carries the state alone once loading ends
+json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
+                         const std::vector<ambient::guidance::Corpus>& corpora);
+json GuidanceModelJson(const ambient::guidance::Readiness& readiness);
 // The lane request behind every search: results go out as guidance/ready, a
-// failure as guidance/failed, both naming the session (null for free text)
-ambient::guidance::SearchRequest GuidanceSearchRequest(const std::string& session, std::string note,
-                                                       int limit, Notify notify);
+// failure as guidance/failed, both naming the session (null for free text).
+// With a session the record is stored before the notification, which also says
+// whether the note moved during the search. A session erased meanwhile ends
+// the search quietly, any other store error rides on the ready payload rather
+// than withholding the results
+ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
+                                                       const std::string& session,
+                                                       ambient::store::Document note, int limit,
+                                                       Notify notify);
+// session/guidance: the stored record, null when the note was never searched
+// or the record cannot be read, stale when the note has been written since
+std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
+                                                const json& params);
 // guidance/search: the stored note of session id, or free text, through the
 // lane. The reply is immediate; the results arrive as a notification
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
-                                               ambient::guidance::GuidanceLane& lane,
+                                               ambient::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify);
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::GuidanceLane& lane);
+                             ambient::guidance::IGuidanceLane& lane);
 
 // Every method the engine serves. first_use: model caches were cold at
 // launch, so the one-off compiles are running and readiness reports them.

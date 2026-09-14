@@ -27,6 +27,8 @@ public sealed partial class SessionsView : UserControl
         _patient = patient;
         InitializeComponent();
         Place(wide: false);
+        NarrowTabs.Loaded += (_, _) => FitNarrow();
+        NarrowTabs.SizeChanged += (_, _) => FitNarrow();
         Loaded += (_, _) =>
         {
             _ = ViewModel.RefreshAsync();
@@ -82,6 +84,25 @@ public sealed partial class SessionsView : UserControl
 
         WideLayout.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
         NarrowLayout.Visibility = wide ? Visibility.Collapsed : Visibility.Visible;
+        // The wide column scrolls as a page; the tabs bound the editors
+        if (wide)
+        {
+            _note.FollowContent();
+            _patient.FollowContent();
+        }
+        else
+        {
+            FitNarrow();
+        }
+    }
+
+    private void FitNarrow()
+    {
+        if (_wide == false)
+        {
+            _note.FitTabContent(NarrowTabs);
+            _patient.FitTabContent(NarrowTabs);
+        }
     }
 
     private void OnPatientFoldClick(object sender, RoutedEventArgs e)

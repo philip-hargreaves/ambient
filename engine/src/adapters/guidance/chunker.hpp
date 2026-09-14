@@ -20,7 +20,6 @@ struct Chunk {
     std::string last_updated;
     std::string text;
     std::string url;
-    std::string source;  // "nice" or "text"
 };
 
 inline constexpr int kTargetWords = 300;

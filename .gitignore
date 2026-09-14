@@ -43,6 +43,9 @@ external/
 
 internal/
 
+# The MSc report: its own repo, synced with Overleaf, kept here for context
+/dissertation/
+
 # OS
 Thumbs.db
 desktop.ini

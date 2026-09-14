@@ -15,7 +15,7 @@ CREATE TABLE corpus_meta (
     embedder_id   TEXT    NOT NULL,                 -- model store id, "gte-large-int8"
     embedder_rev  TEXT    NOT NULL,                 -- sha256 of the model weights
     chunk_prefix  TEXT    NOT NULL DEFAULT '',      -- prefix applied to chunks before embedding
-    query_prefix  TEXT    NOT NULL DEFAULT '',      -- prefix the retriever must apply to queries
+    query_prefix  TEXT    NOT NULL DEFAULT '',      -- must equal the staged embedder's, or the corpus is refused
     max_tokens    INTEGER NOT NULL,                 -- truncation length at index time
     dim           INTEGER NOT NULL CHECK (dim > 0),
     vector_format TEXT    NOT NULL CHECK (vector_format = 'f32le'),
@@ -39,10 +39,8 @@ CREATE TABLE chunks (
     update_tag    TEXT    NOT NULL DEFAULT '',
     last_updated  TEXT    NOT NULL DEFAULT '',
     url           TEXT    NOT NULL DEFAULT '',
-    text          TEXT    NOT NULL,                 -- verbatim, displayed, never generated from
-    words         INTEGER NOT NULL CHECK (words > 0)
+    text          TEXT    NOT NULL                  -- verbatim, displayed, never generated from
 );
-CREATE INDEX chunks_code ON chunks (code);
 
 -- Vectors in shards of consecutive ordinals, about 1 MB each; dim repeats so
 -- the length check is local to the row

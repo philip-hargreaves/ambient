@@ -109,7 +109,6 @@ std::vector<Chunk> ChunksFromDocument(const nlohmann::json& doc, std::set<std::s
             chunk.last_updated = last_updated;
             chunk.text = std::string(detail::Trim(Str(rec, "text")));
             chunk.url = source_url + "/chapter/" + slug + "#" + id;
-            chunk.source = "nice";
             out.push_back(std::move(chunk));
         }
     }
@@ -157,7 +156,6 @@ std::vector<Chunk> ChunksFromText(const std::string& code, const std::string& ti
             chunk.text += buffer[i];
         }
         chunk.url = url;
-        chunk.source = "text";
         out.push_back(std::move(chunk));
         buffer.clear();
         buffered = 0;

@@ -14,9 +14,11 @@
 namespace ambient::audio {
 namespace {
 
+// Not in the repo; these tests skip without it
+constexpr const char* kWav =
+    "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
+
 std::vector<float> FirstSeconds(int seconds) {
-    constexpr const char* kWav =
-        "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
     std::ifstream in(kWav, std::ios::binary);
     if (!in.is_open()) throw std::runtime_error(std::string("missing dev wav: ") + kWav);
     in.seekg(44);
@@ -29,6 +31,9 @@ std::vector<float> FirstSeconds(int seconds) {
 
 // Thresholds under test are the validated hysteresis: enter 0.40, exit 0.25
 TEST(SileroVad, SeparatesSpeechFromSilenceAtTheShippedThresholds) {
+    if (!std::filesystem::exists(kWav)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
     models::OvRuntime runtime;
     SileroVad vad(store, runtime);
@@ -64,6 +69,9 @@ TEST(SileroVad, SeparatesSpeechFromSilenceAtTheShippedThresholds) {
 }
 
 TEST(SileroVad, ResetClearsTheRecurrentState) {
+    if (!std::filesystem::exists(kWav)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
     models::OvRuntime runtime;
     SileroVad vad(store, runtime);

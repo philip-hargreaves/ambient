@@ -7,14 +7,18 @@ namespace Ambient.App.Views;
 public sealed partial class NoteEditorView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly TabFit _fit;
 
-    public NoteEditorView(NoteViewModel viewModel, StatusBarViewModel status)
+    public NoteEditorView(
+        NoteViewModel viewModel, StatusBarViewModel status, GuidanceSectionView guidance)
     {
         ViewModel = viewModel;
         _status = status;
         InitializeComponent();
         Select(StyleBox, ViewModel.Style);
         Select(DetailBox, ViewModel.Detail);
+        GuidanceHost.Content = guidance;
+        _fit = new TabFit(NoteBox, 0.5);
         // A stored session brings its own options; the combos follow
         ViewModel.PropertyChanged += (_, e) =>
         {
@@ -34,6 +38,12 @@ public sealed partial class NoteEditorView : UserControl
     }
 
     public NoteViewModel ViewModel { get; }
+
+    // Inside a tab the note keeps at most half of the content area and the
+    // guidance row gets the rest
+    public void FitTabContent(TabView tabs) => _fit.Fit(tabs);
+
+    public void FollowContent() => _fit.Follow();
 
     // The mode must be visible: an accent border while editing, the flat
     // document look otherwise

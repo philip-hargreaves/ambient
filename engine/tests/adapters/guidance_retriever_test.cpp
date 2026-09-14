@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -90,7 +91,9 @@ std::string NoteText(const char* id) {
 TEST(Retriever, ListsEveryCorpusDirectoryWithTheStaleOneUnavailable) {
     Root root;
     auto retriever = root.Make();
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kLoading);
     retriever->Prepare();
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kReady);
     const auto corpora = retriever->Corpora();
     ASSERT_EQ(corpora.size(), 3u);
     EXPECT_EQ(corpora[0].id, "fixture-a");
@@ -111,21 +114,60 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
     Root root;
     auto retriever = root.Make();
     const auto note = NoteText("joint-referral");
-    const auto results = retriever->Search(note, 3);
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kLoading);
+    const auto results = retriever->Search(note, 3, SearchMode::kNote);
+    EXPECT_EQ(retriever->Status().phase, Readiness::Phase::kReady);
     ASSERT_FALSE(results.shown.empty());
     EXPECT_LE(results.shown.size(), 3u);
     EXPECT_GE(results.considered, static_cast<int>(results.shown.size()));
     EXPECT_FALSE(results.abstained);
-    EXPECT_EQ(results.shown[0].guideline, "fx100");
+    EXPECT_EQ(results.shown[0].code, "fx100");
+    EXPECT_EQ(results.shown[0].citation,
+              "FX100 " + results.shown[0].number +
+                  ", Fictional inflammatory joint disease: assessment and management");
+    EXPECT_FALSE(results.shown[0].trigger.empty()) << "a sentence found it, not the whole note";
+    EXPECT_EQ(results.floor, 0.2);
+    EXPECT_EQ(results.searched.size(), 2u);  // the two loaded corpora, not the stale one
+    const auto sentences = SplitSentences(note);
     for (const auto& r : results.shown) {
         EXPECT_EQ(r.corpus, "fixture-a");
         EXPECT_FALSE(r.chunk_id.empty());
         EXPECT_FALSE(r.title.empty());
         EXPECT_FALSE(r.section.empty());
         EXPECT_FALSE(r.text.empty());
+        EXPECT_FALSE(r.number.empty());
+        EXPECT_EQ(r.url, "https://example.test/" + r.chunk_id);
+        EXPECT_EQ(r.source, "text");
+        EXPECT_EQ(r.citation, Citation(r.code, r.number, r.title));
         EXPECT_GE(r.score, 0.2);
-        EXPECT_NE(note.find(r.trigger), std::string::npos) << "trigger is a sentence of the note";
+        if (!r.trigger.empty()) {
+            EXPECT_NE(std::find(sentences.begin(), sentences.end(), r.trigger), sentences.end())
+                << "a trigger is a sentence of the note";
+        }
     }
+}
+
+TEST(Retriever, AbstainsWhenTheGuardDropsEveryMatch) {
+    fixture::TempDir dir("guarded");
+    WordEmbedder live;
+    Chunk only;
+    only.id = "px1-1_1_1";
+    only.code = "px1";
+    only.title = "Fictional paediatric fever";
+    only.number = "1.1.1";
+    only.text = "Offer children with fever paracetamol.";
+    fixture::Build(dir.path / "px1", "px1", live, {only});
+    RetrieverOptions options;
+    options.floor = 0.2;
+    Retriever retriever([] { return std::make_unique<WordEmbedder>(); }, dir.path, options);
+
+    EXPECT_EQ(retriever.Search("Fever offered paracetamol.", 3, SearchMode::kNote).shown.size(),
+              1u);
+    const auto guarded =
+        retriever.Search("Adult man aged 45 with fever offered paracetamol.", 3, SearchMode::kNote);
+    EXPECT_EQ(guarded.considered, 1);
+    EXPECT_TRUE(guarded.shown.empty());
+    EXPECT_TRUE(guarded.abstained) << "the population guard emptied the list";
 }
 
 TEST(Retriever, MergesHitsFromEveryCorpusIntoOneList) {
@@ -134,7 +176,7 @@ TEST(Retriever, MergesHitsFromEveryCorpusIntoOneList) {
     const auto note =
         "Synovitis of the small joints of both hands with morning stiffness. "
         "Also reports frequent migraine with aura and asks about a triptan.";
-    const auto results = retriever->Search(note, 6);
+    const auto results = retriever->Search(note, 6, SearchMode::kNote);
     bool from_a = false, from_b = false;
     for (const auto& r : results.shown) {
         from_a |= r.corpus == "fixture-a";
@@ -147,7 +189,7 @@ TEST(Retriever, MergesHitsFromEveryCorpusIntoOneList) {
 TEST(Retriever, AbstainsWhenNothingClearsTheFloor) {
     Root root;
     auto retriever = root.Make(0.999);
-    const auto results = retriever->Search(NoteText("joint-referral"), 3);
+    const auto results = retriever->Search(NoteText("joint-referral"), 3, SearchMode::kNote);
     EXPECT_TRUE(results.abstained);
     EXPECT_TRUE(results.shown.empty());
     EXPECT_GT(results.considered, 0);
@@ -156,16 +198,47 @@ TEST(Retriever, AbstainsWhenNothingClearsTheFloor) {
 TEST(Retriever, LimitBoundsWhatIsShown) {
     Root root;
     auto retriever = root.Make();
-    EXPECT_EQ(retriever->Search(NoteText("joint-referral"), 1).shown.size(), 1u);
-    EXPECT_TRUE(retriever->Search(NoteText("joint-referral"), 0).shown.empty());
+    EXPECT_EQ(retriever->Search(NoteText("joint-referral"), 1, SearchMode::kNote).shown.size(), 1u);
+    EXPECT_TRUE(retriever->Search(NoteText("joint-referral"), 0, SearchMode::kNote).shown.empty());
 }
 
 TEST(Retriever, AnEmptyNoteAbstainsWithoutEmbedding) {
     Root root;
     auto retriever = root.Make();
-    const auto results = retriever->Search("  ", 3);
+    const auto results = retriever->Search("  ", 3, SearchMode::kNote);
     EXPECT_TRUE(results.abstained);
     EXPECT_EQ(results.considered, 0);
+}
+
+TEST(Retriever, ATypedQueryIsSearchedWholeAtAnyLength) {
+    Root root;
+    auto retriever = root.Make();
+    const auto as_note = retriever->Search("persistent synovitis", 3, SearchMode::kNote);
+    EXPECT_TRUE(as_note.abstained);
+    EXPECT_EQ(as_note.considered, 0);
+    const auto as_query = retriever->Search("persistent synovitis", 3, SearchMode::kQuery);
+    EXPECT_GT(as_query.considered, 0);
+    ASSERT_FALSE(as_query.shown.empty());
+    EXPECT_EQ(as_query.shown[0].code, "fx100");
+    EXPECT_TRUE(as_query.shown[0].trigger.empty());
+
+    const auto two_sentences = retriever->Search(
+        "Synovitis of the small joints of both hands. Migraine with aura and asks about a triptan.",
+        6, SearchMode::kQuery);
+    ASSERT_FALSE(two_sentences.shown.empty());
+    for (const auto& r : two_sentences.shown) EXPECT_TRUE(r.trigger.empty()) << "split as a note";
+    EXPECT_TRUE(retriever->Search("  ", 3, SearchMode::kQuery).abstained);
+}
+
+TEST(Retriever, TheWholeNoteIsTheTriggerWhenEverySentenceIsFiltered) {
+    Root root;
+    auto retriever = root.Make();
+    const auto results = retriever->Search(
+        "No persistent synovitis of the small joints of the hands. "
+        "Denies any urgent referral to a specialist.",
+        3, SearchMode::kNote);
+    ASSERT_FALSE(results.shown.empty());
+    for (const auto& r : results.shown) EXPECT_TRUE(r.trigger.empty());
 }
 
 TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {
@@ -178,7 +251,7 @@ TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {
         std::filesystem::temp_directory_path());
     for (int attempt = 0; attempt < 2; ++attempt) {
         try {
-            retriever.Search("Chest pain on exertion.", 3);
+            retriever.Search("Chest pain on exertion.", 3, SearchMode::kNote);
             FAIL() << "search succeeded without an embedder";
         } catch (const std::runtime_error& e) {
             EXPECT_STREQ(e.what(), "no embedding model staged");
@@ -186,6 +259,8 @@ TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {
     }
     EXPECT_EQ(loads, 1);
     EXPECT_TRUE(retriever.Corpora().empty());
+    EXPECT_EQ(retriever.Status().phase, Readiness::Phase::kUnavailable);
+    EXPECT_EQ(retriever.Status().detail, "no embedding model staged");
 }
 
 TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
@@ -193,17 +268,11 @@ TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
                         std::filesystem::temp_directory_path() / "ambient-retriever-none");
     retriever.Prepare();
     EXPECT_TRUE(retriever.Corpora().empty());
-    const auto results = retriever.Search("Chest pain on exertion.", 3);
+    EXPECT_EQ(retriever.Status().phase, Readiness::Phase::kReady) << "loaded, nothing installed";
+    const auto results = retriever.Search("Chest pain on exertion.", 3, SearchMode::kNote);
     EXPECT_TRUE(results.shown.empty());
     EXPECT_FALSE(results.abstained);
     EXPECT_EQ(results.considered, 0);
-}
-
-TEST(Retriever, DocumentCallsAreNotSupportedYet) {
-    Root root;
-    auto retriever = root.Make();
-    EXPECT_THROW(retriever->AddDocument("letter.pdf"), std::logic_error);
-    EXPECT_THROW(retriever->RemoveDocument("upload-1"), std::logic_error);
 }
 
 }  // namespace

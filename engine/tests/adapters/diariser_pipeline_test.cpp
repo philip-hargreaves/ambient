@@ -16,7 +16,8 @@ namespace {
 
 // Shape checks on the assembled chain over a real consultation. Quality is
 // deliberately not asserted here: the acceptance is the blinded judge
-// protocol, recorded in the provenance addendum
+// protocol, recorded in the provenance addendum. The wav is not in the repo,
+// so these skip without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 
@@ -34,6 +35,9 @@ std::vector<float> LoadWav(const char* path) {
 }
 
 TEST(DiariserPipeline, ADoctorPatientConsultDiarisesToTwoSpeakers) {
+    if (!std::filesystem::exists(kWav)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const auto audio = LoadWav(kWav);
     const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
     models::OvRuntime runtime;
@@ -69,6 +73,9 @@ TEST(DiariserPipeline, ADoctorPatientConsultDiarisesToTwoSpeakers) {
 // decode) and AccrueDoctor reuses them: the numbers must be the ones the
 // reference method produces, and the reuse must actually skip the embed
 TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReusesThem) {
+    if (!std::filesystem::exists(kWav)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const auto audio = LoadWav(kWav);
     const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
     models::OvRuntime runtime;
@@ -113,6 +120,9 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
 // The bit-identity acceptance for capture-fed finalise: feeding the same
 // audio incrementally must change nothing about the diarised output
 TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
+    if (!std::filesystem::exists(kWav)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const auto audio = LoadWav(kWav);
     const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
     models::OvRuntime runtime;

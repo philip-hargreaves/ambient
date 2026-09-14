@@ -7,12 +7,14 @@ namespace Ambient.App.Views;
 public sealed partial class PatientEditorView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly TabFit _fit;
 
     public PatientEditorView(NoteViewModel viewModel, StatusBarViewModel status)
     {
         ViewModel = viewModel;
         _status = status;
         InitializeComponent();
+        _fit = new TabFit(PatientBox, 0.6);
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(NoteViewModel.PatientEditing))
@@ -30,6 +32,12 @@ public sealed partial class PatientEditorView : UserControl
     }
 
     public NoteViewModel ViewModel { get; }
+
+    // Inside a tab the sheet keeps at most three fifths of the content area,
+    // leaving room for the actions and a translation
+    public void FitTabContent(TabView tabs) => _fit.Fit(tabs);
+
+    public void FollowContent() => _fit.Follow();
 
     // The mode must be visible: an accent border while editing, the flat
     // document look otherwise

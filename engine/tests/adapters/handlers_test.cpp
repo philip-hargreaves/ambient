@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "adapters/diarisation/anchor_store.hpp"
+#include "adapters/guidance/guidance_lane.hpp"
 #include "adapters/storage/sqlite_session_store.hpp"
 #include "core/version.hpp"
 
@@ -608,7 +609,8 @@ struct EchoRetriever : ambient::guidance::IGuidanceRetriever {
     std::vector<std::pair<std::string, int>> searches;
     bool fail = false;
 
-    ambient::guidance::Results Search(const std::string& note, int limit) override {
+    ambient::guidance::Results Search(const std::string& note, int limit,
+                                      ambient::guidance::SearchMode) override {
         {
             const std::lock_guard<std::mutex> lock(mutex);
             searches.emplace_back(note, limit);
@@ -624,6 +626,9 @@ struct EchoRetriever : ambient::guidance::IGuidanceRetriever {
     }
     std::vector<ambient::guidance::Corpus> Corpora() override {
         return {};
+    }
+    ambient::guidance::Readiness Status() override {
+        return {ambient::guidance::Readiness::Phase::kReady, ""};
     }
 };
 
@@ -649,33 +654,134 @@ struct Sent {
 TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     ambient::guidance::Results results;
     results.considered = 40;
+    results.floor = 0.85;
+    ambient::guidance::Corpus structured;
+    structured.id = "fixture-nice";
+    structured.name = "Fixture guidance corpus (structured)";
+    structured.licence = "invented";
+    structured.attribution = "none";
+    structured.source = "nice";
+    structured.embedder = "gte-large-int8";
+    structured.sha256 = "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f";
+    structured.chunks = 40;
+    structured.built_at = "2026-09-11T00:00:00Z";
+    results.searched.push_back(structured);
+    ambient::guidance::Corpus plain;
+    plain.id = "fixture";
+    plain.name = "Fixture guidance corpus";
+    plain.licence = "invented";
+    plain.attribution = "none";
+    plain.source = "text";
+    plain.embedder = "gte-large-int8";
+    plain.sha256 = "1b7d2e9f0a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6";
+    plain.chunks = 5;
+    plain.built_at = "2026-09-12T00:00:00Z";
+    results.searched.push_back(plain);
     ambient::guidance::Result one;
-    one.corpus = "fixture";
+    one.corpus = "fixture-nice";
     one.chunk_id = "fx100-1_1_1";
-    one.guideline = "fx100";
+    one.code = "fx100";
+    one.number = "1.1.1";
     one.title = "Fictional inflammatory joint disease: assessment and management";
-    one.section = "1.1 Referral";
+    one.section = "1.1 Referral, diagnosis and investigations > Referral from primary care";
     one.text =
         "Refer adults with persistent synovitis of undetermined cause to a specialist, and refer "
         "urgently if the small joints of the hands or feet are affected.";
+    one.url = "https://example.test/guidance/fx100/chapter/1-recommendations#fx100-1_1_1";
+    one.last_updated = "2020-10-12";
+    one.update_tag = "2009, amended 2018";
+    one.source = "nice";
+    one.citation = "FX100 1.1.1, Fictional inflammatory joint disease: assessment and management";
     one.score = 0.8971234;
     one.trigger = "Examination shows synovitis of several MCP joints.";
     results.shown.push_back(one);
+    ambient::guidance::Result two;  // a plain-text corpus: no section, date or tag, whole-note hit
+    two.corpus = "fixture";
+    two.chunk_id = "gout-1";
+    two.code = "gout";
+    two.number = "1.1.1";
+    two.title = "Fictional gout guideline";
+    two.text = "1.1.1 Offer an NSAID or colchicine for an acute flare.";
+    two.url = "Gout.md";
+    two.source = "text";
+    two.citation = "GOUT 1.1.1, Fictional gout guideline";
+    two.score = 0.861;
+    results.shown.push_back(two);
 
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    std::string stored_first;
+    auto request = GuidanceSearchRequest(
+        *fixture.store, id, note, 3, [&](const std::string& method, json params) {
+            stored_first =
+                fixture.store->ReadDocument(id, ambient::store::DocumentKind::kGuidance).text;
+            sent.Sink()(method, std::move(params));
+        });
+    request.on_ready(results);
+    json expected = LoadFixture("guidance-ready.json");
+    expected["params"]["id"] = id;
+    ASSERT_EQ(sent.all.size(), 1u);
+    EXPECT_EQ(expected["method"], sent.all[0].first);
+    EXPECT_EQ(sent.all[0].second, expected["params"]);
+
+    // Stored before it was sent, as the same record
+    json record = sent.all[0].second;
+    record.erase("id");
+    record.erase("storeError");
+    record.erase("stale");
+    EXPECT_EQ(json::parse(stored_first), record);
+}
+
+TEST(Handlers, GuidanceReadyIsStaleWhenTheNoteMovedDuringTheSearch) {
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
+    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited meanwhile");
+    request.on_ready(ambient::guidance::Results{});
+    ASSERT_EQ(sent.all.size(), 1u);
+    EXPECT_TRUE(sent.all[0].second["stale"]);
+}
+
+TEST(Handlers, GuidanceForAnErasedSessionIsDroppedQuietly) {
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
+    fixture.store->Delete(id);
+    request.on_ready(ambient::guidance::Results{});
+    EXPECT_TRUE(sent.all.empty());
+}
+
+TEST(Handlers, GuidanceTheStoreRefusesStillArrivesWithTheReason) {
+    SessionStoreFixture fixture;
+    const auto recording = fixture.store->Begin({16000, "", ""});
     Sent sent;
     auto request =
-        GuidanceSearchRequest("a1b2c3d4e5f60718293a4b5c6d7e8f90", "note", 3, sent.Sink());
-    request.on_ready(results);
-    const json fixture = LoadFixture("guidance-ready.json");
+        GuidanceSearchRequest(*fixture.store, recording, {.text = "note"}, 3, sent.Sink());
+    request.on_ready(ambient::guidance::Results{});
     ASSERT_EQ(sent.all.size(), 1u);
-    EXPECT_EQ(fixture["method"], sent.all[0].first);
-    EXPECT_EQ(sent.all[0].second, fixture["params"]);
+    EXPECT_EQ(sent.all[0].first, "guidance/ready");
+    EXPECT_EQ(sent.all[0].second["id"], recording);
+    EXPECT_NE(sent.all[0].second["storeError"].get<std::string>().find("still recording"),
+              std::string::npos);
 }
 
 TEST(Handlers, GuidanceFailedMatchesTheFixture) {
+    SessionStoreFixture sessions;
     Sent sent;
-    auto request =
-        GuidanceSearchRequest("a1b2c3d4e5f60718293a4b5c6d7e8f90", "note", 3, sent.Sink());
+    auto request = GuidanceSearchRequest(*sessions.store, "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+                                         {.text = "note"}, 3, sent.Sink());
     request.on_failed("guidance embedder gte-large-int8: tokenizer ignores max_length");
     const json fixture = LoadFixture("guidance-failed.json");
     ASSERT_EQ(sent.all.size(), 1u);
@@ -698,8 +804,20 @@ TEST(Handlers, GuidanceCorporaMatchesTheFixture) {
     refused.id = "nice-2026-08-25";
     refused.unavailable = "corpus.db sha256 does not match the manifest";
 
+    ambient::guidance::Readiness ready;
+    ready.phase = ambient::guidance::Readiness::Phase::kReady;
     const json fixture = LoadFixture("guidance-corpora.json");
-    EXPECT_EQ(GuidanceCorporaJson({loaded, refused}), fixture["result"]);
+    EXPECT_EQ(GuidanceCorporaJson(ready, {loaded, refused}), fixture["result"]);
+}
+
+TEST(Handlers, GuidanceModelMatchesTheFixture) {
+    ambient::guidance::Readiness unavailable;
+    unavailable.phase = ambient::guidance::Readiness::Phase::kUnavailable;
+    unavailable.detail = "no model for embedding/default";
+    const json fixture = LoadFixture("guidance-model.json");
+    EXPECT_EQ(fixture["method"], "guidance/model");
+    EXPECT_EQ(GuidanceModelJson(unavailable), fixture["params"]);
+    EXPECT_EQ(GuidanceModelJson(ambient::guidance::Readiness{})["state"], "loading");
 }
 
 TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
@@ -712,8 +830,8 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
          .style = "prose",
          .detail = "standard"});
     EchoRetriever retriever;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(*fixture.store, lane, json{{"id", id}}, sent.Sink());
     ASSERT_TRUE(std::holds_alternative<json>(outcome));
@@ -721,6 +839,8 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
     ASSERT_TRUE(sent.WaitFor(1));
     EXPECT_EQ(sent.all[0].first, "guidance/ready");
     EXPECT_EQ(sent.all[0].second["id"], id);
+    EXPECT_EQ(sent.all[0].second.at("storeError"), nullptr);
+    EXPECT_EQ(sent.all[0].second.at("stale"), false);
     EXPECT_EQ(sent.all[0].second["shown"][0]["trigger"],
               "Six weeks of synovitis in the small joints of both hands.");
     ASSERT_EQ(retriever.searches.size(), 1u);
@@ -730,8 +850,8 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
 TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     SessionStoreFixture fixture;
     EchoRetriever retriever;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(
         *fixture.store, lane, json{{"text", "Chest pain on exertion."}, {"limit", 5}}, sent.Sink());
@@ -739,6 +859,8 @@ TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     ASSERT_TRUE(sent.WaitFor(1));
     EXPECT_EQ(sent.all[0].first, "guidance/ready");
     EXPECT_TRUE(sent.all[0].second["id"].is_null());
+    EXPECT_EQ(sent.all[0].second.at("storeError"), nullptr);
+    EXPECT_EQ(sent.all[0].second.at("stale"), nullptr) << "no note, nothing to be stale against";
     EXPECT_EQ(retriever.searches,
               (std::vector<std::pair<std::string, int>>{{"Chest pain on exertion.", 5}}));
 }
@@ -748,8 +870,8 @@ TEST(Handlers, GuidanceSearchRefusesBadParamsAndAMissingNote) {
     const auto without_note = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(without_note);
     EchoRetriever retriever;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     struct Case {
         json params;
@@ -777,8 +899,8 @@ TEST(Handlers, GuidanceSearchReportsAFailedSearch) {
     SessionStoreFixture fixture;
     EchoRetriever retriever;
     retriever.fail = true;
-    ambient::guidance::GuidanceLane lane(retriever);
     Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
 
     const auto outcome =
         HandleGuidanceSearch(*fixture.store, lane, json{{"text", "Chest pain."}}, sent.Sink());
@@ -787,6 +909,55 @@ TEST(Handlers, GuidanceSearchReportsAFailedSearch) {
     EXPECT_EQ(sent.all[0].first, "guidance/failed");
     EXPECT_EQ(sent.all[0].second["detail"], "no embedding model staged");
     EXPECT_TRUE(sent.all[0].second["id"].is_null());
+}
+
+TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
+    SessionStoreFixture fixture;
+    const auto id = fixture.store->Begin({16000, "", ""});
+    fixture.store->Finalise(id);
+    EXPECT_EQ(ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}})),
+              (json{{"guidance", nullptr}}));
+
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    const json expected = LoadFixture("session-guidance.json")["result"];
+    json record = expected["guidance"];
+    record.erase("generatedAt");
+    record.erase("stale");
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kGuidance,
+                                {.text = record.dump()});
+
+    json result = ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}));
+    EXPECT_TRUE(result["guidance"]["generatedAt"].is_string());
+    result["guidance"]["generatedAt"] = expected["guidance"]["generatedAt"];
+    EXPECT_EQ(result, expected);
+
+    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited");
+    EXPECT_TRUE(
+        ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}))["guidance"]["stale"]);
+
+    // A search after a rewrite replaces the record and it reads fresh again
+    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "regenerated"});
+    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    Sent sent;
+    ambient::guidance::Results second;
+    second.considered = 1;
+    GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink()).on_ready(second);
+    const json again =
+        ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}))["guidance"];
+    EXPECT_FALSE(again["stale"]);
+    EXPECT_EQ(again["noteRevision"], note.revision);
+    EXPECT_EQ(again["considered"], 1);
+
+    for (const char* broken : {"{ not json", R"({"version": 99})", R"({"shown": [{"text": 5}]})"}) {
+        fixture.store->SaveDocument(id, ambient::store::DocumentKind::kGuidance, {.text = broken});
+        EXPECT_EQ(ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}})),
+                  (json{{"guidance", nullptr}}))
+            << broken;
+    }
+
+    const auto unknown = HandleSessionGuidance(*fixture.store, json{{"id", "nope"}});
+    ASSERT_TRUE(std::holds_alternative<Error>(unknown));
+    EXPECT_EQ(std::get<Error>(unknown).code, kSessionError);
 }
 
 }  // namespace

@@ -15,10 +15,10 @@
 #endif
 #include <windows.h>
 
+#include "adapters/guidance/corpus_store.hpp"
 #include "adapters/guidance/schema.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/storage/db.hpp"
-#include "core/guidance_query.hpp"
 
 namespace ambient::guidance {
 namespace {
@@ -31,11 +31,12 @@ void Require(bool ok, const std::string& why) {
 
 void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                  const std::vector<Chunk>& chunks, std::span<const float> vectors) {
-    Require(!spec.id.empty() && !spec.embedder_id.empty() && spec.dim > 0, "spec incomplete");
+    Require(!spec.id.empty() && !spec.embedder.id.empty() && spec.embedder.dim > 0,
+            "spec incomplete");
     Require(spec.source == "nice" || spec.source == "text", "source must be nice or text");
-    Require(vectors.size() == chunks.size() * static_cast<std::size_t>(spec.dim),
+    Require(vectors.size() == chunks.size() * static_cast<std::size_t>(spec.embedder.dim),
             "vectors do not match chunks by dim");
-    const auto dim = static_cast<std::size_t>(spec.dim);
+    const auto dim = static_cast<std::size_t>(spec.embedder.dim);
     for (std::size_t i = 0; i < chunks.size(); ++i) {
         Require(!chunks[i].text.empty(), "chunk " + chunks[i].id + " has no text");
         double norm = 0;
@@ -71,11 +72,11 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
             meta.BindText(3, spec.licence);
             meta.BindText(4, spec.attribution);
             meta.BindText(5, spec.source);
-            meta.BindText(6, spec.embedder_id);
-            meta.BindText(7, spec.embedder_rev);
-            meta.BindText(8, spec.query_prefix);
-            meta.BindInt64(9, spec.max_tokens);
-            meta.BindInt64(10, spec.dim);
+            meta.BindText(6, spec.embedder.id);
+            meta.BindText(7, spec.embedder.rev);
+            meta.BindText(8, spec.embedder.query_prefix);
+            meta.BindInt64(9, spec.embedder.max_tokens);
+            meta.BindInt64(10, spec.embedder.dim);
             meta.BindInt64(11, static_cast<std::int64_t>(chunks.size()));
             meta.BindInt64(12, shard_count);
             meta.BindText(13, spec.built_at);
@@ -84,8 +85,8 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
 
             auto insert = db.Prepare(
                 "INSERT INTO chunks(ord, chunk_id, code, title, chapter, number, section,"
-                " update_tag, last_updated, url, text, words)"
-                " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                " update_tag, last_updated, url, text)"
+                " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             for (std::size_t i = 0; i < chunks.size(); ++i) {
                 const Chunk& c = chunks[i];
                 insert.Reset();
@@ -100,7 +101,6 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                 insert.BindText(9, c.last_updated);
                 insert.BindText(10, c.url);
                 insert.BindText(11, c.text);
-                insert.BindInt64(12, detail::WordCount(c.text));
                 insert.Step();
             }
 
@@ -117,7 +117,7 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                 shard.BindInt64(1, s);
                 shard.BindInt64(2, static_cast<std::int64_t>(first));
                 shard.BindInt64(3, static_cast<std::int64_t>(count));
-                shard.BindInt64(4, spec.dim);
+                shard.BindInt64(4, spec.embedder.dim);
                 shard.BindBlob(5,
                                std::span<const std::uint8_t>(bytes, count * dim * sizeof(float)));
                 shard.Step();
@@ -142,11 +142,11 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                             {"licence", spec.licence},
                             {"attribution", spec.attribution},
                             {"source", spec.source},
-                            {"embedder_id", spec.embedder_id},
-                            {"embedder_rev", spec.embedder_rev},
-                            {"query_prefix", spec.query_prefix},
-                            {"max_tokens", spec.max_tokens},
-                            {"dim", spec.dim},
+                            {"embedder_id", spec.embedder.id},
+                            {"embedder_rev", spec.embedder.rev},
+                            {"query_prefix", spec.embedder.query_prefix},
+                            {"max_tokens", spec.embedder.max_tokens},
+                            {"dim", spec.embedder.dim},
                             {"chunks", chunks.size()},
                             {"shards", (chunks.size() + kShardVectors - 1) / kShardVectors},
                             {"file", kCorpusFile},

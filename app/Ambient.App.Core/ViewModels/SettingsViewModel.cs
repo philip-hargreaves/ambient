@@ -8,6 +8,14 @@ using Ambient.Client;
 
 namespace Ambient.App.Core.ViewModels;
 
+/// <summary>One installed corpus, as Settings lists it.</summary>
+public sealed record CorpusRow(string Name, string Detail, string Attribution, bool Refused)
+{
+    public bool AttributionVisible => Attribution.Length > 0;
+
+    public bool Loaded => !Refused;
+}
+
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
@@ -60,6 +68,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 if (connected)
                 {
                     _ = LoadNoteModelsAsync();
+                    _ = LoadGuidanceCorporaAsync();
                     if (SeedDataEnabled)
                     {
                         _ = ApplySeedDataAsync(true);
@@ -73,10 +82,15 @@ public sealed partial class SettingsViewModel : ObservableObject
                     var snapshot = parameters.Clone();
                     Post(() => OnNoteModel(snapshot));
                 }
+                else if (method == "guidance/model")
+                {
+                    Post(() => _ = LoadGuidanceCorporaAsync());
+                }
             };
             if (client.Connected)
             {
                 _ = LoadNoteModelsAsync();
+                _ = LoadGuidanceCorporaAsync();
                 if (SeedDataEnabled)
                 {
                     _ = ApplySeedDataAsync(true);
@@ -340,6 +354,88 @@ public sealed partial class SettingsViewModel : ObservableObject
             default:
                 break;
         }
+    }
+
+    // ---- guidance corpora -------------------------------------------------
+
+    /// <summary>The corpora the engine has, refused ones included.</summary>
+    public ObservableCollection<CorpusRow> GuidanceCorpora { get; } = [];
+
+    /// <summary>Why nothing is listed, empty when corpora are shown.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GuidanceCaptionVisible))]
+    public partial string GuidanceCaption { get; set; } = "";
+
+    public bool GuidanceCaptionVisible => GuidanceCaption.Length > 0;
+
+    private async Task LoadGuidanceCorporaAsync()
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            var reply = await _client
+                .RequestAsync("guidance/corpora", null, TimeSpan.FromSeconds(5))
+                .ConfigureAwait(true);
+            ApplyGuidanceCorpora(reply);
+        }
+        catch (Exception)
+        {
+            GuidanceCorpora.Clear();
+            GuidanceCaption = "Unavailable";
+        }
+    }
+
+    private void ApplyGuidanceCorpora(JsonElement reply)
+    {
+        GuidanceCorpora.Clear();
+        if (reply.TryGetProperty("corpora", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var corpus in list.EnumerateArray())
+            {
+                GuidanceCorpora.Add(RowFrom(corpus));
+            }
+        }
+
+        var detail = GuidanceCard.Field(reply, "detail");
+        GuidanceCaption = GuidanceCard.Field(reply, "state") switch
+        {
+            "loading" => "Loading",
+            "unavailable" => detail.Length > 0 ? $"Unavailable: {detail}" : "Unavailable",
+            _ when GuidanceCorpora.Count == 0 => "None installed",
+            _ => "",
+        };
+    }
+
+    // A refused corpus keeps its place, so unused guidance is visible, not missing
+    private static CorpusRow RowFrom(JsonElement corpus)
+    {
+        var refused = GuidanceCard.Field(corpus, "unavailable");
+        if (refused.Length > 0)
+        {
+            return new CorpusRow(
+                GuidanceCard.Field(corpus, "id"), $"Not used: {refused}", "", true);
+        }
+
+        // The licence is not shown: the attribution line is what it asks for
+        var parts = new List<string>();
+        if (corpus.TryGetProperty("chunks", out var chunks)
+            && chunks.TryGetInt32(out var count) && count > 0)
+        {
+            parts.Add($"{count:N0} passages");
+        }
+
+        var built = GuidanceCard.ShortDate(GuidanceCard.Field(corpus, "builtAt"));
+        if (built.Length > 0)
+        {
+            parts.Add(built);
+        }
+
+        return new CorpusRow(GuidanceCard.Field(corpus, "name"), string.Join(" · ", parts),
+            GuidanceCard.Field(corpus, "attribution"), false);
     }
 
     /// <summary>

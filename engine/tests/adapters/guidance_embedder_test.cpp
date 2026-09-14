@@ -141,8 +141,8 @@ TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {
         Retriever ordering(lend, dir / "corpora", unfloored);
         Retriever shipped(lend, dir / "corpora");
         for (const auto& note : fixture::Notes(kFixtureDir)) {
-            const auto results = ordering.Search(note.text, 3);
-            const auto floored = shipped.Search(note.text, 3);
+            const auto results = ordering.Search(note.text, 3, SearchMode::kNote);
+            const auto floored = shipped.Search(note.text, 3, SearchMode::kNote);
             std::vector<std::string> ids;
             for (const auto& r : results.shown) ids.push_back(r.chunk_id);
             if (note.expected.empty()) {
@@ -151,12 +151,12 @@ TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {
             }
             ASSERT_FALSE(ids.empty()) << note.id;
             const auto code = note.expected[0].substr(0, note.expected[0].find('-'));
-            EXPECT_EQ(results.shown[0].guideline, code) << note.id << ": " << Join(ids);
+            EXPECT_EQ(results.shown[0].code, code) << note.id << ": " << Join(ids);
             bool any = false;
             for (const auto& id : note.expected) any |= std::count(ids.begin(), ids.end(), id) > 0;
             EXPECT_TRUE(any) << note.id << ": " << Join(ids);
             for (const auto& banned : note.must_not) {
-                for (const auto& r : results.shown) EXPECT_NE(r.guideline, banned) << note.id;
+                for (const auto& r : results.shown) EXPECT_NE(r.code, banned) << note.id;
             }
             std::printf("  %s: top cosine %.3f, %zu of %d shown at the shipped floor\n",
                         note.id.c_str(), results.shown[0].score, floored.shown.size(),

@@ -5,10 +5,20 @@
 #include <string>
 #include <vector>
 
-#include "adapters/guidance/corpus_store.hpp"
-#include "adapters/models/model_store.hpp"
+namespace ambient::models {
+class ModelStore;
+}  // namespace ambient::models
 
 namespace ambient::guidance {
+
+// The staged embedder a corpus must have been built with
+struct EmbedderIdentity {
+    std::string id;
+    std::string rev;  // sha256 of the weights
+    int dim = 0;
+    int max_tokens = 0;
+    std::string query_prefix;
+};
 
 struct Embedding {
     std::vector<float> vector;  // unit length, Identity().dim floats

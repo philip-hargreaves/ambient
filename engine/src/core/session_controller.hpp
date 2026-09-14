@@ -60,8 +60,8 @@ class ISessionEvents {
     virtual void OnNotePartial(const std::string&) {}
     virtual void OnNoteReady(const std::string&) {}
     virtual void OnNoteFailed(const std::string&) {}
-    // The stored note with its session, for work that follows the note
-    virtual void OnNoteSaved(const std::string& /*session*/, const std::string& /*note*/) {}
+    // The note as stored, with its revision, for work that follows the note
+    virtual void OnNoteSaved(const std::string& /*session*/, const store::Document& /*note*/) {}
 
     // The store could not write (disk full, I/O); recording continues
     virtual void OnStorageFault(const std::string& /*detail*/) {}
@@ -1093,17 +1093,26 @@ class SessionController {
         return words;
     }
 
-    // A store refusal never costs the note: the text still reaches the shell
-    void SaveNote(const store::SessionId& id, const std::string& text,
-                  const note::NoteOptions& options) {
+    // A store refusal never costs the note: the text still reaches the shell.
+    // Returns the note as stored, nothing when the store refused it or its
+    // revision could not be read back
+    std::optional<store::Document> SaveNote(const store::SessionId& id, const std::string& text,
+                                            const note::NoteOptions& options) {
+        store::Document document;
+        document.text = text;
+        document.style = options.style;
+        document.detail = options.detail;
         try {
-            store::Document document;
-            document.text = text;
-            document.style = options.style;
-            document.detail = options.detail;
             store_.SaveDocument(id, store::DocumentKind::kNote, document);
         } catch (const std::exception& e) {
             StoreFailed("note", e);
+            return std::nullopt;
+        }
+        try {
+            return store_.ReadDocument(id, store::DocumentKind::kNote);
+        } catch (const std::exception& e) {
+            StoreFailed("note revision", e);
+            return std::nullopt;
         }
     }
 
@@ -1205,8 +1214,18 @@ class SessionController {
                     events_.OnNoteRefused(*reason, true);
                     return;  // no note, no sheet, no label, and the print learns nothing
                 }
-                SaveNote(id, note, options);
-                events_.OnNoteSaved(id, note);
+                if (const auto stored = SaveNote(id, note, options)) {
+                    // What follows the note must never cost the note
+                    try {
+                        events_.OnNoteSaved(id, *stored);
+                    } catch (const std::exception& e) {
+                        std::fprintf(stderr,
+                                     "ambient-engine: work after the note not started: %s\n",
+                                     e.what());
+                    } catch (...) {
+                        std::fprintf(stderr, "ambient-engine: work after the note not started\n");
+                    }
+                }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     refused_ = false;

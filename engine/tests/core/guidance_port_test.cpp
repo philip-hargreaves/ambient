@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -26,42 +25,6 @@ std::vector<nlohmann::json> ReadLines(const std::string& name) {
     }
     return rows;
 }
-
-// Canned retriever over the fixture: a note's expected ids come back in
-// fixture order, so tests above the port run without a model
-struct FakeGuidanceRetriever : IGuidanceRetriever {
-    std::vector<nlohmann::json> corpus = ReadLines("corpus.jsonl");
-    std::vector<nlohmann::json> notes = ReadLines("notes.jsonl");
-
-    Results Search(const std::string& note, int limit) override {
-        Results results;
-        results.considered = static_cast<int>(corpus.size());
-        for (const auto& n : notes) {
-            if (n.at("text") != note) continue;
-            const auto expected = n.at("expected").get<std::vector<std::string>>();
-            results.abstained = expected.empty();
-            for (const auto& chunk : corpus) {
-                if (static_cast<int>(results.shown.size()) >= limit) break;
-                const auto id = chunk.at("id").get<std::string>();
-                if (std::find(expected.begin(), expected.end(), id) == expected.end()) continue;
-                results.shown.push_back({"fixture", id, chunk.at("code"), chunk.at("title"),
-                                         chunk.at("section"), chunk.at("text"), 1.0, note});
-            }
-        }
-        return results;
-    }
-
-    std::vector<Corpus> Corpora() override {
-        Corpus fixture;
-        fixture.id = "fixture";
-        fixture.name = "Fixture guidance corpus";
-        fixture.licence = "invented";
-        fixture.source = "text";
-        fixture.chunks = static_cast<int>(corpus.size());
-        fixture.built_at = "2026-09-09";
-        return {fixture};
-    }
-};
 
 TEST(GuidanceFixture, IdsAreUniqueAndCarryTheirGuidelineCode) {
     const auto corpus = ReadLines("corpus.jsonl");
@@ -90,31 +53,23 @@ TEST(GuidanceFixture, EveryExpectedIdExistsAndTheHardCasesArePresent) {
     EXPECT_TRUE(non_clinical) << "a non-clinical text that retrieves nothing";
 }
 
-TEST(FakeGuidanceRetriever, HonoursTheLimitAndNamesTheTrigger) {
-    FakeGuidanceRetriever fake;
-    const auto note = fake.notes.front().at("text").get<std::string>();
-    const auto all = fake.Search(note, 10);
-    ASSERT_EQ(all.shown.size(), fake.notes.front().at("expected").size());
-    EXPECT_FALSE(all.abstained);
-    EXPECT_EQ(all.considered, static_cast<int>(fake.corpus.size()));
-    EXPECT_EQ(all.shown.front().trigger, note);
-    EXPECT_EQ(all.shown.front().guideline, "fx100");
-    EXPECT_EQ(fake.Search(note, 1).shown.size(), 1u);
-}
-
-TEST(FakeGuidanceRetriever, AbstainsOnNonClinicalText) {
-    FakeGuidanceRetriever fake;
-    const auto results = fake.Search(fake.notes.back().at("text"), 3);
-    EXPECT_TRUE(results.abstained);
-    EXPECT_TRUE(results.shown.empty());
-    ASSERT_EQ(fake.Corpora().size(), 1u);
-    EXPECT_EQ(fake.Corpora().front().chunks, static_cast<int>(fake.corpus.size()));
-}
+// The port's defaults and nothing else
+struct StubRetriever : IGuidanceRetriever {
+    Results Search(const std::string&, int, SearchMode) override {
+        return {};
+    }
+    std::vector<Corpus> Corpora() override {
+        return {};
+    }
+    Readiness Status() override {
+        return {};
+    }
+};
 
 TEST(GuidancePort, DocumentCallsAreNotSupportedYet) {
-    FakeGuidanceRetriever fake;
-    EXPECT_THROW(fake.AddDocument("C:/somewhere/guideline.pdf"), std::logic_error);
-    EXPECT_THROW(fake.RemoveDocument("uploads"), std::logic_error);
+    StubRetriever stub;
+    EXPECT_THROW(stub.AddDocument("C:/somewhere/guideline.pdf"), std::logic_error);
+    EXPECT_THROW(stub.RemoveDocument("uploads"), std::logic_error);
 }
 
 }  // namespace
