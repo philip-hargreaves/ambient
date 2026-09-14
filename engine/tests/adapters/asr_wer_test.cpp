@@ -22,6 +22,7 @@
 namespace ambient::asr {
 namespace {
 
+// Not in the repo; the test skips without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 constexpr const char* kRef =
@@ -103,6 +104,9 @@ struct RecordingSink : ITurnSink {
 };
 
 TEST(AsrWer, ProductionPathHoldsTheBaseline) {
+    if (!std::filesystem::exists(kWav) || !std::filesystem::exists(kRef)) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const auto frames = LoadWav(kWav);
     const auto gold = NormalisedWords(LoadGold(kRef));
 

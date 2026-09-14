@@ -1,0 +1,87 @@
+# Every suite with nothing filtered out: engine, shell, contract. Run before a PR.
+#
+#   .\tools\run-gates.ps1 [-Build] [-WithMicrophone] [-List]
+#
+# -List checks the plumbing without running anything. Needs staged weights and
+# the Intel GPU; tests that read the research corpus skip without it.
+[CmdletBinding()]
+param(
+    [switch]$Build,
+    [switch]$WithMicrophone,
+    [switch]$List
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$vs = 'C:\Program Files\Microsoft Visual Studio\18\Community'
+$ctest = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe'
+if (-not (Test-Path $ctest)) { $ctest = (Get-Command ctest -ErrorAction SilentlyContinue).Source }
+if (-not $ctest) { throw 'ctest not found; install the CMake component or put ctest on PATH' }
+
+# A stray note host holds the GPU and fails everything after it
+foreach ($image in 'Ambient.App', 'ambient_engine', 'ambient_note_host') {
+    Get-Process $image -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+$results = [ordered]@{}
+$started = Get-Date
+
+function Get-Summary([string]$text) {
+    if ($text -match '(\d+)% tests passed, (\d+) tests failed out of (\d+)') {
+        return "$([int]$Matches[3] - [int]$Matches[2])/$($Matches[3]) passed"
+    }
+    if ($text -match 'Failed:\s+(\d+), Passed:\s+(\d+), Skipped:\s+(\d+), Total:\s+(\d+)') {
+        return "$($Matches[2])/$($Matches[4]) passed, $($Matches[3]) skipped, $($Matches[1]) failed"
+    }
+    if ($text -match 'Total Tests: (\d+)') { return "$($Matches[1]) tests listed" }
+    return 'no summary'
+}
+
+function Invoke-Gate([string]$name, [scriptblock]$body) {
+    Write-Host "== $name" -ForegroundColor Cyan
+    $at = Get-Date
+    $output = & $body 2>&1 | Out-String
+    $results[$name] = [pscustomobject]@{
+        Exit    = $LASTEXITCODE
+        Minutes = [math]::Round(((Get-Date) - $at).TotalMinutes, 1)
+        Summary = Get-Summary $output
+    }
+    $output | Out-File (Join-Path $root "build\gates-$name.log")
+}
+
+if ($Build) {
+    Invoke-Gate 'build' {
+        Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+        Enter-VsDevShell -VsInstallPath $vs -DevCmdArguments '-arch=x64 -no_logo' -SkipAutomaticLocation | Out-Null
+        Set-Location $root
+        cmake --build --preset release
+        dotnet build ambient.slnx -p:Platform=x64
+    }
+}
+
+$exclude = if ($WithMicrophone) { @() } else { @('-LE', 'microphone') }
+Invoke-Gate 'engine' {
+    if ($List) { & $ctest --test-dir "$root\build\release" @exclude -N }
+    else { & $ctest --test-dir "$root\build\release" @exclude --output-on-failure --timeout 1500 }
+}
+
+Invoke-Gate 'shell' {
+    if ($List) { dotnet test "$root\app\Ambient.App.Tests" --no-build -t }
+    else { dotnet test "$root\app\Ambient.App.Tests" --no-build }
+}
+
+Invoke-Gate 'contract' {
+    if ($List) { dotnet test "$root\app\Ambient.Contract.Tests" -t }
+    else { dotnet test "$root\app\Ambient.Contract.Tests" }
+}
+
+foreach ($image in 'ambient_engine', 'ambient_note_host') {
+    Get-Process $image -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host ''
+$results.GetEnumerator() | ForEach-Object {
+    '{0,-10} exit {1,-4} {2,6} min  {3}' -f $_.Key, $_.Value.Exit, $_.Value.Minutes, $_.Value.Summary
+}
+'{0:N0} minutes in total; logs in build\gates-*.log' -f ((Get-Date) - $started).TotalMinutes
+if (@($results.Values | Where-Object { $_.Exit -ne 0 })) { exit 1 }

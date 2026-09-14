@@ -42,6 +42,10 @@ TEST(ClusterVoiceprint, TheAccruedAnchorRanksItsOwnSpeakerNearer) {
     std::ifstream in(std::filesystem::path(kFixtureDir) / "fixtures.json");
     ASSERT_TRUE(in.is_open());
     const auto meta = nlohmann::json::parse(in);
+    // The fixture names a wav that is not in the repo
+    if (!std::filesystem::exists(meta.at("wav").get<std::string>())) {
+        GTEST_SKIP() << "research corpus not mounted";
+    }
     const auto audio = LoadWav(meta.at("wav"));
 
     // Fixture slices as labelled slices: doctor cluster 0, patient cluster 1
