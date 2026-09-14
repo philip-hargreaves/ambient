@@ -45,11 +45,7 @@ public sealed record GuidanceCard(
     /// "Last updated 12 Oct 2020" from any ISO 8601 date; empty when the guideline gives none.
     /// </summary>
     public string LastUpdatedLabel =>
-        DateTimeOffset.TryParse(
-            LastUpdated, CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date)
-            ? "Last updated " + date.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
-            : "";
+        ShortDate(LastUpdated) is { Length: > 0 } date ? "Last updated " + date : "";
 
     public bool LastUpdatedVisible => LastUpdatedLabel.Length > 0;
 
@@ -61,6 +57,13 @@ public sealed record GuidanceCard(
     public string OpenName => $"Open {Reference}";
 
     public string CopyName => $"Copy citation for {Reference}";
+
+    /// <summary>"12 Oct 2020" from any ISO 8601 date, empty from anything else.</summary>
+    internal static string ShortDate(string value) =>
+        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date)
+            ? date.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+            : "";
 
     internal static string Field(JsonElement element, string property) =>
         element.ValueKind == JsonValueKind.Object
