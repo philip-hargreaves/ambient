@@ -1256,7 +1256,9 @@ class SessionController {
                     events_.OnPatientFailed("patient information failed");
                 }
             }
-            // The title comes last: everything the clinician waits for is done
+            // The title comes last and holds nothing up: open and summary go
+            // ahead while it is written
+            note_busy_ = false;
             if (!note.empty()) {
                 SaveLabel(id, note);
             }

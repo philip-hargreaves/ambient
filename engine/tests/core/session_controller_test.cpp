@@ -508,9 +508,13 @@ struct FakeNoteWriter : note::INoteWriter {
     std::string patient_input;
     std::string label_result = "  \"Elbow swelling.\"  ";  // sanitises to Elbow swelling
     std::atomic<int> label_calls{0};
+    std::atomic<bool> block_label{false};
 
     std::string WriteLabel(const std::string&) override {
         ++label_calls;
+        while (block_label.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         return label_result;
     }
 
@@ -874,6 +878,40 @@ TEST(SessionController, ARejectedTitleLeavesNoLabel) {
 
     EXPECT_EQ(writer.label_calls.load(), 1);
     EXPECT_EQ(store.label, "") << "no title beats a bad title; the list shows the date";
+}
+
+// The title is written after the documents. A consultation opened meanwhile
+// is not refused for it
+TEST(SessionController, OpenIsNotRefusedWhileTheTitleIsWritten) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.turns = {{0, 16000 * 30, "doctor", "a stored consultation with enough words to note"}};
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.block_label = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+    for (int i = 0; i < 500 && writer.label_calls.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_EQ(writer.label_calls.load(), 1) << "the title is being written";
+
+    EXPECT_TRUE(controller.Open("past"));
+
+    writer.block_label = false;
+    for (int i = 0; i < 500 && store.label.empty(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_EQ(store.label, "Elbow swelling");
 }
 
 TEST(SessionController, ATypedLabelSurvivesTheNote) {
