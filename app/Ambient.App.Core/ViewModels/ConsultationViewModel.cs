@@ -1013,6 +1013,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             case "guidance/failed" when parameters.ValueKind == JsonValueKind.Object:
                 ApplyGuidance(parameters, ready: false);
                 break;
+            case "guidance/documentsChanged":
+                Guidance.DocumentsChanged();
+                break;
             case "audio.level" when parameters.ValueKind == JsonValueKind.Object:
                 Status.SetMicLevel(
                     parameters.GetProperty("level").GetDouble(),

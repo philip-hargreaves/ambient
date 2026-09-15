@@ -138,6 +138,7 @@ configure_file(src/adapters/guidance/schema.hpp.in
 add_library(ambient_guidance STATIC
     src/adapters/guidance/chunker.cpp
     src/adapters/guidance/corpus_builder.cpp
+    src/adapters/guidance/document_ingest.cpp
     src/adapters/guidance/corpus_store.cpp
     src/adapters/guidance/embedder.cpp
     src/adapters/guidance/guidance_lane.cpp

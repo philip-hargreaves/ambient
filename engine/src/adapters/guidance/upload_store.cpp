@@ -6,6 +6,7 @@
 #include <cstring>
 #include <format>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <random>
 #include <span>
@@ -223,7 +224,7 @@ UploadStore::Added UploadStore::Add(const std::filesystem::path& file, const std
         insert.Step();
         txn.Commit();
     }
-    // The copy follows the row, in sealed blocks; a copy that fails takes the row with it
+    // The copy follows the row in sealed blocks. A copy that fails takes the row with it
     try {
         std::ofstream out(FilePath(id), std::ios::binary);
         if (!out.is_open()) throw StoreError(StoreCode::kIo, "cannot write the document copy");
@@ -263,8 +264,9 @@ void UploadStore::Finish(std::int64_t id, const std::vector<UploadChunk>& chunks
         insert.BindInt64(1, id);
         insert.BindInt64(2, static_cast<std::int64_t>(ord));
         insert.BindInt64(3, chunk.page);
-        insert.BindBlob(4,
-                        doc_key.Seal(Domain::kUploadSection, Aad(id), ord, Bytes(chunk.section)));
+        const auto heading =
+            nlohmann::json{{"number", chunk.number}, {"section", chunk.section}}.dump();
+        insert.BindBlob(4, doc_key.Seal(Domain::kUploadSection, Aad(id), ord, Bytes(heading)));
         insert.BindBlob(5, doc_key.Seal(Domain::kUploadText, Aad(id), ord, Bytes(chunk.text)));
         insert.BindBlob(6, doc_key.Seal(Domain::kUploadVector, Aad(id), ord, vec));
         insert.BindBlob(7, doc_key.Seal(Domain::kUploadBoxes, Aad(id), ord, Bytes(chunk.boxes)));
@@ -308,8 +310,10 @@ std::vector<UploadChunk> UploadStore::ReadChunks(std::int64_t id) {
         const auto ord = static_cast<std::uint64_t>(select.ColumnInt64(0));
         UploadChunk chunk;
         chunk.page = static_cast<int>(select.ColumnInt64(1));
-        chunk.section =
-            Text(doc_key.Open(Domain::kUploadSection, Aad(id), ord, select.ColumnBlob(2)));
+        const auto heading = nlohmann::json::parse(
+            Text(doc_key.Open(Domain::kUploadSection, Aad(id), ord, select.ColumnBlob(2))));
+        chunk.number = heading.value("number", "");
+        chunk.section = heading.value("section", "");
         chunk.text = Text(doc_key.Open(Domain::kUploadText, Aad(id), ord, select.ColumnBlob(3)));
         const auto vec = doc_key.Open(Domain::kUploadVector, Aad(id), ord, select.ColumnBlob(4));
         Guard(vec.size() == dim * sizeof(float), "a stored vector has the wrong length");

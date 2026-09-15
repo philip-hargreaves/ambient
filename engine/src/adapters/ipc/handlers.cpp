@@ -13,6 +13,7 @@
 #include "adapters/translate/translate_lane.hpp"
 #include "core/summary_scrub.hpp"
 #include "core/version.hpp"
+#include "ports/store_error.hpp"
 
 namespace ambient::ipc {
 
@@ -903,9 +904,100 @@ std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& s
     }
 }
 
+json DocumentJson(const ambient::guidance::DocumentInfo& document) {
+    return json{{"id", document.id},
+                {"name", document.name},
+                {"mime", document.mime},
+                {"state", document.state},
+                {"error", NullWhenEmpty(document.error)},
+                {"addedAt", document.added_at},
+                {"indexedAt", NullWhenEmpty(document.indexed_at)},
+                {"bytes", document.bytes},
+                {"pages", document.pages},
+                {"pagesWithoutText", document.pages_without_text},
+                {"chunks", document.chunks}};
+}
+
+json ProgressJson(const ambient::guidance::IngestProgress& progress) {
+    return json{{"id", progress.id},
+                {"phase", progress.phase},
+                {"done", progress.done},
+                {"total", progress.total}};
+}
+
+bool ChangesReadySet(const ambient::guidance::DocumentInfo& document) {
+    return document.state == "ready" || (document.state == "removed" && document.chunks > 0);
+}
+
+namespace {
+
+Error DocumentsError(const std::exception& e) {
+    return Error{kSessionError, "Document store error", json(e.what())};
+}
+
+}  // namespace
+
+std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest& ingest,
+                                             const json& params) {
+    const json paths = params.is_object() ? params.value("paths", json()) : json();
+    if (!paths.is_array() || paths.empty()) {
+        return Error{kInvalidParams, "Invalid params", json("paths must be a list of strings")};
+    }
+    std::vector<std::filesystem::path> files;
+    for (const auto& path : paths) {
+        if (!path.is_string()) {
+            return Error{kInvalidParams, "Invalid params", json("paths must be a list of strings")};
+        }
+        const auto text = path.get<std::string>();
+        files.emplace_back(std::u8string(text.begin(), text.end()));
+    }
+    try {
+        const auto accepted = ingest.Add(files);
+        json documents = json::array();
+        for (const auto& document : accepted.documents) documents.push_back(DocumentJson(document));
+        json skipped = json::array();
+        for (const auto& s : accepted.skipped) {
+            skipped.push_back(json{{"path", s.path}, {"reason", s.reason}});
+        }
+        return json{{"documents", documents}, {"skipped", skipped}};
+    } catch (const std::exception& e) {
+        return DocumentsError(e);
+    }
+}
+
+std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest) {
+    try {
+        json documents = json::array();
+        for (const auto& document : ingest.List()) documents.push_back(DocumentJson(document));
+        return json{{"documents", documents}};
+    } catch (const std::exception& e) {
+        return DocumentsError(e);
+    }
+}
+
+std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
+                                                const json& params) {
+    const json id = params.is_object() ? params.value("id", json()) : json();
+    if (!id.is_number_integer()) {
+        return Error{kInvalidParams, "Invalid params", json("id must be an integer")};
+    }
+    try {
+        ingest.Remove(id.get<std::int64_t>());
+        return json::object();
+    } catch (const ambient::store::StoreError& e) {
+        if (e.Code() == ambient::store::StoreCode::kNotFound) {
+            return Error{kInvalidParams, "Invalid params", json("unknown document")};
+        }
+        return DocumentsError(e);
+    } catch (const std::exception& e) {
+        return DocumentsError(e);
+    }
+}
+
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::IGuidanceLane& lane) {
+                             ambient::guidance::IGuidanceLane& lane,
+                             ambient::guidance::IDocumentIngest& ingest) {
     server.RegisterMethod("guidance/search", [&server, &sessions, &lane](const json& params) {
         return HandleGuidanceSearch(sessions, lane, params,
                                     [&server](const std::string& method, json notification) {
@@ -918,6 +1010,26 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
     server.RegisterMethod("session/guidance", [&sessions](const json& params) {
         return HandleSessionGuidance(sessions, params);
     });
+    server.RegisterMethod("guidance/documents/add", [&ingest](const json& params) {
+        return HandleDocumentsAdd(ingest, params);
+    });
+    server.RegisterMethod("guidance/documents/cancel", [&ingest](const json&) {
+        ingest.Cancel();
+        return json::object();
+    });
+    server.RegisterMethod("guidance/documents",
+                          [&ingest](const json&) { return HandleDocumentsList(ingest); });
+    server.RegisterMethod("guidance/documents/remove", [&ingest](const json& params) {
+        return HandleDocumentsRemove(ingest, params);
+    });
+    server.RegisterMethod("guidance/documents/removeAll",
+                          [&ingest](const json&) -> std::variant<json, Error> {
+                              try {
+                                  return json{{"removed", ingest.RemoveAll()}};
+                              } catch (const std::exception& e) {
+                                  return DocumentsError(e);
+                              }
+                          });
 }
 
 }  // namespace ambient::ipc

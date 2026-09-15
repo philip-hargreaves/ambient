@@ -16,8 +16,28 @@ namespace ambient::guidance {
 
 struct RetrieverOptions {
     double floor = kDefaultFloor;
+    double upload_floor = kDefaultFloor;
     int note_weight = 1;
     int union_size = kUnionSize;
+};
+
+// Every ready added document, decrypted, as one matrix and its rows. Built by
+// the ingest and swapped in whole, so a search never touches the store
+struct UploadSnapshot {
+    struct Row {
+        std::int64_t document = 0;
+        int page = 0;
+        std::string name;
+        std::string number;
+        std::string section;
+        std::string text;
+        std::string boxes;
+        std::string added_at;
+    };
+    int dim = 0;
+    std::vector<float> matrix;  // rows.size() by dim
+    std::vector<Row> rows;
+    std::vector<Corpus> documents;  // one per document, for the record's searched list
 };
 
 using EmbedderLoader = std::function<std::unique_ptr<IEmbedder>()>;
@@ -38,6 +58,11 @@ class Retriever : public IGuidanceRetriever {
     std::vector<Corpus> Corpora() override;
     Readiness Status() override;
 
+    // For the ingest: one embed at a time, interleaved with searches
+    Embedding Embed(const std::string& text);
+    EmbedderIdentity Identity();
+    void PublishUploads(std::shared_ptr<const UploadSnapshot> uploads);
+
    private:
     struct Loaded {
         Corpus corpus;
@@ -52,6 +77,7 @@ class Retriever : public IGuidanceRetriever {
     std::mutex search_mutex_;
     std::unique_ptr<IEmbedder> embedder_;
     std::vector<Loaded> loaded_;
+    std::shared_ptr<const UploadSnapshot> uploads_;
     std::string load_error_;
 
     std::mutex corpora_mutex_;

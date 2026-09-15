@@ -22,7 +22,9 @@
                     "source": "nice",
                     "citation": "FX100 1.1.1, Fictional inflammatory joint disease: assessment and management",
                     "score": 0.897,
-                    "trigger": "Examination shows synovitis of several MCP joints."
+                    "trigger": "Examination shows synovitis of several MCP joints.",
+                    "document": 0,
+                    "page": 0
                 }
             ],
             "searched": [
@@ -41,7 +43,8 @@
             ],
             "considered": 40,
             "floor": 0.85,
-            "abstained": false
+            "abstained": false,
+            "uploadFloor": 0.85
         }
     }
 }

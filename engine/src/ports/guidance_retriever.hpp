@@ -38,6 +38,8 @@ struct Result {
     std::string citation;      // code, number and title on one line, for the clipboard
     double score = 0;
     std::string trigger;  // the note sentence that found it, empty for the whole note or a query
+    std::int64_t document = 0;  // an added document's id, 0 for a corpus
+    int page = 0;               // 0-based page of an added PDF, 0 otherwise
 };
 
 struct Results {
@@ -45,6 +47,7 @@ struct Results {
     std::vector<Corpus> searched;  // corpora open to the search, for the record
     int considered = 0;            // candidates before the floor and the filters
     double floor = 0;              // cosine floor the candidates were held to
+    double upload_floor = 0;       // the same for the added documents
     bool abstained = false;        // nothing to show, by filter or by floor
 };
 

@@ -10,6 +10,7 @@
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "core/session_controller.hpp"
+#include "ports/document_ingest.hpp"
 #include "ports/guidance_lane.hpp"
 #include "ports/note_lane.hpp"
 
@@ -103,9 +104,23 @@ std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& s
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
                                                ambient::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify);
+// Added documents: the row guidance/documents lists and guidance/document
+// announces, and the progress notification
+json DocumentJson(const ambient::guidance::DocumentInfo& document);
+json ProgressJson(const ambient::guidance::IngestProgress& progress);
+// The ready set changes when a document finishes or a finished one goes
+bool ChangesReadySet(const ambient::guidance::DocumentInfo& document);
+// guidance/documents/add: every path accepted gets a row at once and the rest
+// are skipped with a reason. guidance/documents/remove cancels an indexing id
+std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest& ingest,
+                                             const json& params);
+std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest);
+std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
+                                                const json& params);
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::IGuidanceLane& lane);
+                             ambient::guidance::IGuidanceLane& lane,
+                             ambient::guidance::IDocumentIngest& ingest);
 
 // Every method the engine serves. first_use: model caches were cold at
 // launch, so the one-off compiles are running and readiness reports them.

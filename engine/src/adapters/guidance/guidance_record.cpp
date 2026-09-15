@@ -60,13 +60,19 @@ json ToJson(const Results& results) {
                          {"source", r.source},
                          {"citation", r.citation},
                          {"score", std::round(r.score * 1000) / 1000},
-                         {"trigger", r.trigger}});
+                         {"trigger", r.trigger},
+                         {"document", r.document},
+                         {"page", r.page}});
     }
     json searched = json::array();
     for (const auto& c : results.searched) searched.push_back(ToJson(c));
-    return json{{"version", kRecordVersion}, {"shown", shown},
-                {"searched", searched},      {"considered", results.considered},
-                {"floor", results.floor},    {"abstained", results.abstained}};
+    return json{{"version", kRecordVersion},
+                {"shown", shown},
+                {"searched", searched},
+                {"considered", results.considered},
+                {"floor", results.floor},
+                {"abstained", results.abstained},
+                {"uploadFloor", results.upload_floor}};
 }
 
 Corpus CorpusFromJson(const json& j) {
@@ -103,6 +109,8 @@ Results FromJson(const json& j) {
             result.citation = Str(r, "citation");
             result.score = Num(r, "score");
             result.trigger = Str(r, "trigger");
+            result.document = static_cast<std::int64_t>(Num(r, "document"));
+            result.page = Int(r, "page");
             out.shown.push_back(std::move(result));
         }
     }
@@ -111,6 +119,7 @@ Results FromJson(const json& j) {
     }
     out.considered = Int(j, "considered");
     out.floor = Num(j, "floor");
+    out.upload_floor = Num(j, "uploadFloor");
     if (const auto it = j.find("abstained"); it != j.end() && it->is_boolean()) {
         out.abstained = it->get<bool>();
     }

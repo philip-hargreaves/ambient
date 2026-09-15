@@ -1,0 +1,31 @@
+{
+    "jsonrpc": "2.0",
+    "id": 16,
+    "result": {
+        "documents": [
+            {
+                "id": 2871034561297730,
+                "name": "PMR local pathway",
+                "mime": "text/plain",
+                "state": "indexing",
+                "error": null,
+                "addedAt": "2026-09-15T09:14:10Z",
+                "indexedAt": null,
+                "bytes": 9120,
+                "pages": 0,
+                "pagesWithoutText": 0,
+                "chunks": 0
+            }
+        ],
+        "skipped": [
+            {
+                "path": "C:\\Guidelines\\BSR gout guideline 2017.md",
+                "reason": "duplicate"
+            },
+            {
+                "path": "C:\\Guidelines\\scan.pdf",
+                "reason": "unsupported"
+            }
+        ]
+    }
+}

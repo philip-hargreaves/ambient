@@ -54,10 +54,15 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
     public partial GuidanceSection Section { get; private set; } = GuidanceSection.Hidden;
 
-    /// <summary>The note has been written since this guidance was found.</summary>
+    /// <summary>The note or the added documents have moved since this was found.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchAgainVisible))]
     public partial bool Stale { get; private set; }
+
+    [ObservableProperty]
+    public partial string StaleCaption { get; private set; } = NoteStaleCaption;
+
+    private const string NoteStaleCaption = "This guidance was found before your note edits.";
 
     /// <summary>
     /// The engine showed these results but could not keep them with the session.
@@ -262,6 +267,17 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         if (HasRecord)
         {
+            StaleCaption = NoteStaleCaption;
+            Stale = true;
+        }
+    }
+
+    /// <summary>guidance/documentsChanged: a note edit stays the stronger reason.</summary>
+    public void DocumentsChanged()
+    {
+        if (HasRecord && !Stale)
+        {
+            StaleCaption = "Added documents changed since this guidance was found.";
             Stale = true;
         }
     }
@@ -281,6 +297,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         }
 
         ApplyRecord(record);
+        StaleCaption = NoteStaleCaption;
         Stale = Flag(record, "stale");
     }
 
@@ -288,6 +305,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public void ApplyReady(JsonElement result)
     {
         ApplyRecord(result);
+        StaleCaption = NoteStaleCaption;
         Stale = Flag(result, "stale");
         NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
         FoundIn = Elapsed(_noteClock);

@@ -9,6 +9,7 @@
 #include "adapters/guidance/embedder.hpp"
 #include "adapters/storage/chunk_cipher.hpp"
 #include "adapters/storage/db.hpp"
+#include "ports/document_ingest.hpp"
 
 namespace ambient::guidance {
 
@@ -16,23 +17,9 @@ inline constexpr std::uint32_t kUploadApplicationId = 0x414D4255;  // "AMBU"
 inline constexpr int kUploadFormat = 1;
 inline constexpr const char* kUploadFile = "uploads.db";
 
-// A row of the list. Everything here is plaintext in the file except the name
-struct DocumentInfo {
-    std::int64_t id = 0;
-    std::string name;
-    std::string mime;
-    std::string state;  // indexing, ready, failed, stale
-    std::string error;  // a reason code
-    std::string added_at;
-    std::string indexed_at;
-    std::int64_t bytes = 0;
-    int pages = 0;
-    int pages_without_text = 0;
-    std::int64_t chunks = 0;
-};
-
 struct UploadChunk {
     int page = 0;
+    std::string number;  // the document's own numbering, when it has one
     std::string section;
     std::string text;
     std::vector<float> vector;  // unit length, the store's dimension
@@ -68,7 +55,7 @@ class UploadStore {
     std::vector<UploadChunk> ReadChunks(std::int64_t id);
     std::vector<std::uint8_t> ReadFile(std::int64_t id);
 
-    // Row, passages, file and key go together; what lingers in free pages is
+    // Row, passages, file and key go together. What lingers in free pages is
     // ciphertext without a key
     void Remove(std::int64_t id);
     std::size_t RemoveAll();

@@ -345,6 +345,26 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
+    public async Task ChangedDocumentsMarkAStoredResultStaleWithTheirOwnCaption()
+    {
+        var (session, engine, note) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
+
+        engine.RaiseNotification("guidance/documentsChanged",
+            JsonSerializer.SerializeToElement(new { }));
+
+        Assert.True(session.Guidance.Stale);
+        Assert.Equal(
+            "Added documents changed since this guidance was found.",
+            session.Guidance.StaleCaption);
+
+        note.ClinicalNoteText = "edited";
+        await session.SaveNoteAsync();
+
+        Assert.Equal(
+            "This guidance was found before your note edits.", session.Guidance.StaleCaption);
+    }
+
+    [Fact]
     public async Task SavingAnUnchangedNoteSendsNothingAndMarksNothing()
     {
         var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));

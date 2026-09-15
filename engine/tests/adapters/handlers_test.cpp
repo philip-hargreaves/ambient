@@ -17,6 +17,7 @@
 #include "adapters/guidance/guidance_lane.hpp"
 #include "adapters/storage/sqlite_session_store.hpp"
 #include "core/version.hpp"
+#include "ports/store_error.hpp"
 
 namespace ambient::ipc {
 namespace {
@@ -657,6 +658,7 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     ambient::guidance::Results results;
     results.considered = 40;
     results.floor = 0.85;
+    results.upload_floor = 0.85;
     ambient::guidance::Corpus structured;
     structured.id = "fixture-nice";
     structured.name = "Fixture guidance corpus (structured)";
@@ -810,6 +812,116 @@ TEST(Handlers, GuidanceCorporaMatchesTheFixture) {
     ready.phase = ambient::guidance::Readiness::Phase::kReady;
     const json fixture = LoadFixture("guidance-corpora.json");
     EXPECT_EQ(GuidanceCorporaJson(ready, {loaded, refused}), fixture["result"]);
+}
+
+ambient::guidance::DocumentInfo ReadyDocument() {
+    ambient::guidance::DocumentInfo d;
+    d.id = 7302914125883421;
+    d.name = "BSR gout guideline 2017";
+    d.mime = "text/markdown";
+    d.state = "ready";
+    d.added_at = "2026-09-15T09:12:44Z";
+    d.indexed_at = "2026-09-15T09:13:02Z";
+    d.bytes = 48213;
+    d.chunks = 41;
+    return d;
+}
+
+ambient::guidance::DocumentInfo IndexingDocument() {
+    ambient::guidance::DocumentInfo d;
+    d.id = 2871034561297730;
+    d.name = "PMR local pathway";
+    d.mime = "text/plain";
+    d.state = "indexing";
+    d.added_at = "2026-09-15T09:14:10Z";
+    d.bytes = 9120;
+    return d;
+}
+
+ambient::guidance::DocumentInfo FailedDocument() {
+    ambient::guidance::DocumentInfo d;
+    d.id = 9106572248130415;
+    d.name = "Clinic letter";
+    d.mime = "text/plain";
+    d.state = "failed";
+    d.error = "patientData";
+    d.added_at = "2026-09-15T09:14:10Z";
+    d.bytes = 2210;
+    return d;
+}
+
+struct FakeIngest : ambient::guidance::IDocumentIngest {
+    std::vector<std::filesystem::path> added;
+    std::vector<std::int64_t> removed;
+    bool cancelled = false;
+
+    ambient::guidance::Accepted Add(const std::vector<std::filesystem::path>& paths) override {
+        added = paths;
+        ambient::guidance::Accepted out;
+        out.documents.push_back(IndexingDocument());
+        out.skipped.push_back({"C:\\Guidelines\\BSR gout guideline 2017.md", "duplicate"});
+        out.skipped.push_back({"C:\\Guidelines\\scan.pdf", "unsupported"});
+        return out;
+    }
+    void Cancel() override {
+        cancelled = true;
+    }
+    std::vector<ambient::guidance::DocumentInfo> List() override {
+        return {ReadyDocument(), IndexingDocument(), FailedDocument()};
+    }
+    void Remove(std::int64_t id) override {
+        if (id != ReadyDocument().id) {
+            throw ambient::store::StoreError(ambient::store::StoreCode::kNotFound, "no document");
+        }
+        removed.push_back(id);
+    }
+    std::size_t RemoveAll() override {
+        return 3;
+    }
+    void SetListener(std::function<void(const ambient::guidance::IngestProgress&)>,
+                     std::function<void(const ambient::guidance::DocumentInfo&)>) override {}
+};
+
+TEST(Handlers, DocumentsMatchTheFixtures) {
+    FakeIngest ingest;
+    EXPECT_EQ(ResultOf(HandleDocumentsList(ingest)),
+              LoadFixture("guidance-documents.json")["result"]);
+    EXPECT_EQ(DocumentJson(ReadyDocument()), LoadFixture("guidance-document.json")["params"]);
+    EXPECT_EQ(ProgressJson({IndexingDocument().id, "preparing", 120, 310}),
+              LoadFixture("guidance-progress.json")["params"]);
+
+    const auto outcome = HandleDocumentsAdd(
+        ingest, json{{"paths",
+                      {"C:\\Guidelines\\PMR local pathway.txt",
+                       "C:\\Guidelines\\BSR gout guideline 2017.md", "C:\\Guidelines\\scan.pdf"}}});
+    EXPECT_EQ(ResultOf(outcome), LoadFixture("guidance-documents-add.json")["result"]);
+    ASSERT_EQ(ingest.added.size(), 3u);
+    EXPECT_EQ(ingest.added[0].filename(), "PMR local pathway.txt");
+}
+
+TEST(Handlers, DocumentsAddAndRemoveCheckTheirParams) {
+    FakeIngest ingest;
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsAdd(ingest, json::object())));
+    EXPECT_TRUE(
+        std::holds_alternative<Error>(HandleDocumentsAdd(ingest, json{{"paths", json::array()}})));
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsAdd(ingest, json{{"paths", {1}}})));
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsRemove(ingest, json{{"id", "7"}})));
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsRemove(ingest, json{{"id", 1}})));
+    EXPECT_TRUE(std::holds_alternative<json>(
+        HandleDocumentsRemove(ingest, json{{"id", ReadyDocument().id}})));
+    EXPECT_EQ(ingest.removed, std::vector<std::int64_t>{ReadyDocument().id});
+}
+
+TEST(Handlers, TheReadySetChangesWhenADocumentFinishesOrAFinishedOneGoes) {
+    EXPECT_TRUE(ChangesReadySet(ReadyDocument()));
+    EXPECT_FALSE(ChangesReadySet(IndexingDocument()));
+    EXPECT_FALSE(ChangesReadySet(FailedDocument()));
+    auto gone = ReadyDocument();
+    gone.state = "removed";
+    EXPECT_TRUE(ChangesReadySet(gone));
+    gone = IndexingDocument();
+    gone.state = "removed";
+    EXPECT_FALSE(ChangesReadySet(gone));
 }
 
 TEST(Handlers, GuidanceModelMatchesTheFixture) {

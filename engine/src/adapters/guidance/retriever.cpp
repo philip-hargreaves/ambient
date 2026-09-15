@@ -35,6 +35,14 @@ std::string Key(const Located& l) {
     return std::to_string(l.corpus) + ":" + std::to_string(l.ord);
 }
 
+// "BSR PMR guidelines 2009, page 3, 1.2": the name, then what the document gives
+std::string UploadCitation(const UploadSnapshot::Row& row) {
+    std::string out = row.name;
+    if (row.page > 0) out += ", page " + std::to_string(row.page + 1);
+    if (!row.number.empty()) out += ", " + row.number;
+    return out;
+}
+
 }  // namespace
 
 Retriever::Retriever(EmbedderLoader load_embedder, std::filesystem::path corpora_root,
@@ -91,12 +99,34 @@ void Retriever::Load() {
     }
 }
 
+Embedding Retriever::Embed(const std::string& text) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    Load();
+    return embedder_->Embed(text);
+}
+
+EmbedderIdentity Retriever::Identity() {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    Load();
+    return embedder_->Identity();
+}
+
+void Retriever::PublishUploads(std::shared_ptr<const UploadSnapshot> uploads) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    uploads_ = std::move(uploads);
+}
+
 Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
     Results out;
     out.floor = options_.floor;
+    out.upload_floor = options_.upload_floor;
+    const auto uploads = uploads_;
     std::vector<CorpusStore*> stores;
+    if (uploads) {
+        for (const auto& document : uploads->documents) out.searched.push_back(document);
+    }
     for (auto& item : loaded_) {
         if (item.store) {
             stores.push_back(item.store.get());
@@ -114,61 +144,112 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         out.abstained = true;
         return out;
     }
-    if (stores.empty()) return out;
+    const bool have_uploads = uploads && !uploads->rows.empty();
+    if (stores.empty() && !have_uploads) return out;
 
-    // Every corpus shares the embedder, so one sub-query's hits from all of them
-    // sort into one list before the vote
+    // Each sub-query is embedded once and scanned against both groups
+    std::vector<std::pair<std::string, Embedding>> embedded;
+    for (const auto& query : queries) embedded.emplace_back(query, embedder_->Embed(query));
+
+    struct Source {
+        const float* matrix;
+        std::size_t size;
+        int dim;
+    };
     const int k = options_.union_size;
-    std::map<std::string, Located> where;
-    std::vector<SubQueryHits> lists;
-    for (const auto& query : queries) {
-        const auto embedding = embedder_->Embed(query);
-        std::vector<Located> located;
-        for (std::size_t c = 0; c < stores.size(); ++c) {
-            const auto hits = Scan(stores[c]->Matrix(), stores[c]->Size(), stores[c]->Dim(),
-                                   embedding.vector.data(), k);
-            for (const auto& hit : hits) located.push_back({c, hit.ord, hit.cosine});
+    // One group's sources sort into one list per sub-query before the vote
+    const auto vote = [&](const std::vector<Source>& sources, double floor,
+                          std::map<std::string, Located>& where) {
+        std::vector<SubQueryHits> lists;
+        for (const auto& [query, embedding] : embedded) {
+            std::vector<Located> located;
+            for (std::size_t c = 0; c < sources.size(); ++c) {
+                const auto hits = Scan(sources[c].matrix, sources[c].size, sources[c].dim,
+                                       embedding.vector.data(), k);
+                for (const auto& hit : hits) located.push_back({c, hit.ord, hit.cosine});
+            }
+            std::stable_sort(
+                located.begin(), located.end(),
+                [](const Located& a, const Located& b) { return a.cosine > b.cosine; });
+            if (located.size() > static_cast<std::size_t>(k))
+                located.resize(static_cast<std::size_t>(k));
+            SubQueryHits list{query, query == whole, {}};
+            for (const auto& l : located) {
+                auto key = Key(l);
+                list.hits.push_back({key, l.cosine});
+                where.emplace(std::move(key), l);
+            }
+            lists.push_back(std::move(list));
         }
-        std::stable_sort(located.begin(), located.end(),
-                         [](const Located& a, const Located& b) { return a.cosine > b.cosine; });
-        if (located.size() > static_cast<std::size_t>(k))
-            located.resize(static_cast<std::size_t>(k));
-        SubQueryHits list{query, query == whole, {}};
-        for (const auto& l : located) {
-            auto key = Key(l);
-            list.hits.push_back({key, l.cosine});
-            where.emplace(std::move(key), l);
+        return ApplyFloor(RankVote(lists, options_.note_weight, k), floor);
+    };
+
+    // Added documents lead, as their own group with their own floor
+    if (have_uploads) {
+        std::map<std::string, Located> where;
+        const auto ordered = vote({{uploads->matrix.data(), uploads->rows.size(), uploads->dim}},
+                                  options_.upload_floor, where);
+        out.considered += ordered.considered;
+        int shown = 0;
+        for (const auto& candidate : ordered.kept) {
+            if (shown >= limit) break;
+            const auto& at = where.at(candidate.id);
+            const auto& row = uploads->rows[at.ord];
+            if (PopulationConflict(text, row.text, row.name)) continue;
+            Result result;
+            result.corpus = "upload:" + std::to_string(row.document);
+            result.chunk_id = result.corpus + "-" + std::to_string(at.ord);
+            result.number = row.number;
+            result.title = row.name;
+            result.section = row.section;
+            result.citation = UploadCitation(row);
+            result.text = row.text;
+            result.last_updated = row.added_at;
+            result.source = "upload";
+            result.score = candidate.cosine;
+            result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
+            result.document = row.document;
+            result.page = row.page;
+            out.shown.push_back(std::move(result));
+            ++shown;
         }
-        lists.push_back(std::move(list));
     }
 
-    auto ordered = ApplyFloor(RankVote(lists, options_.note_weight, k), options_.floor);
-    out.considered = ordered.considered;
-    for (const auto& candidate : ordered.kept) {
-        if (static_cast<int>(out.shown.size()) >= limit) break;
-        const auto& at = where.at(candidate.id);
-        auto* store = stores[at.corpus];
-        auto chunk = store->TextAt(at.ord);
-        const auto& cite = store->CiteAt(at.ord);
-        if (PopulationConflict(text, chunk.text, cite.title)) continue;
-        Result result;
-        result.corpus = store->Info().id;
-        result.chunk_id = cite.chunk_id;
-        result.code = cite.code;
-        result.number = cite.number;
-        result.title = cite.title;
-        result.section = cite.section;
-        result.citation = Citation(cite.code, cite.number, cite.title);
-        result.text = std::move(chunk.text);
-        result.url = std::move(chunk.url);
-        result.last_updated = std::move(chunk.last_updated);
-        result.update_tag = std::move(chunk.update_tag);
-        result.source = store->Info().source;
-        result.score = candidate.cosine;
-        result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
-        out.shown.push_back(std::move(result));
+    if (!stores.empty()) {
+        std::vector<Source> sources;
+        for (auto* store : stores)
+            sources.push_back({store->Matrix(), store->Size(), store->Dim()});
+        std::map<std::string, Located> where;
+        const auto ordered = vote(sources, options_.floor, where);
+        out.considered += ordered.considered;
+        int shown = 0;
+        for (const auto& candidate : ordered.kept) {
+            if (shown >= limit) break;
+            const auto& at = where.at(candidate.id);
+            auto* store = stores[at.corpus];
+            auto chunk = store->TextAt(at.ord);
+            const auto& cite = store->CiteAt(at.ord);
+            if (PopulationConflict(text, chunk.text, cite.title)) continue;
+            Result result;
+            result.corpus = store->Info().id;
+            result.chunk_id = cite.chunk_id;
+            result.code = cite.code;
+            result.number = cite.number;
+            result.title = cite.title;
+            result.section = cite.section;
+            result.citation = Citation(cite.code, cite.number, cite.title);
+            result.text = std::move(chunk.text);
+            result.url = std::move(chunk.url);
+            result.last_updated = std::move(chunk.last_updated);
+            result.update_tag = std::move(chunk.update_tag);
+            result.source = store->Info().source;
+            result.score = candidate.cosine;
+            result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
+            out.shown.push_back(std::move(result));
+            ++shown;
+        }
     }
-    out.abstained = ordered.abstained || (limit > 0 && out.shown.empty());
+    out.abstained = out.shown.empty();
     return out;
 }
 

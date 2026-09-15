@@ -11,6 +11,9 @@ namespace Ambient.App.Core.ViewModels;
 /// <summary>One installed corpus, as Settings lists it.</summary>
 public sealed record CorpusRow(string Name, string Detail, string Attribution, bool Refused)
 {
+    /// <summary>A line above every row but the first.</summary>
+    public bool Divided { get; init; }
+
     public bool AttributionVisible => Attribution.Length > 0;
 
     public bool Loaded => !Refused;
@@ -56,6 +59,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         CollectPerformanceData = preferences?.CollectPerformanceData ?? false;
         KeepConsultations = preferences?.KeepConsultations ?? false;
         ShowPerformanceMetrics = preferences?.ShowPerformanceMetrics ?? false;
+        DeveloperToolsExpanded = preferences?.DeveloperToolsExpanded ?? false;
         Theme = preferences?.Theme ?? "system";
         _noteTier = preferences?.NoteTier ?? "default";
         _initialising = false;
@@ -69,6 +73,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 {
                     _ = LoadNoteModelsAsync();
                     _ = LoadGuidanceCorporaAsync();
+                    _ = LoadDocumentsAsync();
                     if (SeedDataEnabled)
                     {
                         _ = ApplySeedDataAsync(true);
@@ -84,13 +89,28 @@ public sealed partial class SettingsViewModel : ObservableObject
                 }
                 else if (method == "guidance/model")
                 {
-                    Post(() => _ = LoadGuidanceCorporaAsync());
+                    Post(() =>
+                    {
+                        _ = LoadGuidanceCorporaAsync();
+                        _ = LoadDocumentsAsync();
+                    });
+                }
+                else if (method == "guidance/document")
+                {
+                    var document = parameters.Clone();
+                    Post(() => Upsert(document));
+                }
+                else if (method == "guidance/progress")
+                {
+                    var progress = parameters.Clone();
+                    Post(() => ApplyProgress(progress));
                 }
             };
             if (client.Connected)
             {
                 _ = LoadNoteModelsAsync();
                 _ = LoadGuidanceCorporaAsync();
+                _ = LoadDocumentsAsync();
                 if (SeedDataEnabled)
                 {
                     _ = ApplySeedDataAsync(true);
@@ -386,17 +406,19 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             GuidanceCorpora.Clear();
             GuidanceCaption = "Unavailable";
+            GuidanceReady = false;
         }
     }
 
     private void ApplyGuidanceCorpora(JsonElement reply)
     {
+        GuidanceReady = GuidanceCard.Field(reply, "state") == "ready";
         GuidanceCorpora.Clear();
         if (reply.TryGetProperty("corpora", out var list) && list.ValueKind == JsonValueKind.Array)
         {
             foreach (var corpus in list.EnumerateArray())
             {
-                GuidanceCorpora.Add(RowFrom(corpus));
+                GuidanceCorpora.Add(RowFrom(corpus) with { Divided = GuidanceCorpora.Count > 0 });
             }
         }
 
@@ -436,6 +458,309 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         return new CorpusRow(GuidanceCard.Field(corpus, "name"), string.Join(" · ", parts),
             GuidanceCard.Field(corpus, "attribution"), false);
+    }
+
+    // ---- added documents --------------------------------------------------
+
+    /// <summary>The clinician's added documents: the batch in progress, then by name.</summary>
+    public ObservableCollection<DocumentRow> Documents { get; } = [];
+
+    /// <summary>Documents can be added once the embedder is ready.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddDocumentsCommand), nameof(AddFolderCommand))]
+    public partial bool GuidanceReady { get; private set; }
+
+    /// <summary>What the last add skipped, or why nothing could be added.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DocumentsCaptionVisible))]
+    public partial string DocumentsCaption { get; set; } = "";
+
+    public bool DocumentsCaptionVisible => DocumentsCaption.Length > 0;
+
+    /// <summary>How many documents are still being read, empty when none is.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BatchVisible))]
+    public partial string BatchCaption { get; private set; } = "";
+
+    public bool BatchVisible => BatchCaption.Length > 0;
+
+    public bool DocumentsPresent => Documents.Count > 0;
+
+    /// <summary>The view supplies the pickers and the dialogs.</summary>
+    public Func<Task<IReadOnlyList<string>>>? PickDocuments { get; set; }
+
+    public Func<Task<string?>>? PickFolder { get; set; }
+
+    public Func<string, Task<bool>>? ConfirmRemoveDocument { get; set; }
+
+    public Func<int, Task<bool>>? ConfirmRemoveAllDocuments { get; set; }
+
+    [RelayCommand(CanExecute = nameof(GuidanceReady))]
+    private async Task AddDocuments()
+    {
+        if (PickDocuments is null)
+        {
+            return;
+        }
+
+        var paths = await PickDocuments().ConfigureAwait(true);
+        if (paths.Count > 0)
+        {
+            await AddPathsAsync(paths).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Every file in the folder. The engine skips what it cannot read.</summary>
+    [RelayCommand(CanExecute = nameof(GuidanceReady))]
+    private async Task AddFolder()
+    {
+        if (PickFolder is null)
+        {
+            return;
+        }
+
+        var folder = await PickFolder().ConfigureAwait(true);
+        if (folder is null)
+        {
+            return;
+        }
+
+        var paths = Directory.EnumerateFiles(folder)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
+        if (paths.Length == 0)
+        {
+            DocumentsCaption = "The folder has no files";
+            return;
+        }
+
+        await AddPathsAsync(paths).ConfigureAwait(true);
+    }
+
+    private async Task AddPathsAsync(IReadOnlyList<string> paths)
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            var reply = await _client
+                .RequestAsync("guidance/documents/add", new { paths }, RequestTimeout)
+                .ConfigureAwait(true);
+            if (reply.TryGetProperty("documents", out var documents))
+            {
+                foreach (var document in documents.EnumerateArray())
+                {
+                    Upsert(document);
+                }
+            }
+
+            DocumentsCaption = SkippedCaption(reply);
+        }
+        catch (Exception e)
+        {
+            DocumentsCaption = "The documents could not be added";
+            _status?.Log($"guidance/documents/add failed: {e.Message}");
+        }
+    }
+
+    // Skipped files become a count under the add row
+    private static string SkippedCaption(JsonElement reply)
+    {
+        if (!reply.TryGetProperty("skipped", out var skipped)
+            || skipped.ValueKind != JsonValueKind.Array || skipped.GetArrayLength() == 0)
+        {
+            return "";
+        }
+
+        var parts = new List<string>();
+        foreach (var group in skipped.EnumerateArray()
+            .GroupBy(s => GuidanceCard.Field(s, "reason")))
+        {
+            var n = group.Count();
+            parts.Add(group.Key switch
+            {
+                "duplicate" => $"{n} already added",
+                "unsupported" => $"{n} skipped, not text or Markdown",
+                "noSpace" => $"{n} skipped, not enough free space",
+                _ => $"{n} could not be read",
+            });
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            var reply = await _client
+                .RequestAsync("guidance/documents", null, TimeSpan.FromSeconds(5))
+                .ConfigureAwait(true);
+            Documents.Clear();
+            foreach (var document in reply.GetProperty("documents").EnumerateArray())
+            {
+                Upsert(document);
+            }
+        }
+        catch (Exception)
+        {
+            Documents.Clear();
+        }
+
+        DocumentsCaption = "";
+        OnPropertyChanged(nameof(DocumentsPresent));
+        RefreshBatch();
+    }
+
+    // A row keeps its place while it works, then sorts by name below the batch
+    private void Upsert(JsonElement document)
+    {
+        var id = document.GetProperty("id").GetInt64();
+        var row = Documents.FirstOrDefault(r => r.Id == id);
+        if (GuidanceCard.Field(document, "state") == "removed")
+        {
+            if (row is not null)
+            {
+                Documents.Remove(row);
+            }
+        }
+        else if (row is null)
+        {
+            row = new DocumentRow(document, RemoveDocumentCommand);
+            Documents.Insert(Place(row), row);
+        }
+        else
+        {
+            var wasWorking = row.Working;
+            row.Apply(document);
+            if (wasWorking && !row.Working)
+            {
+                Documents.Remove(row);
+                Documents.Insert(Place(row), row);
+            }
+        }
+
+        OnPropertyChanged(nameof(DocumentsPresent));
+        RefreshBatch();
+    }
+
+    private int Place(DocumentRow row)
+    {
+        var i = 0;
+        while (i < Documents.Count && Documents[i].Working)
+        {
+            i++;
+        }
+
+        if (row.Working)
+        {
+            return i;
+        }
+
+        while (i < Documents.Count
+            && string.Compare(Documents[i].Name, row.Name, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            i++;
+        }
+
+        return i;
+    }
+
+    private void ApplyProgress(JsonElement progress)
+    {
+        if (progress.TryGetProperty("id", out var id) && id.TryGetInt64(out var value))
+        {
+            Documents.FirstOrDefault(r => r.Id == value)?.ApplyProgress(progress);
+        }
+    }
+
+    private void RefreshBatch()
+    {
+        var working = Documents.Count(r => r.Working);
+        BatchCaption = working switch
+        {
+            0 => "",
+            1 => "Adding 1 document",
+            _ => $"Adding {working} documents",
+        };
+    }
+
+    /// <summary>Cancel asks nothing while the row works. Remove asks once it has settled.</summary>
+    [RelayCommand]
+    private async Task RemoveDocument(DocumentRow? row)
+    {
+        if (row is null || _client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        if (!row.Working && ConfirmRemoveDocument is not null
+            && !await ConfirmRemoveDocument(row.Name).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        try
+        {
+            await _client
+                .RequestAsync("guidance/documents/remove", new { id = row.Id }, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/documents/remove failed: {e.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task RemoveAllDocuments()
+    {
+        if (_client is null || !_client.Connected || Documents.Count == 0)
+        {
+            return;
+        }
+
+        if (ConfirmRemoveAllDocuments is not null
+            && !await ConfirmRemoveAllDocuments(Documents.Count).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        try
+        {
+            await _client.RequestAsync("guidance/documents/removeAll", null, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/documents/removeAll failed: {e.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task CancelAll()
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            await _client.RequestAsync("guidance/documents/cancel", null, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/documents/cancel failed: {e.Message}");
+        }
     }
 
     /// <summary>
@@ -634,6 +959,25 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>The Developer tools group is closed unless it was left open.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeveloperToolsCollapsed))]
+    public partial bool DeveloperToolsExpanded { get; set; }
+
+    public bool DeveloperToolsCollapsed => !DeveloperToolsExpanded;
+
+    [RelayCommand]
+    private void ToggleDeveloperTools() => DeveloperToolsExpanded = !DeveloperToolsExpanded;
+
+    partial void OnDeveloperToolsExpandedChanged(bool value)
+    {
+        if (!_initialising && _preferences is not null)
+        {
+            _preferences.DeveloperToolsExpanded = value;
+            _preferences.Save();
+        }
+    }
+
     /// <summary>Shows the status-bar model and memory chips. For testing.</summary>
     [ObservableProperty]
     public partial bool ShowPerformanceMetrics { get; set; }
@@ -671,7 +1015,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExportDescription))]
     public partial string ExportResult { get; private set; } = "";
+
+    /// <summary>The Export row's line: the last outcome once there is one.</summary>
+    public string ExportDescription =>
+        ExportResult.Length > 0 ? ExportResult : "Saves the report as an HTML file";
 
     /// <summary>Suggested name in, chosen path (or null) out; the view owns the picker.</summary>
     public Func<string, Task<string?>>? PickSavePath { get; set; }

@@ -1,0 +1,17 @@
+{
+    "jsonrpc": "2.0",
+    "method": "guidance/document",
+    "params": {
+        "id": 7302914125883421,
+        "name": "BSR gout guideline 2017",
+        "mime": "text/markdown",
+        "state": "ready",
+        "error": null,
+        "addedAt": "2026-09-15T09:12:44Z",
+        "indexedAt": "2026-09-15T09:13:02Z",
+        "bytes": 48213,
+        "pages": 0,
+        "pagesWithoutText": 0,
+        "chunks": 41
+    }
+}

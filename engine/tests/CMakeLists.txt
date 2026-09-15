@@ -60,6 +60,8 @@ add_executable(engine_tests
     adapters/guidance_record_test.cpp
     adapters/guidance_retriever_test.cpp
     adapters/upload_store_test.cpp
+    adapters/document_ingest_test.cpp
+    core/patient_screen_test.cpp
     adapters/capture_devices_test.cpp
     adapters/handlers_test.cpp
     adapters/messages_test.cpp

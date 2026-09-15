@@ -7,10 +7,10 @@
 #include <iterator>
 #include <vector>
 
-#include "guidance_fixture.hpp"
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/storage/chunk_cipher.hpp"
 #include "adapters/storage/db.hpp"
+#include "guidance_fixture.hpp"
 #include "ports/store_error.hpp"
 
 namespace ambient::guidance {
@@ -31,7 +31,7 @@ std::filesystem::path WriteFile(const std::filesystem::path& dir, const char* na
 }
 
 UploadChunk Chunk(const std::string& text, int page = 0) {
-    return {page, "Recommendations", text, {1.0F, 0.0F, 0.0F, 0.0F}, "[[0.1,0.2,0.8,0.25]]"};
+    return {page, "1.1", "Recommendations", text, {1.0F, 0.0F, 0.0F, 0.0F}, "[[0.1,0.2,0.8,0.25]]"};
 }
 
 bool FileHolds(const std::filesystem::path& path, const std::vector<std::uint8_t>& needle) {
@@ -96,6 +96,8 @@ TEST(UploadStore, CreatesRefusesForeignFilesAndAddsFinishesListsAndRemoves) {
     const auto chunks = store->ReadChunks(added.id);
     ASSERT_EQ(chunks.size(), 2u);
     EXPECT_EQ(chunks[0].text, "Start prednisolone 15 mg daily.");
+    EXPECT_EQ(chunks[0].number, "1.1");
+    EXPECT_EQ(chunks[0].section, "Recommendations");
     EXPECT_EQ(chunks[1].page, 2);
     EXPECT_EQ(chunks[1].vector, (std::vector<float>{1.0F, 0.0F, 0.0F, 0.0F}));
     const auto copy = store->ReadFile(added.id);

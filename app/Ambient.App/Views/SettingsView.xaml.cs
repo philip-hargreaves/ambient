@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
+using Windows.Storage.Pickers;
 using Ambient.App.Core;
 using Ambient.App.Core.ViewModels;
 using Ambient.Client;
@@ -70,6 +71,43 @@ public sealed partial class SettingsView : UserControl
             };
             return await dialog.ShowAsync() == ContentDialogResult.Primary;
         };
+        // Two pickers because Windows has two dialogs. The file one takes many
+        viewModel.PickDocuments = async () =>
+        {
+            var picker = new FileOpenPicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            };
+            picker.FileTypeFilter.Add(".txt");
+            picker.FileTypeFilter.Add(".md");
+            if (!BindToWindow(picker))
+            {
+                return [];
+            }
+
+            var files = await picker.PickMultipleFilesAsync();
+            return files.Select(f => f.Path).ToArray();
+        };
+        viewModel.PickFolder = async () =>
+        {
+            var picker = new FolderPicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+            };
+            picker.FileTypeFilter.Add("*");
+            if (!BindToWindow(picker))
+            {
+                return null;
+            }
+
+            return (await picker.PickSingleFolderAsync())?.Path;
+        };
+        viewModel.ConfirmRemoveDocument = name => ConfirmAsync($"Remove {name}?",
+            "It is erased from this device. Guidance already saved with a consultation "
+            + "is unchanged.", "Remove");
+        viewModel.ConfirmRemoveAllDocuments = count => ConfirmAsync(
+            count == 1 ? "Remove the added document?" : $"Remove all {count} documents?",
+            "They are erased from this device. This cannot be undone.", "Remove all");
     }
 
     public SettingsViewModel ViewModel { get; }
@@ -77,4 +115,32 @@ public sealed partial class SettingsView : UserControl
     public ShellViewModel Shell { get; }
 
     public VoiceViewModel Voice { get; }
+
+    // Unpackaged WinUI: a picker must be bound to our window handle
+    private static bool BindToWindow(object picker)
+    {
+        var window = App.Current.Window;
+        if (window is null)
+        {
+            return false;
+        }
+
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+        return true;
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string content, string primary)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = content,
+            PrimaryButtonText = primary,
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Ambient.App.Core;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.ViewModels;
@@ -544,6 +545,7 @@ public class SettingsViewModelTest
         Assert.False(corpus.Refused);
         Assert.Equal("", settings.GuidanceCaption);
         Assert.False(settings.GuidanceCaptionVisible);
+        Assert.False(corpus.Divided);
     }
 
     [Fact]
@@ -609,5 +611,147 @@ public class SettingsViewModelTest
         Assert.Equal("22,991 passages · 11 Sep 2026", corpus.Detail);
         Assert.Equal("Contains public sector information", corpus.Attribution);
         Assert.Equal("", settings.GuidanceCaption);
+    }
+
+    private static object Document(long id, string name, string state, int chunks = 0,
+        string? error = null) => new
+    {
+        id,
+        name,
+        mime = "text/plain",
+        state,
+        error,
+        addedAt = "2026-09-15T09:12:44Z",
+        indexedAt = state == "ready" ? "2026-09-15T09:13:02Z" : null,
+        bytes = 1000,
+        pages = 0,
+        pagesWithoutText = 0,
+        chunks,
+    };
+
+    private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value);
+
+    [Fact]
+    public void AddedDocumentsListWorkingRowsFirstThenByName()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        engine.GuidanceDocuments.Add(Document(2, "asthma", "ready", 12));
+        engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
+        engine.GuidanceDocuments.Add(Document(4, "Letter", "failed", error: "patientData"));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        Assert.Equal(["PMR", "asthma", "Gout", "Letter"], settings.Documents.Select(d => d.Name));
+        Assert.Equal("Waiting", settings.Documents[0].Detail);
+        Assert.Equal("Cancel", settings.Documents[0].ControlLabel);
+        Assert.True(settings.Documents[0].Waiting);
+        Assert.Equal("12 passages · added 15 Sep 2026", settings.Documents[1].Detail);
+        Assert.Equal("Remove", settings.Documents[1].ControlLabel);
+        Assert.Equal(
+            "Not added: this looks like a document about a patient.", settings.Documents[3].Detail);
+        Assert.True(settings.Documents[3].Failed);
+        Assert.Equal("Adding 1 document", settings.BatchCaption);
+        Assert.True(settings.DocumentsPresent);
+        Assert.True(settings.AddDocumentsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AddingDocumentsSendsThePathsAndCountsWhatWasSkipped()
+    {
+        var engine = new FakeEngineClient();
+        engine.AddedDocuments.Add(Document(5, "PMR pathway", "indexing"));
+        engine.SkippedDocuments.Add(new { path = @"C:\g\gout.txt", reason = "duplicate" });
+        engine.SkippedDocuments.Add(new { path = @"C:\g\scan.pdf", reason = "unsupported" });
+        var settings = new SettingsViewModel(TempPreferences(), client: engine)
+        {
+            PickDocuments = () => Task.FromResult<IReadOnlyList<string>>(
+                [@"C:\g\PMR pathway.txt", @"C:\g\gout.txt", @"C:\g\scan.pdf"]),
+        };
+
+        await settings.AddDocumentsCommand.ExecuteAsync(null);
+
+        var request = Assert.Single(engine.Requests, r => r.Method == "guidance/documents/add");
+        Assert.Contains("PMR pathway.txt", request.Params);
+        var row = Assert.Single(settings.Documents);
+        Assert.Equal("PMR pathway", row.Name);
+        Assert.True(row.Working);
+        Assert.Equal(
+            "1 already added · 1 skipped, not text or Markdown", settings.DocumentsCaption);
+    }
+
+    [Fact]
+    public async Task RowsFollowTheEngineAndRemoveAsksOnlyOnceSettled()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
+        var asked = 0;
+        var settings = new SettingsViewModel(TempPreferences(), client: engine)
+        {
+            ConfirmRemoveDocument = _ =>
+            {
+                asked++;
+                return Task.FromResult(true);
+            },
+        };
+        var row = Assert.Single(settings.Documents);
+
+        engine.RaiseNotification("guidance/progress",
+            Json(new { id = 3, phase = "paused", done = 0, total = 10 }));
+        Assert.Equal("Waiting for the consultation to finish", row.Detail);
+        Assert.False(row.ControlVisible);
+        engine.RaiseNotification("guidance/progress",
+            Json(new { id = 3, phase = "preparing", done = 3, total = 10 }));
+        Assert.Equal("Preparing 3 of 10 passages", row.Detail);
+        Assert.Equal(0.3, row.Progress, 3);
+        Assert.True(row.ControlVisible);
+        Assert.False(row.Waiting);
+
+        await settings.RemoveDocumentCommand.ExecuteAsync(row);
+        Assert.Equal(0, asked);
+        Assert.Contains(engine.Requests,
+            r => r.Method == "guidance/documents/remove" && r.Params == "{\"id\":3}");
+
+        engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "ready", 10)));
+        Assert.Equal("10 passages · added 15 Sep 2026", row.Detail);
+        Assert.False(row.Working);
+        Assert.Equal("", settings.BatchCaption);
+
+        await settings.RemoveDocumentCommand.ExecuteAsync(row);
+        Assert.Equal(1, asked);
+
+        engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "removed", 10)));
+        Assert.Empty(settings.Documents);
+        Assert.False(settings.DocumentsPresent);
+    }
+
+    [Fact]
+    public void DeveloperToolsStayClosedUntilOpenedAndThenStayOpen()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var settings = new SettingsViewModel(new AppPreferences(path));
+        Assert.False(settings.DeveloperToolsExpanded);
+
+        settings.ToggleDeveloperToolsCommand.Execute(null);
+        Assert.True(settings.DeveloperToolsExpanded);
+        Assert.False(settings.DeveloperToolsCollapsed);
+
+        var saved = AppPreferences.Load(path);
+        Assert.True(saved.DeveloperToolsExpanded);
+        Assert.True(new SettingsViewModel(saved).DeveloperToolsExpanded);
+    }
+
+    [Fact]
+    public void DocumentsWaitForTheGuidanceModel()
+    {
+        var engine = new FakeEngineClient { GuidanceState = "loading" };
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        Assert.False(settings.AddDocumentsCommand.CanExecute(null));
+
+        engine.GuidanceState = "ready";
+        engine.RaiseNotification("guidance/model");
+
+        Assert.True(settings.AddDocumentsCommand.CanExecute(null));
+        Assert.Single(settings.Documents);
     }
 }

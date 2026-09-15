@@ -26,6 +26,7 @@
 #include "adapters/diarisation/anchor_store.hpp"
 #include "adapters/diarisation/deferred_diariser.hpp"
 #include "adapters/diarisation/speaker_diariser.hpp"
+#include "adapters/guidance/document_ingest.hpp"
 #include "adapters/guidance/embedder.hpp"
 #include "adapters/guidance/guidance_lane.hpp"
 #include "adapters/guidance/retriever.hpp"
@@ -459,8 +460,22 @@ int main(int argc, char* argv[]) {
                                       &ov_runtime, translator.get(), translate_lane.get(),
                                       first_use, &anchors, note_lane, stray_note_host,
                                       models_root.parent_path() / "demo" / "reflections");
+        // Added documents embed between note searches and wait while a
+        // consultation runs
+        ambient::guidance::DocumentIngest ingest(guidance_retriever, store_root / "uploads",
+                                                 [&controller] { return controller.Running(); });
+        ingest.SetListener(
+            [&server](const ambient::guidance::IngestProgress& progress) {
+                server.PushNotification("guidance/progress", ambient::ipc::ProgressJson(progress));
+            },
+            [&server](const ambient::guidance::DocumentInfo& document) {
+                server.PushNotification("guidance/document", ambient::ipc::DocumentJson(document));
+                if (ambient::ipc::ChangesReadySet(document)) {
+                    server.PushNotification("guidance/documentsChanged", nlohmann::json::object());
+                }
+            });
         ambient::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
-                                              guidance_lane);
+                                              guidance_lane, ingest);
         server.ServeOneClient();
         controller.Stop();
         return 0;

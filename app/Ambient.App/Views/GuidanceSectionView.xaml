@@ -162,7 +162,7 @@
                     <TextBlock
                         Foreground="{ThemeResource CautionBrush}"
                         Style="{StaticResource MicroText}"
-                        Text="This guidance was found before your note edits." />
+                        Text="{x:Bind ViewModel.StaleCaption, Mode=OneWay}" />
                     <HyperlinkButton
                         Padding="2,0"
                         VerticalAlignment="Center"

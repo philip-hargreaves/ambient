@@ -3,309 +3,344 @@
     x:Class="Ambient.App.Views.SettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Ambient.App.Views"
     xmlns:vm="using:Ambient.App.Core.ViewModels">
 
-    <!-- The same card chrome as the consultation view; the column centres
-         so a wide window frames it instead of leaving it in a corner -->
+    <!-- The same card chrome as the consultation view. Title and groups share
+         one column, so a wide window frames them instead of leaving them in
+         a corner. A group is a header and one card, its settings as rows -->
     <Border Margin="8,0,8,8" Style="{StaticResource CardSurface}">
         <Grid RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <StackPanel Margin="16,16,16,0" Orientation="Horizontal" Spacing="12">
+            <Grid MaxWidth="760" Margin="16,16,16,0" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
                 <Button Command="{x:Bind Shell.GoBackCommand}" ToolTipService.ToolTip="Back">
                     <FontIcon FontSize="14" Glyph="&#xE72B;" />
                 </Button>
                 <TextBlock
+                    Grid.Column="1"
                     VerticalAlignment="Center"
                     Style="{ThemeResource TitleTextBlockStyle}"
                     Text="{x:Bind ViewModel.Heading}" />
-            </StackPanel>
+            </Grid>
             <ScrollViewer Grid.Row="1">
-                <StackPanel
-                    MaxWidth="760"
-                    Margin="16,0,16,16"
-                    HorizontalAlignment="Center"
-                    Spacing="4">
+                <Grid>
+                <StackPanel MaxWidth="760" Margin="16,0,16,24" Spacing="4">
 
-                <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Appearance" />
+                <TextBlock
+                    Margin="4,4,0,4"
+                    Style="{StaticResource SettingsGroupHeader}"
+                    Text="Appearance" />
                 <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Theme" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="System default follows Windows" />
-                        </StackPanel>
+                    <views:SettingsRow
+                        BorderThickness="0"
+                        Description="System default follows Windows"
+                        Title="Theme">
                         <ComboBox
-                            Grid.Column="1"
                             MinWidth="160"
-                            VerticalAlignment="Center"
                             ItemsSource="{x:Bind ViewModel.ThemeOptions}"
                             SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}" />
-                    </Grid>
+                    </views:SettingsRow>
                 </Border>
 
                 <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Consultations" />
                 <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Save consultation data" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Encrypted on this device, the audio is never kept" />
-                        </StackPanel>
-                        <ToggleSwitch
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsOn="{x:Bind ViewModel.KeepConsultations, Mode=TwoWay}"
-                            OffContent="Off"
-                            OnContent="On" />
-                    </Grid>
-                </Border>
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Delete all consultation data" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Every stored consultation, with its notes and reflections. Cannot be undone." />
-                        </StackPanel>
-                        <Button
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            Command="{x:Bind ViewModel.DeleteAllConsultationsCommand}"
-                            Content="Delete all"
-                            Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
-                    </Grid>
-                </Border>
-
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Voice enrolment" />
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Style="{StaticResource SettingsDescription}"
-                                           VerticalAlignment="Center"
-                                           Text="{x:Bind Voice.Headline, Mode=OneWay}" />
-                                <!-- Forget is rare and irreversible: a link, not a second button -->
-                                <HyperlinkButton
-                                    Padding="0"
-                                    Margin="0,2,0,0"
+                    <StackPanel>
+                        <views:SettingsRow
+                            BorderThickness="0"
+                            Description="Encrypted on this device, the audio is never kept"
+                            Title="Save consultation data">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Save consultation data"
+                                IsOn="{x:Bind ViewModel.KeepConsultations, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="Every stored consultation, with its notes and reflections. Cannot be undone."
+                            Title="Delete all consultation data">
+                            <Button
+                                MinWidth="160"
+                                Command="{x:Bind ViewModel.DeleteAllConsultationsCommand}"
+                                Content="Delete all"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                        </views:SettingsRow>
+                        <Border Style="{StaticResource SettingsRowChrome}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Voice enrolment" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource SettingsDescription}"
+                                            Text="{x:Bind Voice.Headline, Mode=OneWay}" />
+                                        <!-- Forget is rare and irreversible, so a link beside the button -->
+                                        <HyperlinkButton
+                                            Margin="0,2,0,0"
+                                            Padding="0"
+                                            VerticalAlignment="Center"
+                                            Command="{x:Bind Voice.ForgetVoiceCommand}"
+                                            Content="Forget"
+                                            Visibility="{x:Bind Voice.HasVoice, Mode=OneWay}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    MinWidth="160"
                                     VerticalAlignment="Center"
-                                    Command="{x:Bind Voice.ForgetVoiceCommand}"
-                                    Content="Forget"
-                                    Visibility="{x:Bind Voice.HasVoice, Mode=OneWay}" />
-                            </StackPanel>
-                        </StackPanel>
-                        <Button
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            Command="{x:Bind Voice.SetUpVoiceCommand}"
-                            Content="{x:Bind Voice.SetUpLabel, Mode=OneWay}" />
-                    </Grid>
+                                    Command="{x:Bind Voice.SetUpVoiceCommand}"
+                                    Content="{x:Bind Voice.SetUpLabel, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
                 </Border>
 
                 <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Performance" />
                 <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Note model" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="{x:Bind ViewModel.NoteModelCaption, Mode=OneWay}" />
-                        </StackPanel>
-                        <ComboBox
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsEnabled="{x:Bind ViewModel.NoteModelEnabled, Mode=OneWay}"
-                            ItemsSource="{x:Bind ViewModel.NoteModelOptions}"
-                            SelectedIndex="{x:Bind ViewModel.NoteModelIndex, Mode=TwoWay}" />
-                    </Grid>
-                </Border>
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Low-power mode" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Runs speech recognition on the NPU to save battery. Transcripts may take a little longer." />
-                        </StackPanel>
-                        <ToggleSwitch
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsOn="{x:Bind ViewModel.NpuTranscription, Mode=TwoWay}"
-                            OffContent="Off"
-                            OnContent="On" />
-                    </Grid>
+                    <StackPanel>
+                        <views:SettingsRow
+                            BorderThickness="0"
+                            Description="{x:Bind ViewModel.NoteModelCaption, Mode=OneWay}"
+                            Title="Note model">
+                            <ComboBox
+                                MinWidth="160"
+                                IsEnabled="{x:Bind ViewModel.NoteModelEnabled, Mode=OneWay}"
+                                ItemsSource="{x:Bind ViewModel.NoteModelOptions}"
+                                SelectedIndex="{x:Bind ViewModel.NoteModelIndex, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="Runs speech recognition on the NPU to save battery. Transcripts may take a little longer."
+                            Title="Low-power mode">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Low-power mode"
+                                IsOn="{x:Bind ViewModel.NpuTranscription, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                    </StackPanel>
                 </Border>
 
                 <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Guideline documents" />
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <Border
+                            Padding="16,12"
+                            Visibility="{x:Bind ViewModel.GuidanceCaptionVisible, Mode=OneWay}">
+                            <TextBlock
+                                Margin="0"
+                                Style="{StaticResource SettingsDescription}"
+                                Text="{x:Bind ViewModel.GuidanceCaption, Mode=OneWay}" />
+                        </Border>
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.GuidanceCorpora}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CorpusRow">
+                                    <StackPanel>
+                                        <Rectangle
+                                            Height="1"
+                                            Fill="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            Visibility="{x:Bind Divided}" />
+                                        <StackPanel Padding="16,12" Spacing="2">
+                                            <TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsDescription}"
+                                                Text="{x:Bind Detail}"
+                                                Visibility="{x:Bind Loaded}" />
+                                            <TextBlock
+                                                Foreground="{ThemeResource CautionBrush}"
+                                                Style="{StaticResource SettingsDescription}"
+                                                Text="{x:Bind Detail}"
+                                                Visibility="{x:Bind Refused}" />
+                                            <!-- The licence asks for this line, so it wraps -->
+                                            <TextBlock
+                                                Style="{StaticResource SettingsDescription}"
+                                                Text="{x:Bind Attribution}"
+                                                Visibility="{x:Bind AttributionVisible}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource SettingsCard}">
+                    <StackPanel>
+                        <Border BorderThickness="0" Style="{StaticResource SettingsRowChrome}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="Added documents" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsDescription}"
+                                        Text="Add medical documents or guidelines to search alongside each note." />
+                                    <StackPanel Margin="0,4,0,0" Orientation="Horizontal" Spacing="12">
+                                        <HyperlinkButton
+                                            Padding="0"
+                                            Command="{x:Bind ViewModel.AddFolderCommand}"
+                                            Content="Add a folder" />
+                                        <HyperlinkButton
+                                            Padding="0"
+                                            Command="{x:Bind ViewModel.RemoveAllDocumentsCommand}"
+                                            Content="Remove all"
+                                            Visibility="{x:Bind ViewModel.DocumentsPresent, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <TextBlock
+                                        Style="{StaticResource SettingsDescription}"
+                                        Text="{x:Bind ViewModel.DocumentsCaption, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.DocumentsCaptionVisible, Mode=OneWay}" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    MinWidth="160"
+                                    VerticalAlignment="Center"
+                                    Command="{x:Bind ViewModel.AddDocumentsCommand}"
+                                    Content="Add documents"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            </Grid>
+                        </Border>
+                        <Border
+                            Style="{StaticResource SettingsRowChrome}"
+                            Visibility="{x:Bind ViewModel.BatchVisible, Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    Margin="0"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SettingsDescription}"
+                                    Text="{x:Bind ViewModel.BatchCaption, Mode=OneWay}" />
+                                <HyperlinkButton
+                                    Padding="0"
+                                    VerticalAlignment="Center"
+                                    Command="{x:Bind ViewModel.CancelAllCommand}"
+                                    Content="Cancel all"
+                                    FontSize="12" />
+                            </StackPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Documents}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:DocumentRow">
+                                    <Border Style="{StaticResource SettingsRowChrome}">
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" />
+                                                <TextBlock
+                                                    Style="{StaticResource SettingsDescription}"
+                                                    Text="{x:Bind Detail, Mode=OneWay}"
+                                                    Visibility="{x:Bind Plain, Mode=OneWay}" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource CautionBrush}"
+                                                    Style="{StaticResource SettingsDescription}"
+                                                    Text="{x:Bind Detail, Mode=OneWay}"
+                                                    Visibility="{x:Bind Failed, Mode=OneWay}" />
+                                                <ProgressBar
+                                                    Height="3"
+                                                    Margin="0,4,0,0"
+                                                    IsIndeterminate="{x:Bind Waiting, Mode=OneWay}"
+                                                    Maximum="1"
+                                                    Value="{x:Bind Progress, Mode=OneWay}"
+                                                    Visibility="{x:Bind Working, Mode=OneWay}" />
+                                            </StackPanel>
+                                            <Button
+                                                Grid.Column="1"
+                                                MinWidth="160"
+                                                VerticalAlignment="Center"
+                                                Command="{x:Bind Remove}"
+                                                CommandParameter="{x:Bind}"
+                                                Content="{x:Bind ControlLabel, Mode=OneWay}"
+                                                Visibility="{x:Bind ControlVisible, Mode=OneWay}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Closed by default: these are for testing and demos -->
+                <Button
+                    Margin="0,16,0,0"
+                    Padding="4,4"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.Name="Developer tools"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ToggleDeveloperToolsCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Developer tools" />
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            FontSize="10"
+                            Glyph="&#xE70D;"
+                            Visibility="{x:Bind ViewModel.DeveloperToolsCollapsed, Mode=OneWay}" />
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            FontSize="10"
+                            Glyph="&#xE70E;"
+                            Visibility="{x:Bind ViewModel.DeveloperToolsExpanded, Mode=OneWay}" />
+                    </StackPanel>
+                </Button>
                 <Border
                     Style="{StaticResource SettingsCard}"
-                    Visibility="{x:Bind ViewModel.GuidanceCaptionVisible, Mode=OneWay}">
-                    <TextBlock
-                        Style="{StaticResource SettingsDescription}"
-                        Text="{x:Bind ViewModel.GuidanceCaption, Mode=OneWay}" />
+                    Visibility="{x:Bind ViewModel.DeveloperToolsExpanded, Mode=OneWay}">
+                    <StackPanel>
+                        <views:SettingsRow
+                            BorderThickness="0"
+                            Description="Replay recordings through the pipeline"
+                            Title="Demo tray">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Demo tray"
+                                IsOn="{x:Bind ViewModel.DemoTrayEnabled, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="A year of consultations and reflections from PriMock57 recordings"
+                            Title="Seed data">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Seed data"
+                                IsOn="{x:Bind ViewModel.SeedDataEnabled, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="Model and speed figures in the status bar"
+                            Title="Performance metrics">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Performance metrics"
+                                IsOn="{x:Bind ViewModel.ShowPerformanceMetrics, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="Timings to a local file, the audio and text are never included"
+                            Title="Collect performance data">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Collect performance data"
+                                IsOn="{x:Bind ViewModel.CollectPerformanceData, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="{x:Bind ViewModel.ExportDescription, Mode=OneWay}"
+                            Title="Export performance report">
+                            <Button
+                                MinWidth="160"
+                                Command="{x:Bind ViewModel.ExportPerformanceReportCommand}"
+                                Content="Export" />
+                        </views:SettingsRow>
+                    </StackPanel>
                 </Border>
-                <ItemsControl ItemsSource="{x:Bind ViewModel.GuidanceCorpora}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:CorpusRow">
-                            <Border Margin="0,0,0,4" Style="{StaticResource SettingsCard}">
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" />
-                                    <TextBlock
-                                        Style="{StaticResource SettingsDescription}"
-                                        Text="{x:Bind Detail}"
-                                        TextWrapping="Wrap"
-                                        Visibility="{x:Bind Loaded}" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource CautionBrush}"
-                                        Style="{StaticResource SettingsDescription}"
-                                        Text="{x:Bind Detail}"
-                                        TextWrapping="Wrap"
-                                        Visibility="{x:Bind Refused}" />
-                                    <!-- The licence asks for this line, so it wraps -->
-                                    <TextBlock
-                                        Style="{StaticResource SettingsDescription}"
-                                        Text="{x:Bind Attribution}"
-                                        TextWrapping="Wrap"
-                                        Visibility="{x:Bind AttributionVisible}" />
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Developer tools" />
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Demo tray" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Replay recordings through the pipeline" />
-                        </StackPanel>
-                        <ToggleSwitch
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsOn="{x:Bind ViewModel.DemoTrayEnabled, Mode=TwoWay}"
-                            OffContent="Hidden"
-                            OnContent="Shown" />
-                    </Grid>
-                </Border>
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Seed data" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="A year of consultations and reflections from PriMock57 recordings" />
-                        </StackPanel>
-                        <ToggleSwitch
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsOn="{x:Bind ViewModel.SeedDataEnabled, Mode=TwoWay}"
-                            OffContent="Hidden"
-                            OnContent="Shown" />
-                    </Grid>
-                </Border>
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Performance metrics" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Model and speed figures in the status bar" />
-                        </StackPanel>
-                        <ToggleSwitch
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsOn="{x:Bind ViewModel.ShowPerformanceMetrics, Mode=TwoWay}"
-                            OffContent="Hidden"
-                            OnContent="Shown" />
-                    </Grid>
-                </Border>
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Collect performance data" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Timings to a local file, the audio and text are never included" />
-                        </StackPanel>
-                        <ToggleSwitch
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            IsOn="{x:Bind ViewModel.CollectPerformanceData, Mode=TwoWay}"
-                            OffContent="Off"
-                            OnContent="On" />
-                    </Grid>
-                </Border>
-                <Border Style="{StaticResource SettingsCard}">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="160" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Export performance report" />
-                            <TextBlock Style="{StaticResource SettingsDescription}"
-                                       Text="Saves the report as an HTML file" />
-                        </StackPanel>
-                        <Button
-                            Grid.Column="1"
-                            MinWidth="160"
-                            VerticalAlignment="Center"
-                            Command="{x:Bind ViewModel.ExportPerformanceReportCommand}"
-                            Content="Export" />
-                    </Grid>
-                </Border>
-                    <TextBlock Style="{StaticResource SettingsDescription}"
-                               Margin="2,4,0,0"
-                               Text="{x:Bind ViewModel.ExportResult, Mode=OneWay}" />
                 </StackPanel>
+                </Grid>
             </ScrollViewer>
         </Grid>
     </Border>

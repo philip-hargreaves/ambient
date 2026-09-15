@@ -1,7 +1,7 @@
 #pragma once
 
 // Generated at configure time from the .sql files under
-// src/adapters/guidance/schema; edit those, not this header
+// src/adapters/guidance/schema. Edit those
 
 namespace ambient::guidance {
 

@@ -272,8 +272,31 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
                 new { guidance = StoredGuidance }));
         }
 
+        if (method == "guidance/documents")
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(
+                new { documents = GuidanceDocuments.ToArray() }));
+        }
+
+        if (method == "guidance/documents/add")
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                documents = AddedDocuments.ToArray(),
+                skipped = SkippedDocuments.ToArray(),
+            }));
+        }
+
         return Task.FromResult(Empty);
     }
+
+    /// <summary>Served by guidance/documents, empty by default.</summary>
+    public List<object> GuidanceDocuments { get; } = [];
+
+    /// <summary>Served by guidance/documents/add: accepted rows and skipped files.</summary>
+    public List<object> AddedDocuments { get; } = [];
+
+    public List<object> SkippedDocuments { get; } = [];
 
     /// <summary>Served by guidance/corpora: the embedder's state, ready by default.</summary>
     public string GuidanceState { get; set; } = "ready";

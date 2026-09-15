@@ -1,0 +1,47 @@
+{
+    "jsonrpc": "2.0",
+    "id": 15,
+    "result": {
+        "documents": [
+            {
+                "id": 7302914125883421,
+                "name": "BSR gout guideline 2017",
+                "mime": "text/markdown",
+                "state": "ready",
+                "error": null,
+                "addedAt": "2026-09-15T09:12:44Z",
+                "indexedAt": "2026-09-15T09:13:02Z",
+                "bytes": 48213,
+                "pages": 0,
+                "pagesWithoutText": 0,
+                "chunks": 41
+            },
+            {
+                "id": 2871034561297730,
+                "name": "PMR local pathway",
+                "mime": "text/plain",
+                "state": "indexing",
+                "error": null,
+                "addedAt": "2026-09-15T09:14:10Z",
+                "indexedAt": null,
+                "bytes": 9120,
+                "pages": 0,
+                "pagesWithoutText": 0,
+                "chunks": 0
+            },
+            {
+                "id": 9106572248130415,
+                "name": "Clinic letter",
+                "mime": "text/plain",
+                "state": "failed",
+                "error": "patientData",
+                "addedAt": "2026-09-15T09:14:10Z",
+                "indexedAt": null,
+                "bytes": 2210,
+                "pages": 0,
+                "pagesWithoutText": 0,
+                "chunks": 0
+            }
+        ]
+    }
+}

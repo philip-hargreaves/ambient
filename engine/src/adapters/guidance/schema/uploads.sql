@@ -1,7 +1,7 @@
 -- Ambient added documents: the clinician's own guideline files, sealed. One
 -- file, uploads.db, beside the clinical store, with each copied source in
--- files/<id>.bin. Written by the engine only. WAL; application_id 0x414D4255
--- ("AMBU"); user_version 1 is the format.
+-- files/<id>.bin. Written by the engine only, in WAL mode. application_id
+-- 0x414D4255 ("AMBU"), user_version 1 is the format.
 
 -- One row: the embedder every vector was made with, and the store key that
 -- wraps each document's key
@@ -16,7 +16,7 @@ CREATE TABLE metadata (
     wrapped_key   BLOB    NOT NULL                  -- store key, DPAPI-protected for the user
 );
 
--- One added document. Plaintext is what the list needs without a key; the
+-- One added document. Plaintext is what the list needs without a key. The
 -- name, the passages and the copied file are sealed under the document's key
 CREATE TABLE documents (
     id            INTEGER PRIMARY KEY,              -- random, never reused
@@ -34,7 +34,7 @@ CREATE TABLE documents (
     pages_without_text INTEGER
 );
 
--- One passage; ord is dense per document, page is 0-based
+-- One passage. ord is dense per document and page is 0-based
 CREATE TABLE chunks (
     document_id   INTEGER NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
     ord           INTEGER NOT NULL,
