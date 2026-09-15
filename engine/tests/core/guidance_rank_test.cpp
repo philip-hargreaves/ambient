@@ -85,6 +85,27 @@ TEST(PopulationConflict, PregnancyAgeAndSexOnlyWhenTheNoteIsExplicit) {
                                    "Refer children with recurrent infection."));
 }
 
+TEST(PopulationConflict, TheTitleCountsAndSexAloneSaysAdult) {
+    const std::string adult = "53-year-old male with two days of vomiting and diarrhoea.";
+    const std::string rec =
+        "Suspect gastroenteritis if there is a sudden change in stool consistency.";
+    EXPECT_TRUE(PopulationConflict(adult, rec,
+                                   "Diarrhoea and vomiting caused by gastroenteritis in under 5s"));
+    EXPECT_FALSE(PopulationConflict(adult, rec, "Gastroenteritis in adults"));
+    EXPECT_TRUE(PopulationConflict("Male patient with dysuria.",
+                                   "Refer children with recurrent infection."))
+        << "sex stated, no age, no child: an adult";
+    EXPECT_FALSE(PopulationConflict("Male, 9 years old, with dysuria.",
+                                    "Refer children with recurrent infection."));
+    EXPECT_FALSE(
+        PopulationConflict("Male child with dysuria.", "Refer children with recurrent infection."));
+    EXPECT_FALSE(PopulationConflict(adult, "Offer a test to people under 50 with weight loss.",
+                                    "Type 1 diabetes in adults: diagnosis and management"))
+        << "an adult threshold is not a child";
+    EXPECT_TRUE(PopulationConflict(adult, "Give the first dose at once.",
+                                   "Urinary tract infection in under 16s"));
+}
+
 TEST(Citation, CodeNumberTitle) {
     EXPECT_EQ(Citation("fx100", "1.1.1", "Fictional inflammatory joint disease"),
               "FX100 1.1.1, Fictional inflammatory joint disease");

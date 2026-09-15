@@ -162,12 +162,36 @@ inline int StatedAge(std::string_view lower) {
     return -1;
 }
 
+// "children", "under 5s", "young people", "neonatal": text about the young.
+// "under 50" is an adult threshold, so only ages up to 18 count
+inline bool AboutChildren(std::string_view lower) {
+    if (ContainsAnyWord(lower, {"children", "child", "infant", "infants", "infancy", "neonatal",
+                                "neonates", "paediatric", "boy", "boys", "girl", "girls"}) ||
+        ContainsAny(lower, {"young people", "adolescent"})) {
+        return true;
+    }
+    for (auto at = lower.find("under "); at != std::string_view::npos;
+         at = lower.find("under ", at + 6)) {
+        int age = 0;
+        std::size_t i = at + 6;
+        while (i < lower.size() && std::isdigit(static_cast<unsigned char>(lower[i]))) {
+            age = age * 10 + (lower[i] - '0');
+            ++i;
+        }
+        if (i > at + 6 && age <= 18) return true;
+    }
+    return false;
+}
+
 }  // namespace detail
 
 // A recommendation addressed to a population the note explicitly rules out:
-// pregnancy against "not pregnant", children against a stated adult age, one
-// sex against the other. Only explicit statements count; silence never does
-inline bool PopulationConflict(std::string_view note, std::string_view recommendation) {
+// pregnancy against "not pregnant", children against a stated adult, one sex
+// against the other. The guideline title counts as well as the text, since a
+// recommendation for under-5s rarely says so itself. Only explicit statements
+// count, silence never does
+inline bool PopulationConflict(std::string_view note, std::string_view recommendation,
+                               std::string_view title = "") {
     const auto n = detail::Lower(note);
     auto r = detail::Lower(recommendation);
     r = detail::Erase(detail::Erase(r, "not pregnant"), "non-pregnant");
@@ -176,10 +200,11 @@ inline bool PopulationConflict(std::string_view note, std::string_view recommend
         return true;
     }
     const int age = detail::StatedAge(n);
-    const bool adult = age >= 18 || detail::ContainsAnyWord(n, {"adult", "adults", "man", "woman"});
-    if (adult &&
-        (detail::ContainsAnyWord(r, {"children", "child", "infant", "infants", "paediatric"}) ||
-         detail::ContainsAny(r, {"young people", "under 16", "under 18"}))) {
+    // "male" and "female" say adult only with no age given and no child in the note
+    const bool adult =
+        age >= 18 || detail::ContainsAnyWord(n, {"adult", "adults", "man", "woman"}) ||
+        (age < 0 && !detail::AboutChildren(n) && detail::ContainsAnyWord(n, {"male", "female"}));
+    if (adult && (detail::AboutChildren(r) || detail::AboutChildren(detail::Lower(title)))) {
         return true;
     }
     const bool female = detail::ContainsAnyWord(n, {"woman", "women", "female", "she", "her"});
