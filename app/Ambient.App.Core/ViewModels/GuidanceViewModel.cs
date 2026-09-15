@@ -63,11 +63,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [ObservableProperty]
     public partial bool NotStored { get; private set; }
 
-    /// <summary>Who the shown guidance is from: the attributions of corpora with a card.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AttributionVisible))]
-    public partial string Attribution { get; private set; } = "";
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchEnabled))]
     [NotifyCanExecuteChangedFor(nameof(SearchQueryCommand))]
@@ -109,8 +104,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         or GuidanceSection.NothingMatched or GuidanceSection.NoCorpusAtSearch;
 
     public bool CardsVisible => Cards.Count > 0;
-
-    public bool AttributionVisible => Attribution.Length > 0;
 
     public bool SearchAgainVisible => Stale && !Searching;
 
@@ -192,7 +185,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _noteCards = [];
         Stale = false;
         NotStored = false;
-        Attribution = "";
         Query = "";
         Section = GuidanceSection.Hidden;
         ClearQuery();
@@ -204,7 +196,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _noteCards = [];
         Stale = false;
         NotStored = false;
-        Attribution = "";
         Section = GuidanceSection.FollowsNote;
         ShowCards();
     }
@@ -243,7 +234,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         {
             _noteCards = [];
             Stale = false;
-            Attribution = "";
             Section = GuidanceSection.NotSearched;
             ShowCards();
             return;
@@ -344,7 +334,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
     private void ApplyRecord(JsonElement record)
     {
         _noteCards = ReadCards(record);
-        Attribution = string.Join(" · ", Attributions(record, _noteCards));
         Section = _noteCards.Count > 0 ? GuidanceSection.Results
             : SearchedCount(record) > 0 ? GuidanceSection.NothingMatched
             : GuidanceSection.NoCorpusAtSearch;
@@ -402,17 +391,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         }
 
         return cards;
-    }
-
-    // Distinct, in searched order, for the corpora that put a card on screen
-    private static IEnumerable<string> Attributions(JsonElement record, List<GuidanceCard> cards)
-    {
-        var shown = cards.Select(c => c.Corpus).ToHashSet(StringComparer.Ordinal);
-        return Searched(record)
-            .Where(c => shown.Contains(GuidanceCard.Field(c, "id")))
-            .Select(c => GuidanceCard.Field(c, "attribution"))
-            .Where(a => a.Length > 0)
-            .Distinct(StringComparer.Ordinal);
     }
 
     private static List<JsonElement> Searched(JsonElement record) =>

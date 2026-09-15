@@ -22,20 +22,6 @@ public class GuidanceViewModelTest
         unavailable = (string?)null,
     };
 
-    private static object Corpus2(string id, string attribution) => new
-    {
-        id,
-        name = "Second corpus",
-        licence = "invented",
-        attribution,
-        source = "text",
-        embedder = "gte-large-int8",
-        sha256 = "",
-        chunks = 4,
-        builtAt = "2026-09-12T00:00:00Z",
-        unavailable = (string?)null,
-    };
-
     private static object Result(string chunkId, string trigger = "A sentence of the note.",
         string url = "https://example.test/fx100", string source = "nice",
         string number = "1.1.1", string section = "1.1 Referral", string updateTag = "",
@@ -125,7 +111,6 @@ public class GuidanceViewModelTest
         Assert.Equal(2, guidance.Cards.Count);
         Assert.False(guidance.Stale);
         Assert.True(guidance.HasRecord);
-        Assert.Equal("Fixture attribution", guidance.Attribution);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "guidance/search");
     }
 
@@ -188,7 +173,6 @@ public class GuidanceViewModelTest
 
         guidance.ApplyReady(Fixtures.Load("guidance-ready.json").GetProperty("params"));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
-        Assert.Equal("none", guidance.Attribution);
         var cards = guidance.Cards;
         Assert.Equal(["NICE", "Fixture guidance corpus"], cards.Select(c => c.SourceLabel));
         Assert.False(cards[^1].MatchedVisible, "the whole-note match comes last");
@@ -557,23 +541,6 @@ public class GuidanceViewModelTest
         var card = session.Guidance.Cards.Single();
         Assert.Equal(GuidanceSection.Results, session.Guidance.Section);
         Assert.False(card.SourceLabelVisible);
-        Assert.False(session.Guidance.AttributionVisible);
-    }
-
-    [Fact]
-    public async Task AttributionNamesTheCorporaWithACardShown()
-    {
-        var (session, engine) = await AfterNoteAsync();
-        object[] corpora = [Corpus, Corpus2("second", "Second attribution")];
-
-        engine.RaiseNotification("guidance/ready",
-            Ready("s1", [Result("s-1", corpus: "second")], corpora: corpora));
-        Assert.Equal("Second attribution", session.Guidance.Attribution);
-
-        engine.RaiseNotification("guidance/ready",
-            Ready("s1", [Result("fx100-1_1_1"), Result("s-1", corpus: "second")],
-                corpora: corpora));
-        Assert.Equal("Fixture attribution · Second attribution", session.Guidance.Attribution);
     }
 
     [Fact]
