@@ -359,9 +359,10 @@ int main(int argc, char* argv[]) {
         // costs a respawn, never the engine
         std::unique_ptr<ambient::note::INoteWriter> note_writer;
         ambient::note::INoteLane* note_lane = nullptr;
-        // A note host alive before this engine spawned any is wedged from an
-        // earlier engine; only a reboot ends it
-        const bool stray_note_host = ambient::host::CountProcesses(L"ambient_note_host.exe") > 0;
+        // A host from the engine that just died takes a moment to leave. One
+        // still here after that is wedged in the driver, and only a reboot ends it
+        const bool stray_note_host =
+            !ambient::host::WaitUntilGone(L"ambient_note_host.exe", std::chrono::seconds(5));
         if (stray_note_host) {
             std::fprintf(stderr,
                          "ambient-engine: a note host from an earlier engine is still running; "

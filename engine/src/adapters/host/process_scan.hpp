@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cwchar>
 
@@ -29,6 +30,17 @@ inline std::size_t CountProcesses(const wchar_t* image) {
     }
     CloseHandle(snapshot);
     return count;
+}
+
+// True once no process with this image is left, false at the bound. A host
+// whose engine just died takes a moment to leave the process table
+inline bool WaitUntilGone(const wchar_t* image, std::chrono::milliseconds bound) {
+    const auto deadline = std::chrono::steady_clock::now() + bound;
+    while (CountProcesses(image) > 0) {
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        Sleep(100);
+    }
+    return true;
 }
 
 }  // namespace ambient::host
