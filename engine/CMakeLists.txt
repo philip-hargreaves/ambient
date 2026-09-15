@@ -129,8 +129,9 @@ target_link_libraries(ambient_translate
 # The corpus schema is a SQL file, embedded like the session schema
 set(ambient_guidance_schema_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/adapters/guidance/schema)
 file(READ ${ambient_guidance_schema_dir}/corpus.sql AMBIENT_CORPUS_SCHEMA_SQL)
+file(READ ${ambient_guidance_schema_dir}/uploads.sql AMBIENT_UPLOAD_SCHEMA_SQL)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${ambient_guidance_schema_dir}/corpus.sql)
+    ${ambient_guidance_schema_dir}/corpus.sql ${ambient_guidance_schema_dir}/uploads.sql)
 configure_file(src/adapters/guidance/schema.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/adapters/guidance/schema.hpp @ONLY)
 
@@ -141,7 +142,8 @@ add_library(ambient_guidance STATIC
     src/adapters/guidance/embedder.cpp
     src/adapters/guidance/guidance_lane.cpp
     src/adapters/guidance/indexer.cpp
-    src/adapters/guidance/retriever.cpp)
+    src/adapters/guidance/retriever.cpp
+    src/adapters/guidance/upload_store.cpp)
 target_include_directories(ambient_guidance PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(ambient_guidance
     PUBLIC ambient_core ambient_models nlohmann_json::nlohmann_json
