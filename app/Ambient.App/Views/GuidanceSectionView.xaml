@@ -167,24 +167,13 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel
-                                            Orientation="Horizontal"
-                                            Spacing="8"
-                                            VerticalAlignment="Center">
-                                            <TextBlock
-                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                Text="{x:Bind Reference}" />
-                                            <TextBlock
-                                                Style="{StaticResource MicroText}"
-                                                Text="{x:Bind Tag}"
-                                                Visibility="{x:Bind TagVisible}" />
-                                            <TextBlock
-                                                Style="{StaticResource MicroText}"
-                                                Text="{x:Bind LastUpdatedLabel}"
-                                                Visibility="{x:Bind LastUpdatedVisible}" />
-                                        </StackPanel>
+                                        <TextBlock
+                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                            Text="{x:Bind Title}"
+                                            TextWrapping="Wrap" />
                                         <Border
                                             Grid.Column="1"
+                                            VerticalAlignment="Top"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             Style="{StaticResource ChipBorder}"
@@ -194,46 +183,71 @@
                                                 Text="{x:Bind SourceLabel}" />
                                         </Border>
                                     </Grid>
-                                    <TextBlock
-                                        Style="{StaticResource MicroText}"
-                                        Text="{x:Bind Context}"
-                                        TextTrimming="CharacterEllipsis"
-                                        ToolTipService.ToolTip="{x:Bind Context}" />
-                                    <!-- The recommendation as written, never trimmed -->
-                                    <TextBlock
-                                        Margin="0,4,0,0"
-                                        IsTextSelectionEnabled="True"
-                                        Style="{StaticResource BodyText}"
-                                        Text="{x:Bind Text}" />
-                                    <TextBlock
-                                        Style="{StaticResource MicroText}"
-                                        Text="{x:Bind Matched}"
-                                        TextTrimming="CharacterEllipsis"
-                                        ToolTipService.ToolTip="{x:Bind Trigger}"
-                                        Visibility="{x:Bind MatchedVisible}" />
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <HyperlinkButton
-                                            Padding="2,0"
-                                            AutomationProperties.Name="{x:Bind OpenName}"
-                                            Click="OnOpen"
-                                            FontSize="12"
-                                            Visibility="{x:Bind CanOpen}">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon FontSize="12" Glyph="&#xE8A7;" />
-                                                <TextBlock FontSize="12" Text="Open" />
-                                            </StackPanel>
-                                        </HyperlinkButton>
-                                        <HyperlinkButton
-                                            Padding="2,0"
-                                            AutomationProperties.Name="{x:Bind CopyName}"
-                                            Click="OnCopyCitation"
-                                            FontSize="12">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon FontSize="12" Glyph="&#xE8C8;" />
-                                                <TextBlock FontSize="12" Text="Copy citation" />
-                                            </StackPanel>
-                                        </HyperlinkButton>
-                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource MicroText}" Text="{x:Bind Meta}" />
+                                    <ItemsControl ItemsSource="{x:Bind Recommendations}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:GuidanceRecommendation">
+                                                <StackPanel Margin="0,8,0,0" Spacing="3">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock
+                                                            Style="{StaticResource CaptionText}"
+                                                            Text="{x:Bind Reference}" />
+                                                        <TextBlock
+                                                            Grid.Column="1"
+                                                            Style="{StaticResource MicroText}"
+                                                            Text="{x:Bind Tag}"
+                                                            Visibility="{x:Bind TagVisible}" />
+                                                        <TextBlock
+                                                            Grid.Column="2"
+                                                            Style="{StaticResource MicroText}"
+                                                            Text="{x:Bind Path}"
+                                                            TextTrimming="CharacterEllipsis"
+                                                            ToolTipService.ToolTip="{x:Bind Path}"
+                                                            Visibility="{x:Bind PathVisible}" />
+                                                    </Grid>
+                                                    <!-- The recommendation as written, never trimmed -->
+                                                    <TextBlock
+                                                        IsTextSelectionEnabled="True"
+                                                        Style="{StaticResource BodyText}"
+                                                        Text="{x:Bind Text}" />
+                                                    <TextBlock
+                                                        Style="{StaticResource MicroText}"
+                                                        Text="{x:Bind Matched}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        ToolTipService.ToolTip="{x:Bind Matched}"
+                                                        Visibility="{x:Bind MatchedVisible}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <HyperlinkButton
+                                                            Padding="2,0"
+                                                            AutomationProperties.Name="{x:Bind OpenName}"
+                                                            Click="OnOpen"
+                                                            FontSize="12"
+                                                            Visibility="{x:Bind CanOpen}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <FontIcon FontSize="12" Glyph="&#xE8A7;" />
+                                                                <TextBlock FontSize="12" Text="Open" />
+                                                            </StackPanel>
+                                                        </HyperlinkButton>
+                                                        <HyperlinkButton
+                                                            Padding="2,0"
+                                                            AutomationProperties.Name="{x:Bind CopyName}"
+                                                            Click="OnCopyCitation"
+                                                            FontSize="12">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <FontIcon FontSize="12" Glyph="&#xE8C8;" />
+                                                                <TextBlock FontSize="12" Text="Copy citation" />
+                                                            </StackPanel>
+                                                        </HyperlinkButton>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

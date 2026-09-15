@@ -86,8 +86,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public Func<string, Task>? SearchQueryRequested { get; set; }
 
-    private List<GuidanceCard> _noteCards = [];
-    private List<GuidanceCard>? _queryCards;
+    private List<GuidanceRecommendation> _noteResults = [];
+    private List<GuidanceRecommendation>? _queryResults;
     private string _queryText = "";
 
     public bool Visible => Section != GuidanceSection.Hidden;
@@ -142,8 +142,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public string QueryCaption => QuerySearching ? "Searching"
         : QueryFailed ? "Search failed - see the status bar"
-        : _queryCards is null ? ""
-        : _queryCards.Count switch
+        : _queryResults is null ? ""
+        : _queryResults.Count switch
         {
             0 => "No match in the installed guidance",
             1 => "1 result",
@@ -163,7 +163,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     private Task SearchQuery()
     {
         _queryText = Query.Trim();
-        _queryCards = null;
+        _queryResults = null;
         QueryFailed = false;
         QuerySearching = true;
         QueryChanged();
@@ -174,7 +174,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     private void ClearQuery()
     {
         _queryText = "";
-        _queryCards = null;
+        _queryResults = null;
         QuerySearching = false;
         QueryFailed = false;
         QueryChanged();
@@ -182,7 +182,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public void Reset()
     {
-        _noteCards = [];
+        _noteResults = [];
         Stale = false;
         NotStored = false;
         Query = "";
@@ -193,7 +193,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     /// <summary>The note is being written; its search follows.</summary>
     public void NoteStarted()
     {
-        _noteCards = [];
+        _noteResults = [];
         Stale = false;
         NotStored = false;
         Section = GuidanceSection.FollowsNote;
@@ -232,7 +232,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         NotStored = false;
         if (guidance is not { ValueKind: JsonValueKind.Object } record)
         {
-            _noteCards = [];
+            _noteResults = [];
             Stale = false;
             Section = GuidanceSection.NotSearched;
             ShowCards();
@@ -261,7 +261,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
             return;
         }
 
-        _queryCards = ReadCards(result);
+        _queryResults = ReadResults(result, false);
         QuerySearching = false;
         QueryFailed = false;
         QueryChanged();
@@ -323,7 +323,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         if (Searching)
         {
-            Section = _noteCards.Count > 0
+            Section = _noteResults.Count > 0
                 ? GuidanceSection.Results
                 : GuidanceSection.NotSearched;
         }
@@ -333,8 +333,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     private void ApplyRecord(JsonElement record)
     {
-        _noteCards = ReadCards(record);
-        Section = _noteCards.Count > 0 ? GuidanceSection.Results
+        _noteResults = ReadResults(record, true);
+        Section = _noteResults.Count > 0 ? GuidanceSection.Results
             : SearchedCount(record) > 0 ? GuidanceSection.NothingMatched
             : GuidanceSection.NoCorpusAtSearch;
         ShowCards();
@@ -351,18 +351,15 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ShowCards();
     }
 
-    // A typed query stands in for the note's cards until it is cleared. The
-    // note's keep result order within each sentence, whole-note matches last
+    // A typed query stands in for the note's cards until it is cleared. Whole-note
+    // matches sort after the sentences, then each guideline takes one card
     private void ShowCards()
     {
         Cards.Clear();
-        IEnumerable<GuidanceCard> shown = QueryShown
-            ? _queryCards ?? []
-            : _noteCards
-                .GroupBy(c => c.Trigger, StringComparer.Ordinal)
-                .OrderBy(g => g.Key.Length == 0 ? 1 : 0)
-                .SelectMany(g => g);
-        foreach (var card in shown)
+        IEnumerable<GuidanceRecommendation> shown = QueryShown
+            ? _queryResults ?? []
+            : _noteResults.OrderBy(r => r.Trigger.Length == 0 ? 1 : 0);
+        foreach (var card in GuidanceCard.Group(shown))
         {
             Cards.Add(card);
         }
@@ -371,7 +368,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     }
 
     // The source label needs the corpus name, which only the searched list carries
-    private static List<GuidanceCard> ReadCards(JsonElement record)
+    private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var corpus in Searched(record))
@@ -379,18 +376,18 @@ public sealed partial class GuidanceViewModel : ObservableObject
             names[GuidanceCard.Field(corpus, "id")] = GuidanceCard.Field(corpus, "name");
         }
 
-        var cards = new List<GuidanceCard>();
+        var results = new List<GuidanceRecommendation>();
         if (record.TryGetProperty("shown", out var shown) && shown.ValueKind == JsonValueKind.Array)
         {
             foreach (var result in shown.EnumerateArray())
             {
                 var label = GuidanceCard.Field(result, "source") == "nice" ? "NICE"
                     : names.GetValueOrDefault(GuidanceCard.Field(result, "corpus"), "");
-                cards.Add(GuidanceCard.From(result, label));
+                results.Add(GuidanceRecommendation.From(result, label, fromNote));
             }
         }
 
-        return cards;
+        return results;
     }
 
     private static List<JsonElement> Searched(JsonElement record) =>

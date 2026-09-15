@@ -43,6 +43,12 @@ public class GuidanceViewModelTest
             trigger,
         };
 
+    private static GuidanceRecommendation Found(object result) =>
+        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true);
+
+    private static IEnumerable<string> Shown(GuidanceViewModel guidance) =>
+        guidance.Cards.SelectMany(c => c.Recommendations).Select(r => r.ChunkId);
+
     private static JsonElement Ready(string? id, object[] shown, bool searched = true,
         bool? stale = false, string? storeError = null, object[]? corpora = null) =>
         JsonSerializer.SerializeToElement(new
@@ -108,7 +114,7 @@ public class GuidanceViewModelTest
 
         var guidance = session.Guidance;
         Assert.Equal(GuidanceSection.Results, guidance.Section);
-        Assert.Equal(2, guidance.Cards.Count);
+        Assert.Equal(2, guidance.Cards.Single().Recommendations.Count);
         Assert.False(guidance.Stale);
         Assert.True(guidance.HasRecord);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "guidance/search");
@@ -154,15 +160,16 @@ public class GuidanceViewModelTest
             .GetProperty("result").GetProperty("guidance"));
 
         var card = session.Guidance.Cards.Single();
-        Assert.Equal("FX100 1.1.1", card.Reference);
-        Assert.Equal("[2009, amended 2018]", card.Tag);
-        Assert.Equal("Last updated 12 Oct 2020", card.LastUpdatedLabel);
-        Assert.Equal("NICE", card.SourceLabel);
-        Assert.True(card.CanOpen);
         Assert.Equal(
-            "Fictional inflammatory joint disease: assessment and management"
-            + " › 1.1 Referral, diagnosis and investigations › Referral from primary care",
-            card.Context);
+            "Fictional inflammatory joint disease: assessment and management", card.Title);
+        Assert.Equal("Updated 12 Oct 2020 · 1 recommendation", card.Meta);
+        Assert.Equal("NICE", card.SourceLabel);
+        var found = card.Recommendations.Single();
+        Assert.Equal("FX100 1.1.1", found.Reference);
+        Assert.Equal("[2009, amended 2018]", found.Tag);
+        Assert.Equal(
+            "1.1 Referral, diagnosis and investigations › Referral from primary care", found.Path);
+        Assert.True(found.CanOpen);
     }
 
     [Fact]
@@ -175,8 +182,8 @@ public class GuidanceViewModelTest
         Assert.Equal(GuidanceSection.Results, guidance.Section);
         var cards = guidance.Cards;
         Assert.Equal(["NICE", "Fixture guidance corpus"], cards.Select(c => c.SourceLabel));
-        Assert.False(cards[^1].MatchedVisible, "the whole-note match comes last");
-        Assert.False(cards[1].CanOpen);
+        Assert.Equal("Matched: the note as a whole", cards[^1].Recommendations.Single().Matched);
+        Assert.False(cards[1].Recommendations.Single().CanOpen);
 
         guidance.ApplyCorpora(Fixtures.Load("guidance-corpora.json").GetProperty("result"));
         Assert.Equal(GuidanceReadiness.Ready, guidance.Readiness);
@@ -428,19 +435,21 @@ public class GuidanceViewModelTest
         Assert.Empty(guidance.Cards);
 
         engine.RaiseNotification("guidance/ready",
-            Ready(null, [Result("fx200-1_1_1"), Result("fx200-1_1_2")], stale: null));
+            Ready(null, [Result("fx200-1_1_1", trigger: ""), Result("fx200-1_1_2", trigger: "")],
+                stale: null));
         Assert.Equal("2 results", guidance.QueryCaption);
-        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], guidance.Cards.Select(c => c.ChunkId));
+        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], Shown(guidance));
+        Assert.All(guidance.Cards.Single().Recommendations, r => Assert.False(r.MatchedVisible));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
 
         // The note's own result lands behind the query and shows only after Clear
         engine.RaiseNotification("guidance/ready",
             Ready("abc", [Result("fx100-1_1_2"), Result("fx100-1_1_3")]));
-        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], guidance.Cards.Select(c => c.ChunkId));
+        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], Shown(guidance));
 
         guidance.ClearQueryCommand.Execute(null);
         Assert.False(guidance.QueryShown);
-        Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], guidance.Cards.Select(c => c.ChunkId));
+        Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], Shown(guidance));
     }
 
     [Fact]
@@ -623,12 +632,9 @@ public class GuidanceViewModelTest
     [Fact]
     public void OpenIsOfferedForWebLinksOnly()
     {
-        var web = GuidanceCard.From(
-            JsonSerializer.SerializeToElement(Result("fx100-1_1_1")), "NICE");
-        var file = GuidanceCard.From(
-            JsonSerializer.SerializeToElement(Result("gout-1", url: "Gout.md", source: "text")),
-            "");
-        var none = GuidanceCard.From(JsonSerializer.SerializeToElement(Result("x-1", url: "")), "");
+        var web = Found(Result("fx100-1_1_1"));
+        var file = Found(Result("gout-1", url: "Gout.md", source: "text"));
+        var none = Found(Result("x-1", url: ""));
 
         Assert.True(web.CanOpen);
         Assert.False(file.CanOpen);
@@ -636,25 +642,42 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public void CardsDisplayAsTheGuidelineWrites()
+    public void RecommendationsDisplayAsTheGuidelineWrites()
     {
-        var card = GuidanceCard.From(JsonSerializer.SerializeToElement(
-            Result("fx100-1_1_1", number: "", section: "", updateTag: "2015")), "NICE");
-        Assert.Equal("FX100", card.Reference);
-        Assert.Equal("[2015]", card.Tag);
-        Assert.False(card.LastUpdatedVisible);
-        Assert.Equal("Open FX100", card.OpenName);
-        Assert.Equal("Fictional guideline", card.Context);
+        var bare = Found(Result("fx100-1_1_1", number: "", section: "", updateTag: "2015"));
+        Assert.Equal("FX100", bare.Reference);
+        Assert.Equal("[2015]", bare.Tag);
+        Assert.False(bare.PathVisible);
+        Assert.Equal("Open FX100", bare.OpenName);
 
-        var stamped = GuidanceCard.From(JsonSerializer.SerializeToElement(
-            Result("fx100-1_1_1", lastUpdated: "2020-10-12T09:30:00Z")), "NICE");
-        Assert.Equal("Last updated 12 Oct 2020", stamped.LastUpdatedLabel);
-        Assert.Equal("Fictional guideline › 1.1 Referral", stamped.Context);
-        Assert.Equal("Matched: A sentence of the note.", stamped.Matched);
+        var found = Found(Result("fx100-1_1_1"));
+        Assert.Equal("1.1 Referral", found.Path);
+        Assert.Equal("Matched: A sentence of the note.", found.Matched);
 
-        var whole = GuidanceCard.From(
-            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE");
-        Assert.False(whole.MatchedVisible);
+        var whole = Found(Result("fx100-1_1_1", trigger: ""));
+        Assert.Equal("Matched: the note as a whole", whole.Matched);
+
+        var typed = GuidanceRecommendation.From(
+            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE", false);
+        Assert.False(typed.MatchedVisible);
+    }
+
+    [Fact]
+    public void ACardIsOneGuidelineWithItsRecommendationsInOrder()
+    {
+        var cards = GuidanceCard.Group(
+        [
+            Found(Result("fx100-1_1_1", lastUpdated: "2020-10-12T09:30:00Z")),
+            Found(Result("fx200-1_1_1")),
+            Found(Result("fx100-1_1_2", lastUpdated: "2020-10-12T09:30:00Z")),
+        ]).ToList();
+
+        Assert.Equal(["FX100", "FX200"], cards.Select(c => c.Code));
+        Assert.Equal("Fictional guideline", cards[0].Title);
+        Assert.Equal(["fx100-1_1_1", "fx100-1_1_2"],
+            cards[0].Recommendations.Select(r => r.ChunkId));
+        Assert.Equal("Updated 12 Oct 2020 · 2 recommendations", cards[0].Meta);
+        Assert.Equal("1 recommendation", cards[1].Meta);
     }
 
     [Fact]
@@ -669,7 +692,23 @@ public class GuidanceViewModelTest
             Result("fx100-1_1_3", trigger: ""),
         ]));
 
-        Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"],
-            session.Guidance.Cards.Select(c => c.ChunkId));
+        Assert.Single(session.Guidance.Cards);
+        Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"], Shown(session.Guidance));
+    }
+
+    [Fact]
+    public async Task AGuidelineFoundBySentenceLeadsOneFoundByTheWholeNote()
+    {
+        var (session, engine) = await AfterNoteAsync();
+
+        engine.RaiseNotification("guidance/ready", Ready("s1",
+        [
+            Result("fx200-1_1_1", trigger: ""),
+            Result("fx100-1_1_1", trigger: "Second sentence."),
+            Result("fx200-1_1_2", trigger: "Third sentence."),
+        ]));
+
+        Assert.Equal(["FX100", "FX200"], session.Guidance.Cards.Select(c => c.Code));
+        Assert.Equal(["fx100-1_1_1", "fx200-1_1_2", "fx200-1_1_1"], Shown(session.Guidance));
     }
 }

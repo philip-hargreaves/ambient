@@ -43,17 +43,17 @@ public sealed partial class GuidanceSectionView : UserControl
 
     private async void OnOpen(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is GuidanceCard card)
+        if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
-            await LinkHelper.OpenAsync(_status, card.Link);
+            await LinkHelper.OpenAsync(_status, found.Link);
         }
     }
 
     private async void OnCopyCitation(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is GuidanceCard card)
+        if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
-            await ClipboardHelper.CopyAsync(_status, card.Citation, "Citation");
+            await ClipboardHelper.CopyAsync(_status, found.Citation, "Citation");
         }
     }
 }
