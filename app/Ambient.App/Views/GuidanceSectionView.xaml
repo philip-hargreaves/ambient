@@ -158,93 +158,103 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:GuidanceCard">
                             <Border
-                                Margin="0,0,0,6"
-                                Padding="12"
+                                Margin="0,0,0,8"
+                                Padding="16,14,16,10"
                                 Style="{StaticResource InnerCardSurface}">
-                                <StackPanel Spacing="3">
-                                    <Grid ColumnSpacing="8">
+                                <StackPanel>
+                                    <Grid ColumnSpacing="12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock
-                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                            Text="{x:Bind Title}"
-                                            TextWrapping="Wrap" />
+                                        <StackPanel Spacing="2">
+                                            <TextBlock
+                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                Text="{x:Bind Title}"
+                                                TextWrapping="Wrap" />
+                                            <TextBlock Style="{StaticResource MicroText}" Text="{x:Bind Meta}" />
+                                        </StackPanel>
                                         <Border
                                             Grid.Column="1"
                                             VerticalAlignment="Top"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            Style="{StaticResource ChipBorder}"
-                                            Visibility="{x:Bind SourceLabelVisible}">
+                                            Style="{StaticResource ChipBorder}">
                                             <TextBlock
+                                                FontWeight="SemiBold"
                                                 Style="{StaticResource CaptionText}"
-                                                Text="{x:Bind SourceLabel}" />
+                                                Text="{x:Bind Chip}" />
                                         </Border>
                                     </Grid>
-                                    <TextBlock Style="{StaticResource MicroText}" Text="{x:Bind Meta}" />
-                                    <ItemsControl ItemsSource="{x:Bind Recommendations}">
+                                    <ItemsControl Margin="0,10,0,0" ItemsSource="{x:Bind Recommendations}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:GuidanceRecommendation">
-                                                <StackPanel Margin="0,8,0,0" Spacing="3">
-                                                    <Grid ColumnSpacing="8">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
+                                                <!-- A hairline above each row, the first under the header -->
+                                                <Border
+                                                    Padding="0,10,0,8"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="0,1,0,0">
+                                                    <StackPanel Spacing="4">
+                                                        <Grid ColumnSpacing="8" Visibility="{x:Bind LabelVisible}">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock
+                                                                FontWeight="SemiBold"
+                                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                                Style="{StaticResource CaptionText}"
+                                                                Text="{x:Bind Number}" />
+                                                            <TextBlock
+                                                                Grid.Column="1"
+                                                                Style="{StaticResource MicroText}"
+                                                                Text="{x:Bind Tag}"
+                                                                Visibility="{x:Bind TagVisible}" />
+                                                            <TextBlock
+                                                                Grid.Column="2"
+                                                                Style="{StaticResource MicroText}"
+                                                                Text="{x:Bind Path}"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                ToolTipService.ToolTip="{x:Bind Path}"
+                                                                Visibility="{x:Bind PathVisible}" />
+                                                        </Grid>
+                                                        <!-- The recommendation as written, never trimmed -->
                                                         <TextBlock
-                                                            Style="{StaticResource CaptionText}"
-                                                            Text="{x:Bind Reference}" />
+                                                            IsTextSelectionEnabled="True"
+                                                            Style="{StaticResource RecommendationText}"
+                                                            Text="{x:Bind Text}" />
                                                         <TextBlock
-                                                            Grid.Column="1"
                                                             Style="{StaticResource MicroText}"
-                                                            Text="{x:Bind Tag}"
-                                                            Visibility="{x:Bind TagVisible}" />
-                                                        <TextBlock
-                                                            Grid.Column="2"
-                                                            Style="{StaticResource MicroText}"
-                                                            Text="{x:Bind Path}"
+                                                            Text="{x:Bind Matched}"
                                                             TextTrimming="CharacterEllipsis"
-                                                            ToolTipService.ToolTip="{x:Bind Path}"
-                                                            Visibility="{x:Bind PathVisible}" />
-                                                    </Grid>
-                                                    <!-- The recommendation as written, never trimmed -->
-                                                    <TextBlock
-                                                        IsTextSelectionEnabled="True"
-                                                        Style="{StaticResource BodyText}"
-                                                        Text="{x:Bind Text}" />
-                                                    <TextBlock
-                                                        Style="{StaticResource MicroText}"
-                                                        Text="{x:Bind Matched}"
-                                                        TextTrimming="CharacterEllipsis"
-                                                        ToolTipService.ToolTip="{x:Bind Matched}"
-                                                        Visibility="{x:Bind MatchedVisible}" />
-                                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                                        <HyperlinkButton
-                                                            Padding="2,0"
-                                                            AutomationProperties.Name="{x:Bind OpenName}"
-                                                            Click="OnOpen"
-                                                            FontSize="12"
-                                                            Visibility="{x:Bind CanOpen}">
-                                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                <FontIcon FontSize="12" Glyph="&#xE8A7;" />
-                                                                <TextBlock FontSize="12" Text="Open" />
-                                                            </StackPanel>
-                                                        </HyperlinkButton>
-                                                        <HyperlinkButton
-                                                            Padding="2,0"
-                                                            AutomationProperties.Name="{x:Bind CopyName}"
-                                                            Click="OnCopyCitation"
-                                                            FontSize="12">
-                                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                <FontIcon FontSize="12" Glyph="&#xE8C8;" />
-                                                                <TextBlock FontSize="12" Text="Copy citation" />
-                                                            </StackPanel>
-                                                        </HyperlinkButton>
+                                                            ToolTipService.ToolTip="{x:Bind Matched}"
+                                                            Visibility="{x:Bind MatchedVisible}" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                                            <HyperlinkButton
+                                                                Padding="2,0"
+                                                                AutomationProperties.Name="{x:Bind OpenName}"
+                                                                Click="OnOpen"
+                                                                FontSize="12"
+                                                                Visibility="{x:Bind CanOpen}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <FontIcon FontSize="12" Glyph="&#xE8A7;" />
+                                                                    <TextBlock FontSize="12" Text="Open" />
+                                                                </StackPanel>
+                                                            </HyperlinkButton>
+                                                            <HyperlinkButton
+                                                                Padding="2,0"
+                                                                AutomationProperties.Name="{x:Bind CopyName}"
+                                                                Click="OnCopyCitation"
+                                                                FontSize="12">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <FontIcon FontSize="12" Glyph="&#xE8C8;" />
+                                                                    <TextBlock FontSize="12" Text="Copy citation" />
+                                                                </StackPanel>
+                                                            </HyperlinkButton>
+                                                        </StackPanel>
                                                     </StackPanel>
-                                                </StackPanel>
+                                                </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>

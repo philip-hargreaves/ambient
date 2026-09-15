@@ -163,7 +163,7 @@ public class GuidanceViewModelTest
         Assert.Equal(
             "Fictional inflammatory joint disease: assessment and management", card.Title);
         Assert.Equal("Updated 12 Oct 2020 · 1 recommendation", card.Meta);
-        Assert.Equal("NICE", card.SourceLabel);
+        Assert.Equal("NICE · FX100", card.Chip);
         var found = card.Recommendations.Single();
         Assert.Equal("FX100 1.1.1", found.Reference);
         Assert.Equal("[2009, amended 2018]", found.Tag);
@@ -181,7 +181,7 @@ public class GuidanceViewModelTest
         guidance.ApplyReady(Fixtures.Load("guidance-ready.json").GetProperty("params"));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
         var cards = guidance.Cards;
-        Assert.Equal(["NICE", "Fixture guidance corpus"], cards.Select(c => c.SourceLabel));
+        Assert.Equal(["NICE · FX100", "Fixture guidance corpus"], cards.Select(c => c.Chip));
         Assert.Equal("Matched: the note as a whole", cards[^1].Recommendations.Single().Matched);
         Assert.False(cards[1].Recommendations.Single().CanOpen);
 
@@ -540,7 +540,7 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public async Task AResultWithoutItsCorpusInSearchedHasNoLabels()
+    public async Task AResultWithoutItsCorpusInSearchedShowsItsCode()
     {
         var (session, engine) = await AfterNoteAsync();
 
@@ -549,7 +549,7 @@ public class GuidanceViewModelTest
 
         var card = session.Guidance.Cards.Single();
         Assert.Equal(GuidanceSection.Results, session.Guidance.Section);
-        Assert.False(card.SourceLabelVisible);
+        Assert.Equal("GOUT", card.Chip);
     }
 
     [Fact]
@@ -652,7 +652,8 @@ public class GuidanceViewModelTest
 
         var found = Found(Result("fx100-1_1_1"));
         Assert.Equal("1.1 Referral", found.Path);
-        Assert.Equal("Matched: A sentence of the note.", found.Matched);
+        Assert.Equal("Matched: “A sentence of the note.”", found.Matched);
+        Assert.True(found.LabelVisible);
 
         var whole = Found(Result("fx100-1_1_1", trigger: ""));
         Assert.Equal("Matched: the note as a whole", whole.Matched);
@@ -678,6 +679,7 @@ public class GuidanceViewModelTest
             cards[0].Recommendations.Select(r => r.ChunkId));
         Assert.Equal("Updated 12 Oct 2020 · 2 recommendations", cards[0].Meta);
         Assert.Equal("1 recommendation", cards[1].Meta);
+        Assert.Equal("NICE · FX100", cards[0].Chip);
     }
 
     [Fact]

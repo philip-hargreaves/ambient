@@ -36,10 +36,12 @@ public sealed record GuidanceRecommendation(
 
     public bool PathVisible => Section.Length > 0;
 
+    public bool LabelVisible => Number.Length > 0 || Section.Length > 0 || UpdateTag.Length > 0;
+
     /// <summary>
     /// The note sentence that found it, or the whole note. A typed query has no line.
     /// </summary>
-    public string Matched => Trigger.Length > 0 ? $"Matched: {Trigger}"
+    public string Matched => Trigger.Length > 0 ? $"Matched: “{Trigger}”"
         : FromNote ? "Matched: the note as a whole"
         : "";
 
@@ -79,7 +81,12 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
 
     public string SourceLabel => First.SourceLabel;
 
-    public bool SourceLabelVisible => SourceLabel.Length > 0;
+    /// <summary>
+    /// "NICE · NG100", a text corpus by name, or the code when no source was named.
+    /// </summary>
+    public string Chip => First.Source == "nice" && SourceLabel.Length > 0
+        ? $"{SourceLabel} · {Code}"
+        : SourceLabel.Length > 0 ? SourceLabel : Code;
 
     /// <summary>
     /// "Updated 12 Oct 2020 · 3 recommendations", or the count alone without a date.
