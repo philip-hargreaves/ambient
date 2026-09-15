@@ -115,6 +115,7 @@ public class GuidanceViewModelTest
         var guidance = session.Guidance;
         Assert.Equal(GuidanceSection.Results, guidance.Section);
         Assert.Equal(2, guidance.Cards.Single().Recommendations.Count);
+        Assert.Equal("", guidance.FoundIn);
         Assert.False(guidance.Stale);
         Assert.True(guidance.HasRecord);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "guidance/search");
@@ -438,6 +439,7 @@ public class GuidanceViewModelTest
             Ready(null, [Result("fx200-1_1_1", trigger: ""), Result("fx200-1_1_2", trigger: "")],
                 stale: null));
         Assert.Equal("2 results", guidance.QueryCaption);
+        Assert.Matches(@"^found in \d+\.\d s$", guidance.FoundIn);
         Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], Shown(guidance));
         Assert.All(guidance.Cards.Single().Recommendations, r => Assert.False(r.MatchedVisible));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
@@ -449,6 +451,7 @@ public class GuidanceViewModelTest
 
         guidance.ClearQueryCommand.Execute(null);
         Assert.False(guidance.QueryShown);
+        Assert.Equal("", guidance.FoundIn);
         Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], Shown(guidance));
     }
 
@@ -641,6 +644,9 @@ public class GuidanceViewModelTest
         Assert.True(web.CanOpen);
         Assert.False(file.CanOpen);
         Assert.False(none.CanOpen);
+        Assert.Equal(
+            "FX100 1.1.1, Fictional guideline\nhttps://example.test/fx100", web.CitationText);
+        Assert.Equal("FX100 1.1.1, Fictional guideline", file.CitationText);
     }
 
     [Fact]
@@ -700,6 +706,7 @@ public class GuidanceViewModelTest
         Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"], Shown(session.Guidance));
         Assert.Equal("1 guideline · 3 recommendations", session.Guidance.Summary);
         Assert.True(session.Guidance.LimitationVisible);
+        Assert.Matches(@"^found in \d+\.\d s$", session.Guidance.FoundIn);
     }
 
     [Fact]

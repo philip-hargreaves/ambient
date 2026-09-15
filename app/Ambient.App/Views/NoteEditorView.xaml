@@ -87,6 +87,7 @@
             IsHitTestVisible="{x:Bind ViewModel.NoteEditing, Mode=OneWay}"
             IsReadOnly="{x:Bind ViewModel.NoteViewing, Mode=OneWay}"
             IsTabStop="{x:Bind ViewModel.NoteEditing, Mode=OneWay}"
+            SelectionHighlightColorWhenNotFocused="{ThemeResource AccentFillColorTertiaryBrush}"
             Style="{StaticResource DocumentTextBox}"
             Text="{x:Bind ViewModel.ClinicalNoteText, Mode=TwoWay}" />
 

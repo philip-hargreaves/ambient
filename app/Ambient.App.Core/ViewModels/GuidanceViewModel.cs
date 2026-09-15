@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -79,6 +80,15 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(QueryCaption), nameof(QueryCaptionVisible))]
     public partial bool QueryFailed { get; private set; }
 
+    /// <summary>"found in 0.4 s" for the search that put the cards on screen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FoundInVisible))]
+    public partial string FoundIn { get; private set; } = "";
+
+    /// <summary>The note sentence under the pointer, for the note editor to light.</summary>
+    [ObservableProperty]
+    public partial string Hovered { get; set; } = "";
+
     /// <summary>A typed query's cards while one shows; otherwise the note's.</summary>
     public ObservableCollection<GuidanceCard> Cards { get; } = [];
 
@@ -87,6 +97,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public Func<string, Task>? SearchQueryRequested { get; set; }
 
+    private readonly Stopwatch _noteClock = new();
+    private readonly Stopwatch _queryClock = new();
     private List<GuidanceRecommendation> _noteResults = [];
     private List<GuidanceRecommendation>? _queryResults;
     private string _queryText = "";
@@ -108,6 +120,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public bool CardsVisible => Cards.Count > 0;
 
     public bool LimitationVisible => Cards.Count > 0;
+
+    public bool FoundInVisible => FoundIn.Length > 0;
 
     /// <summary>"2 guidelines · 3 recommendations" for the cards on screen.</summary>
     public string Summary
@@ -186,6 +200,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _queryResults = null;
         QueryFailed = false;
         QuerySearching = true;
+        _queryClock.Restart();
         QueryChanged();
         return SearchQueryRequested?.Invoke(_queryText) ?? Task.CompletedTask;
     }
@@ -197,6 +212,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _queryResults = null;
         QuerySearching = false;
         QueryFailed = false;
+        FoundIn = "";
         QueryChanged();
     }
 
@@ -205,6 +221,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _noteResults = [];
         Stale = false;
         NotStored = false;
+        FoundIn = "";
         Query = "";
         Section = GuidanceSection.Hidden;
         ClearQuery();
@@ -216,6 +233,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _noteResults = [];
         Stale = false;
         NotStored = false;
+        FoundIn = "";
         Section = GuidanceSection.FollowsNote;
         ShowCards();
     }
@@ -226,6 +244,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         if (Section == GuidanceSection.FollowsNote)
         {
             Section = GuidanceSection.Searching;
+            _noteClock.Restart();
         }
     }
 
@@ -236,6 +255,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         Stale = false;
         Section = GuidanceSection.Searching;
+        _noteClock.Restart();
     }
 
     public void MarkStale()
@@ -250,6 +270,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public void LoadStored(JsonElement? guidance)
     {
         NotStored = false;
+        FoundIn = "";
         if (guidance is not { ValueKind: JsonValueKind.Object } record)
         {
             _noteResults = [];
@@ -269,6 +290,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ApplyRecord(result);
         Stale = Flag(result, "stale");
         NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
+        FoundIn = Elapsed(_noteClock);
     }
 
     public void ApplyFailed() => Section = GuidanceSection.Failed;
@@ -284,6 +306,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _queryResults = ReadResults(result, false);
         QuerySearching = false;
         QueryFailed = false;
+        FoundIn = Elapsed(_queryClock);
         QueryChanged();
     }
 
@@ -390,6 +413,18 @@ public sealed partial class GuidanceViewModel : ObservableObject
     }
 
     private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
+
+    // A search the clock never timed, such as a stored record, shows nothing
+    private static string Elapsed(Stopwatch clock)
+    {
+        if (!clock.IsRunning)
+        {
+            return "";
+        }
+
+        clock.Stop();
+        return $"found in {clock.Elapsed.TotalSeconds:0.0} s";
+    }
 
     // The source label needs the corpus name, which only the searched list carries
     private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)

@@ -1,6 +1,8 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Ambient.App.Core.ViewModels;
 
 namespace Ambient.App.Views;
@@ -9,6 +11,7 @@ namespace Ambient.App.Views;
 public sealed partial class GuidanceSectionView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly DispatcherQueueTimer _timingTimer;
 
     public GuidanceSectionView(
         GuidanceViewModel viewModel, ShellViewModel shell, StatusBarViewModel status)
@@ -17,21 +20,67 @@ public sealed partial class GuidanceSectionView : UserControl
         Shell = shell;
         _status = status;
         InitializeComponent();
+        _timingTimer = DispatcherQueue.CreateTimer();
+        _timingTimer.Interval = TimeSpan.FromSeconds(4);
+        _timingTimer.IsRepeating = false;
+        _timingTimer.Tick += (_, _) => FadeTiming();
+        ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GuidanceViewModel.FoundIn) && ViewModel.FoundIn.Length > 0)
+            {
+                Timing.Opacity = 1;
+                _timingTimer.Start();
+            }
+        };
     }
 
     public GuidanceViewModel ViewModel { get; }
 
     public ShellViewModel Shell { get; }
 
-    private void OnQueryKeyDown(object sender, KeyRoutedEventArgs e)
+    private void OnQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Enter
-            && ViewModel.SearchQueryCommand.CanExecute(null))
+        if (ViewModel.SearchQueryCommand.CanExecute(null))
         {
             ViewModel.SearchQueryCommand.Execute(null);
-            e.Handled = true;
         }
     }
+
+    private void OnQueryKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Escape)
+        {
+            return;
+        }
+
+        if (ViewModel.ClearQueryCommand.CanExecute(null))
+        {
+            ViewModel.ClearQueryCommand.Execute(null);
+        }
+
+        ViewModel.Query = "";
+        e.Handled = true;
+    }
+
+    private void FadeTiming()
+    {
+        var fade = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(400) };
+        Storyboard.SetTarget(fade, Timing);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        var story = new Storyboard();
+        story.Children.Add(fade);
+        story.Begin();
+    }
+
+    private void OnRowEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
+        {
+            ViewModel.Hovered = found.Trigger;
+        }
+    }
+
+    private void OnRowExited(object sender, PointerRoutedEventArgs e) => ViewModel.Hovered = "";
 
     // Open shows an up chevron, folded a down one, as the patient sheet's fold does
     private void OnFoldClick(object sender, RoutedEventArgs e)
@@ -54,7 +103,7 @@ public sealed partial class GuidanceSectionView : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
-            await ClipboardHelper.CopyAsync(_status, found.Citation, "Citation");
+            await ClipboardHelper.CopyAsync(_status, found.CitationText, "Citation");
         }
     }
 }

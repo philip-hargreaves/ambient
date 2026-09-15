@@ -52,6 +52,9 @@ public sealed record GuidanceRecommendation(
         Uri.TryCreate(Link, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
+    /// <summary>The citation, with the web address on its own line when there is one.</summary>
+    public string CitationText => CanOpen ? $"{Citation}\n{Link}" : Citation;
+
     public string OpenName => $"Open {Reference}";
 
     public string CopyName => $"Copy citation for {Reference}";
