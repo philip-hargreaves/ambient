@@ -395,8 +395,10 @@ std::vector<SessionSummary> SqliteSessionStore::ListSessions() {
         // Label, summary, reflection and guidance are not edits to the record
         " (SELECT max(edited_at) FROM documents d WHERE d.session_id = s.id"
         "  AND d.kind NOT IN ('label', 'summary', 'reflection', 'guidance')),"
-        // The audio's length outlives the audio: the turns' end is plaintext
-        " (SELECT max(first_frame + frame_count) FROM turns t WHERE t.session_id = s.id),"
+        // The audio's length outlives the audio: the turns' end is plaintext.
+        // A session that never sealed still has its chunks
+        " COALESCE((SELECT max(first_frame + frame_count) FROM turns t WHERE t.session_id = s.id),"
+        "  (SELECT max(first_frame + frame_count) FROM chunks c WHERE c.session_id = s.id)),"
         " EXISTS(SELECT 1 FROM documents r WHERE r.session_id = s.id"
         "  AND r.kind IN ('reflection', 'summary')),"
         " s.demo, l.seq"

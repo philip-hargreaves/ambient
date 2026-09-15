@@ -182,6 +182,23 @@ TEST(SessionStore, StoredAudioReadsBackForResume) {
     EXPECT_EQ(store.ReadAudio(id), audio);
 }
 
+TEST(SessionStore, ACrashedSessionListsTheAudioItCaptured) {
+    TempRoot root;
+    SessionId id;
+    {
+        SqliteSessionStore store(root.path, std::chrono::milliseconds(10));
+        id = store.Begin({16000, "", ""});
+        store.Append(id, std::vector<float>(16000 * 3), 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }  // gone mid-recording, no turns sealed
+
+    SqliteSessionStore store(root.path, std::chrono::milliseconds(10));
+    const auto listed = store.ListSessions();
+    ASSERT_EQ(listed.size(), 1u);
+    EXPECT_EQ(listed[0].state, "recording");
+    EXPECT_NEAR(listed[0].audio_seconds, 3.0, 0.01);
+}
+
 TEST(SessionStore, TurnTextIsNotPlaintextAtRest) {
     TempRoot root;
     const std::string sentinel = "SENTINEL-HYPERTENSION-PHRASE";
