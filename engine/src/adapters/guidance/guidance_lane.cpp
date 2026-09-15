@@ -97,9 +97,9 @@ void GuidanceLane::Work() {
         }
         lock.unlock();
         try {
-            const Results results =
-                retriever_.Search(request.note, request.limit,
-                                  request.session.empty() ? SearchMode::kQuery : SearchMode::kNote);
+            const bool note = !request.session.empty() || request.as_note;
+            const Results results = retriever_.Search(
+                request.note, request.limit, note ? SearchMode::kNote : SearchMode::kQuery);
             if (request.on_ready) request.on_ready(results);
         } catch (const std::exception& e) {
             Fail(request, e.what());

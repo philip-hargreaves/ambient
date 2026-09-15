@@ -607,13 +607,15 @@ TEST(Handlers, EchoRejectsAMissingOrNonStringPayload) {
 struct EchoRetriever : ambient::guidance::IGuidanceRetriever {
     std::mutex mutex;
     std::vector<std::pair<std::string, int>> searches;
+    std::vector<ambient::guidance::SearchMode> modes;
     bool fail = false;
 
     ambient::guidance::Results Search(const std::string& note, int limit,
-                                      ambient::guidance::SearchMode) override {
+                                      ambient::guidance::SearchMode mode) override {
         {
             const std::lock_guard<std::mutex> lock(mutex);
             searches.emplace_back(note, limit);
+            modes.push_back(mode);
         }
         if (fail) throw std::runtime_error("no embedding model staged");
         ambient::guidance::Results results;
@@ -863,6 +865,23 @@ TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     EXPECT_EQ(sent.all[0].second.at("stale"), nullptr) << "no note, nothing to be stale against";
     EXPECT_EQ(retriever.searches,
               (std::vector<std::pair<std::string, int>>{{"Chest pain on exertion.", 5}}));
+    EXPECT_EQ(retriever.modes,
+              (std::vector<ambient::guidance::SearchMode>{ambient::guidance::SearchMode::kQuery}));
+}
+
+TEST(Handlers, GuidanceSearchRunsTypedTextAsANoteOnRequest) {
+    SessionStoreFixture fixture;
+    EchoRetriever retriever;
+    Sent sent;
+    ambient::guidance::GuidanceLane lane(retriever);
+
+    const auto outcome = HandleGuidanceSearch(
+        *fixture.store, lane, json{{"text", "Chest pain on exertion."}, {"mode", "note"}},
+        sent.Sink());
+    ASSERT_TRUE(std::holds_alternative<json>(outcome));
+    ASSERT_TRUE(sent.WaitFor(1));
+    EXPECT_EQ(retriever.modes,
+              (std::vector<ambient::guidance::SearchMode>{ambient::guidance::SearchMode::kNote}));
 }
 
 TEST(Handlers, GuidanceSearchRefusesBadParamsAndAMissingNote) {
@@ -882,6 +901,7 @@ TEST(Handlers, GuidanceSearchRefusesBadParamsAndAMissingNote) {
         {json{{"text", 5}}, kInvalidParams},
         {json{{"text", "Chest pain."}, {"limit", 0}}, kInvalidParams},
         {json{{"text", "Chest pain."}, {"limit", 21}}, kInvalidParams},
+        {json{{"text", "Chest pain."}, {"mode", "loud"}}, kInvalidParams},
         {json{{"text", ""}}, kSessionError},
         {json{{"id", "nope"}}, kSessionError},
         {json{{"id", without_note}}, kSessionError},

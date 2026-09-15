@@ -839,12 +839,21 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
         limit = params["limit"].get<int>();
     }
     std::string session;
+    bool as_note = false;
     ambient::store::Document note;
     if (params.contains("text")) {
         if (!params["text"].is_string()) {
             return Error{kInvalidParams, "Invalid params", json("text must be a string")};
         }
         note.text = params["text"].get<std::string>();
+        // Typed text searches whole. "note" runs it through the note pipeline
+        // instead, which the gates use and the app never sends
+        if (params.contains("mode")) {
+            if (params["mode"] != "query" && params["mode"] != "note") {
+                return Error{kInvalidParams, "Invalid params", json("mode must be query or note")};
+            }
+            as_note = params["mode"] == "note";
+        }
     } else {
         const auto id = IdFrom(params);
         if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
@@ -856,7 +865,9 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
         }
     }
     if (note.text.empty()) return Error{kSessionError, "Session error", json("no note to search")};
-    lane.Run(GuidanceSearchRequest(sessions, session, std::move(note), limit, notify));
+    auto request = GuidanceSearchRequest(sessions, session, std::move(note), limit, notify);
+    request.as_note = as_note;
+    lane.Run(std::move(request));
     return json::object();
 }
 
