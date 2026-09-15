@@ -280,8 +280,7 @@ public class GuidanceViewModelTest
             Failed("s1", "guidance embedder gte-large-int8: tokenizer ignores max_length"));
 
         Assert.Equal(GuidanceSection.Failed, session.Guidance.Section);
-        Assert.Equal("Guidance could not be searched - see the status bar",
-            session.Guidance.StateCaption);
+        Assert.Equal("Guidance could not be searched.", session.Guidance.StateCaption);
         Assert.Contains(
             session.Status.LogEntries, e => e.Contains("tokenizer", StringComparison.Ordinal));
         Assert.DoesNotContain("tokenizer", session.Status.LatestActivity, StringComparison.Ordinal);
@@ -311,7 +310,7 @@ public class GuidanceViewModelTest
         engine.SetConnected(false);
 
         Assert.False(session.Guidance.QuerySearching);
-        Assert.Equal("Search failed - see the status bar", session.Guidance.QueryCaption);
+        Assert.Equal("Search failed.", session.Guidance.QueryCaption);
         Assert.True(session.Guidance.QueryShown);
     }
 
@@ -461,9 +460,11 @@ public class GuidanceViewModelTest
 
         engine.RaiseNotification("guidance/ready", Ready(null, [], stale: null));
 
-        Assert.Equal("No match in the installed guidance", session.Guidance.QueryCaption);
+        Assert.Equal("Nothing came close enough to show.", session.Guidance.QueryCaption);
         Assert.False(session.Guidance.QuerySearching);
         Assert.Empty(session.Guidance.Cards);
+        Assert.Equal("", session.Guidance.Summary);
+        Assert.False(session.Guidance.LimitationVisible);
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
         Assert.False(session.Guidance.CaptionVisible, "the query bar replaces the note caption");
 
@@ -480,7 +481,7 @@ public class GuidanceViewModelTest
 
         engine.RaiseNotification("guidance/failed", Failed(null, "embedder gone"));
 
-        Assert.Equal("Search failed - see the status bar", session.Guidance.QueryCaption);
+        Assert.Equal("Search failed.", session.Guidance.QueryCaption);
         Assert.Contains(
             session.Status.LogEntries, e => e.Contains("embedder gone", StringComparison.Ordinal));
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
@@ -614,7 +615,7 @@ public class GuidanceViewModelTest
             new StatusBarViewModel());
 
         Assert.Equal(GuidanceReadiness.NoCorpus, session.Guidance.Readiness);
-        Assert.True(session.Guidance.NoCorpora);
+        Assert.True(session.Guidance.SettingsLinkVisible);
     }
 
     [Fact]
@@ -696,6 +697,8 @@ public class GuidanceViewModelTest
 
         Assert.Single(session.Guidance.Cards);
         Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"], Shown(session.Guidance));
+        Assert.Equal("1 guideline · 3 recommendations", session.Guidance.Summary);
+        Assert.True(session.Guidance.LimitationVisible);
     }
 
     [Fact]
@@ -712,5 +715,6 @@ public class GuidanceViewModelTest
 
         Assert.Equal(["FX100", "FX200"], session.Guidance.Cards.Select(c => c.Code));
         Assert.Equal(["fx100-1_1_1", "fx200-1_1_2", "fx200-1_1_1"], Shown(session.Guidance));
+        Assert.Equal("2 guidelines · 3 recommendations", session.Guidance.Summary);
     }
 }

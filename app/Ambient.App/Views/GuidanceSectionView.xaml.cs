@@ -38,6 +38,7 @@ public sealed partial class GuidanceSectionView : UserControl
     {
         var open = Body.Visibility == Visibility.Visible;
         Body.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        SearchRow.Visibility = Body.Visibility;
         FoldGlyph.Glyph = open ? "" : "";
     }
 

@@ -34,7 +34,8 @@ public enum GuidanceSection
 public sealed partial class GuidanceViewModel : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible), nameof(NoCorpora),
+    [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible),
+        nameof(SettingsLinkVisible),
         nameof(QueryBoxEnabled), nameof(SearchEnabled))]
     [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
     public partial GuidanceReadiness Readiness { get; private set; } = GuidanceReadiness.Loading;
@@ -98,12 +99,30 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public bool NotSearched => Section == GuidanceSection.NotSearched;
 
-    public bool NoCorpora => Readiness == GuidanceReadiness.NoCorpus;
+    public bool SettingsLinkVisible =>
+        Readiness is GuidanceReadiness.NoCorpus or GuidanceReadiness.Unavailable;
 
     public bool HasRecord => Section is GuidanceSection.Results
         or GuidanceSection.NothingMatched or GuidanceSection.NoCorpusAtSearch;
 
     public bool CardsVisible => Cards.Count > 0;
+
+    public bool LimitationVisible => Cards.Count > 0;
+
+    /// <summary>"2 guidelines · 3 recommendations" for the cards on screen.</summary>
+    public string Summary
+    {
+        get
+        {
+            if (Cards.Count == 0)
+            {
+                return "";
+            }
+
+            var found = Cards.Sum(c => c.Recommendations.Count);
+            return $"{Count(Cards.Count, "guideline")} · {Count(found, "recommendation")}";
+        }
+    }
 
     public bool SearchAgainVisible => Stale && !Searching;
 
@@ -125,27 +144,28 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public string StateCaption => Section switch
     {
         GuidanceSection.Hidden or GuidanceSection.Results => "",
-        GuidanceSection.NothingMatched => "Nothing in the installed guidance matches this note",
+        GuidanceSection.NothingMatched => "Nothing came close enough to show. "
+            + "The installed guidance may still cover this condition.",
         GuidanceSection.NoCorpusAtSearch =>
-            "No guideline documents were installed when this note was searched",
-        GuidanceSection.Failed => "Guidance could not be searched - see the status bar",
+            "No guidance was installed when this note was searched.",
+        GuidanceSection.Failed => "Guidance could not be searched.",
         _ when Readiness != GuidanceReadiness.Ready => Readiness switch
         {
             GuidanceReadiness.Loading => "Loading the guidance model",
-            GuidanceReadiness.NoCorpus => "No guideline documents are installed",
-            _ => "Guidance is unavailable on this computer - see Settings",
+            GuidanceReadiness.NoCorpus => "No guidance is installed on this device.",
+            _ => "Guidance is unavailable on this device.",
         },
         GuidanceSection.FollowsNote => "Guidance follows the note",
-        GuidanceSection.Searching => "Searching the installed guidance",
+        GuidanceSection.Searching => "Finding guidance",
         _ => "Guidance was not searched for this consultation",
     };
 
     public string QueryCaption => QuerySearching ? "Searching"
-        : QueryFailed ? "Search failed - see the status bar"
+        : QueryFailed ? "Search failed."
         : _queryResults is null ? ""
         : _queryResults.Count switch
         {
-            0 => "No match in the installed guidance",
+            0 => "Nothing came close enough to show.",
             1 => "1 result",
             var n => $"{n} results",
         };
@@ -365,7 +385,11 @@ public sealed partial class GuidanceViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(CardsVisible));
+        OnPropertyChanged(nameof(LimitationVisible));
+        OnPropertyChanged(nameof(Summary));
     }
+
+    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
 
     // The source label needs the corpus name, which only the searched list carries
     private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)
