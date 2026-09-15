@@ -79,7 +79,7 @@
             <StackPanel Spacing="6">
                 <TextBlock
                     Style="{StaticResource MicroText}"
-                    Text="Nearest recommendations by wording, not a diagnosis. The matched guideline may be for another condition."
+                    Text="These recommendations match the wording of the note. The guideline may be for another condition, so check each title."
                     TextWrapping="Wrap"
                     Visibility="{x:Bind ViewModel.LimitationVisible, Mode=OneWay}" />
                 <!-- A typed query stands in for the note's cards until Clear -->
