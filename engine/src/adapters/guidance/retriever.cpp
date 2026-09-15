@@ -149,8 +149,8 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         const auto& at = where.at(candidate.id);
         auto* store = stores[at.corpus];
         auto chunk = store->TextAt(at.ord);
-        if (PopulationConflict(text, chunk.text)) continue;
         const auto& cite = store->CiteAt(at.ord);
+        if (PopulationConflict(text, chunk.text, cite.title)) continue;
         Result result;
         result.corpus = store->Info().id;
         result.chunk_id = cite.chunk_id;

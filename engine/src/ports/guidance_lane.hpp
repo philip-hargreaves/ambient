@@ -8,7 +8,8 @@
 namespace ambient::guidance {
 
 struct SearchRequest {
-    std::string session;  // empty for a typed query
+    std::string session;   // empty for a typed query
+    bool as_note = false;  // typed text through the note pipeline, for the gates
     std::string note;
     int limit = 0;
     std::function<void(const Results&)> on_ready;

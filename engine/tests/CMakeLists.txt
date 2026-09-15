@@ -52,6 +52,7 @@ add_executable(engine_tests
     adapters/fbank_test.cpp
     adapters/framing_test.cpp
     adapters/gpu_lease_test.cpp
+    adapters/process_scan_test.cpp
     adapters/guidance_chunker_test.cpp
     adapters/guidance_corpus_test.cpp
     adapters/guidance_indexer_test.cpp
