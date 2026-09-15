@@ -3,60 +3,111 @@ using System.Text.Json;
 
 namespace Ambient.App.Core.ViewModels;
 
-/// <summary>One recommendation as the section shows it, read once from the wire.</summary>
-public sealed record GuidanceCard(
+/// <summary>One recommendation as the wire gives it.</summary>
+public sealed record GuidanceRecommendation(
     string Corpus, string ChunkId, string Code, string Number, string Title, string Section,
     string Text, string Link, string LastUpdated, string UpdateTag, string Source,
-    string Citation, double Score, string Trigger, string SourceLabel)
+    string Citation, double Score, string Trigger, string SourceLabel, bool FromNote)
 {
-    public static GuidanceCard From(JsonElement result, string sourceLabel) => new(
-        Field(result, "corpus"), Field(result, "chunkId"), Field(result, "code"),
-        Field(result, "number"), Field(result, "title"), Field(result, "section"),
-        Field(result, "text").TrimEnd(), Field(result, "url"), Field(result, "lastUpdated"),
-        Field(result, "updateTag"), Field(result, "source"), Field(result, "citation"),
-        result.TryGetProperty("score", out var score) && score.ValueKind == JsonValueKind.Number
-            ? score.GetDouble()
-            : 0,
-        Field(result, "trigger"), sourceLabel);
+    public static GuidanceRecommendation From(JsonElement result, string sourceLabel, bool fromNote)
+    {
+        var score = result.TryGetProperty("score", out var value)
+            && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : 0;
+        return new(
+            Field(result, "corpus"), Field(result, "chunkId"), Field(result, "code"),
+            Field(result, "number"), Field(result, "title"), Field(result, "section"),
+            Field(result, "text").TrimEnd(), Field(result, "url"), Field(result, "lastUpdated"),
+            Field(result, "updateTag"), Field(result, "source"), Field(result, "citation"),
+            score, Field(result, "trigger"), sourceLabel, fromNote);
+    }
 
     /// <summary>"NG100 1.1.1", or the code alone when the recommendation has no number.</summary>
     public string Reference => Number.Length > 0
         ? $"{Code.ToUpperInvariant()} {Number}"
         : Code.ToUpperInvariant();
 
-    /// <summary>"[2009, amended 2018]" as the guideline marks it; empty when unmarked.</summary>
+    /// <summary>"[2009, amended 2018]" as the guideline marks it, empty when unmarked.</summary>
     public string Tag => UpdateTag.Length > 0 ? $"[{UpdateTag}]" : "";
 
     public bool TagVisible => UpdateTag.Length > 0;
 
-    public bool SourceLabelVisible => SourceLabel.Length > 0;
+    /// <summary>The section path under the title. The wire's " > " reads as "›".</summary>
+    public string Path => Section.Replace(" > ", " › ", StringComparison.Ordinal);
 
-    /// <summary>Title and section path on one line; the wire's " > " reads as "›".</summary>
-    public string Context => Section.Length > 0
-        ? $"{Title} › {Section.Replace(" > ", " › ", StringComparison.Ordinal)}"
-        : Title;
+    public bool PathVisible => Section.Length > 0;
 
-    /// <summary>The note sentence that found this card; empty when the whole note did.</summary>
-    public string Matched => Trigger.Length > 0 ? $"Matched: {Trigger}" : "";
-
-    public bool MatchedVisible => Trigger.Length > 0;
+    public bool LabelVisible => Number.Length > 0 || Section.Length > 0 || UpdateTag.Length > 0;
 
     /// <summary>
-    /// "Last updated 12 Oct 2020" from any ISO 8601 date; empty when the guideline gives none.
+    /// The note sentence that found it, or the whole note. A typed query has no line.
     /// </summary>
-    public string LastUpdatedLabel =>
-        ShortDate(LastUpdated) is { Length: > 0 } date ? "Last updated " + date : "";
+    public string Matched => Trigger.Length > 0 ? $"Matched: “{Trigger}”"
+        : FromNote ? "Matched: the note as a whole"
+        : "";
 
-    public bool LastUpdatedVisible => LastUpdatedLabel.Length > 0;
+    public bool MatchedVisible => Matched.Length > 0;
 
     /// <summary>A plain-text corpus carries a file name here, which nothing can open.</summary>
     public bool CanOpen =>
         Uri.TryCreate(Link, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
+    /// <summary>The citation, with the web address on its own line when there is one.</summary>
+    public string CitationText => CanOpen ? $"{Citation}\n{Link}" : Citation;
+
     public string OpenName => $"Open {Reference}";
 
     public string CopyName => $"Copy citation for {Reference}";
+
+    internal static string Field(JsonElement element, string property) =>
+        element.ValueKind == JsonValueKind.Object
+        && element.TryGetProperty(property, out var value)
+        && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
+}
+
+/// <summary>One guideline, or one document, with the recommendations found in it.</summary>
+public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommendations)
+{
+    /// <summary>One card per guideline, in the order each first appears.</summary>
+    public static IEnumerable<GuidanceCard> Group(IEnumerable<GuidanceRecommendation> shown) =>
+        shown.GroupBy(r => (r.Corpus, r.Code)).Select(g => new GuidanceCard([.. g]));
+
+    private GuidanceRecommendation First => Recommendations[0];
+
+    public string Corpus => First.Corpus;
+
+    public string Code => First.Code.ToUpperInvariant();
+
+    public string Title => First.Title;
+
+    public string SourceLabel => First.SourceLabel;
+
+    /// <summary>The corpus kind on the wire: nice, text or upload.</summary>
+    public string Source => First.Source;
+
+    /// <summary>
+    /// "NICE · NG100", a text corpus by name, or the code when no source was named.
+    /// </summary>
+    public string Chip => First.Source == "nice" && SourceLabel.Length > 0
+        ? $"{SourceLabel} · {Code}"
+        : SourceLabel.Length > 0 ? SourceLabel : Code;
+
+    /// <summary>
+    /// "Updated 12 Oct 2020 · 3 recommendations", or the count alone without a date.
+    /// </summary>
+    public string Meta
+    {
+        get
+        {
+            var count = Recommendations.Count == 1
+                ? "1 recommendation"
+                : $"{Recommendations.Count} recommendations";
+            var date = ShortDate(First.LastUpdated);
+            return date.Length > 0 ? $"Updated {date} · {count}" : count;
+        }
+    }
 
     /// <summary>"12 Oct 2020" from any ISO 8601 date, empty from anything else.</summary>
     internal static string ShortDate(string value) =>
@@ -66,9 +117,5 @@ public sealed record GuidanceCard(
             : "";
 
     internal static string Field(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-        && element.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
+        GuidanceRecommendation.Field(element, property);
 }

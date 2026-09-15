@@ -22,20 +22,6 @@ public class GuidanceViewModelTest
         unavailable = (string?)null,
     };
 
-    private static object Corpus2(string id, string attribution) => new
-    {
-        id,
-        name = "Second corpus",
-        licence = "invented",
-        attribution,
-        source = "text",
-        embedder = "gte-large-int8",
-        sha256 = "",
-        chunks = 4,
-        builtAt = "2026-09-12T00:00:00Z",
-        unavailable = (string?)null,
-    };
-
     private static object Result(string chunkId, string trigger = "A sentence of the note.",
         string url = "https://example.test/fx100", string source = "nice",
         string number = "1.1.1", string section = "1.1 Referral", string updateTag = "",
@@ -56,6 +42,12 @@ public class GuidanceViewModelTest
             score = 0.897,
             trigger,
         };
+
+    private static GuidanceRecommendation Found(object result) =>
+        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true);
+
+    private static IEnumerable<string> Shown(GuidanceViewModel guidance) =>
+        guidance.Cards.SelectMany(c => c.Recommendations).Select(r => r.ChunkId);
 
     private static JsonElement Ready(string? id, object[] shown, bool searched = true,
         bool? stale = false, string? storeError = null, object[]? corpora = null) =>
@@ -122,10 +114,10 @@ public class GuidanceViewModelTest
 
         var guidance = session.Guidance;
         Assert.Equal(GuidanceSection.Results, guidance.Section);
-        Assert.Equal(2, guidance.Cards.Count);
+        Assert.Equal(2, guidance.Cards.Single().Recommendations.Count);
+        Assert.Equal("", guidance.FoundIn);
         Assert.False(guidance.Stale);
         Assert.True(guidance.HasRecord);
-        Assert.Equal("Fixture attribution", guidance.Attribution);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "guidance/search");
     }
 
@@ -169,15 +161,17 @@ public class GuidanceViewModelTest
             .GetProperty("result").GetProperty("guidance"));
 
         var card = session.Guidance.Cards.Single();
-        Assert.Equal("FX100 1.1.1", card.Reference);
-        Assert.Equal("[2009, amended 2018]", card.Tag);
-        Assert.Equal("Last updated 12 Oct 2020", card.LastUpdatedLabel);
-        Assert.Equal("NICE", card.SourceLabel);
-        Assert.True(card.CanOpen);
         Assert.Equal(
-            "Fictional inflammatory joint disease: assessment and management"
-            + " › 1.1 Referral, diagnosis and investigations › Referral from primary care",
-            card.Context);
+            "Fictional inflammatory joint disease: assessment and management", card.Title);
+        Assert.Equal("Updated 12 Oct 2020 · 1 recommendation", card.Meta);
+        Assert.Equal("NICE · FX100", card.Chip);
+        Assert.Equal("nice", card.Source);
+        var found = card.Recommendations.Single();
+        Assert.Equal("FX100 1.1.1", found.Reference);
+        Assert.Equal("[2009, amended 2018]", found.Tag);
+        Assert.Equal(
+            "1.1 Referral, diagnosis and investigations › Referral from primary care", found.Path);
+        Assert.True(found.CanOpen);
     }
 
     [Fact]
@@ -188,11 +182,10 @@ public class GuidanceViewModelTest
 
         guidance.ApplyReady(Fixtures.Load("guidance-ready.json").GetProperty("params"));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
-        Assert.Equal("none", guidance.Attribution);
         var cards = guidance.Cards;
-        Assert.Equal(["NICE", "Fixture guidance corpus"], cards.Select(c => c.SourceLabel));
-        Assert.False(cards[^1].MatchedVisible, "the whole-note match comes last");
-        Assert.False(cards[1].CanOpen);
+        Assert.Equal(["NICE · FX100", "Fixture guidance corpus"], cards.Select(c => c.Chip));
+        Assert.Equal("Matched: the note as a whole", cards[^1].Recommendations.Single().Matched);
+        Assert.False(cards[1].Recommendations.Single().CanOpen);
 
         guidance.ApplyCorpora(Fixtures.Load("guidance-corpora.json").GetProperty("result"));
         Assert.Equal(GuidanceReadiness.Ready, guidance.Readiness);
@@ -289,8 +282,7 @@ public class GuidanceViewModelTest
             Failed("s1", "guidance embedder gte-large-int8: tokenizer ignores max_length"));
 
         Assert.Equal(GuidanceSection.Failed, session.Guidance.Section);
-        Assert.Equal("Guidance could not be searched - see the status bar",
-            session.Guidance.StateCaption);
+        Assert.Equal("Guidance could not be searched.", session.Guidance.StateCaption);
         Assert.Contains(
             session.Status.LogEntries, e => e.Contains("tokenizer", StringComparison.Ordinal));
         Assert.DoesNotContain("tokenizer", session.Status.LatestActivity, StringComparison.Ordinal);
@@ -320,7 +312,7 @@ public class GuidanceViewModelTest
         engine.SetConnected(false);
 
         Assert.False(session.Guidance.QuerySearching);
-        Assert.Equal("Search failed - see the status bar", session.Guidance.QueryCaption);
+        Assert.Equal("Search failed.", session.Guidance.QueryCaption);
         Assert.True(session.Guidance.QueryShown);
     }
 
@@ -444,19 +436,23 @@ public class GuidanceViewModelTest
         Assert.Empty(guidance.Cards);
 
         engine.RaiseNotification("guidance/ready",
-            Ready(null, [Result("fx200-1_1_1"), Result("fx200-1_1_2")], stale: null));
+            Ready(null, [Result("fx200-1_1_1", trigger: ""), Result("fx200-1_1_2", trigger: "")],
+                stale: null));
         Assert.Equal("2 results", guidance.QueryCaption);
-        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], guidance.Cards.Select(c => c.ChunkId));
+        Assert.Matches(@"^found in \d+\.\d s$", guidance.FoundIn);
+        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], Shown(guidance));
+        Assert.All(guidance.Cards.Single().Recommendations, r => Assert.False(r.MatchedVisible));
         Assert.Equal(GuidanceSection.Results, guidance.Section);
 
         // The note's own result lands behind the query and shows only after Clear
         engine.RaiseNotification("guidance/ready",
             Ready("abc", [Result("fx100-1_1_2"), Result("fx100-1_1_3")]));
-        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], guidance.Cards.Select(c => c.ChunkId));
+        Assert.Equal(["fx200-1_1_1", "fx200-1_1_2"], Shown(guidance));
 
         guidance.ClearQueryCommand.Execute(null);
         Assert.False(guidance.QueryShown);
-        Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], guidance.Cards.Select(c => c.ChunkId));
+        Assert.Equal("", guidance.FoundIn);
+        Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], Shown(guidance));
     }
 
     [Fact]
@@ -468,9 +464,11 @@ public class GuidanceViewModelTest
 
         engine.RaiseNotification("guidance/ready", Ready(null, [], stale: null));
 
-        Assert.Equal("No match in the installed guidance", session.Guidance.QueryCaption);
+        Assert.Equal("Nothing came close enough to show.", session.Guidance.QueryCaption);
         Assert.False(session.Guidance.QuerySearching);
         Assert.Empty(session.Guidance.Cards);
+        Assert.Equal("", session.Guidance.Summary);
+        Assert.False(session.Guidance.LimitationVisible);
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
         Assert.False(session.Guidance.CaptionVisible, "the query bar replaces the note caption");
 
@@ -487,7 +485,7 @@ public class GuidanceViewModelTest
 
         engine.RaiseNotification("guidance/failed", Failed(null, "embedder gone"));
 
-        Assert.Equal("Search failed - see the status bar", session.Guidance.QueryCaption);
+        Assert.Equal("Search failed.", session.Guidance.QueryCaption);
         Assert.Contains(
             session.Status.LogEntries, e => e.Contains("embedder gone", StringComparison.Ordinal));
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
@@ -547,7 +545,7 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public async Task AResultWithoutItsCorpusInSearchedHasNoLabels()
+    public async Task AResultWithoutItsCorpusInSearchedShowsItsCode()
     {
         var (session, engine) = await AfterNoteAsync();
 
@@ -556,24 +554,7 @@ public class GuidanceViewModelTest
 
         var card = session.Guidance.Cards.Single();
         Assert.Equal(GuidanceSection.Results, session.Guidance.Section);
-        Assert.False(card.SourceLabelVisible);
-        Assert.False(session.Guidance.AttributionVisible);
-    }
-
-    [Fact]
-    public async Task AttributionNamesTheCorporaWithACardShown()
-    {
-        var (session, engine) = await AfterNoteAsync();
-        object[] corpora = [Corpus, Corpus2("second", "Second attribution")];
-
-        engine.RaiseNotification("guidance/ready",
-            Ready("s1", [Result("s-1", corpus: "second")], corpora: corpora));
-        Assert.Equal("Second attribution", session.Guidance.Attribution);
-
-        engine.RaiseNotification("guidance/ready",
-            Ready("s1", [Result("fx100-1_1_1"), Result("s-1", corpus: "second")],
-                corpora: corpora));
-        Assert.Equal("Fixture attribution · Second attribution", session.Guidance.Attribution);
+        Assert.Equal("GOUT", card.Chip);
     }
 
     [Fact]
@@ -638,7 +619,7 @@ public class GuidanceViewModelTest
             new StatusBarViewModel());
 
         Assert.Equal(GuidanceReadiness.NoCorpus, session.Guidance.Readiness);
-        Assert.True(session.Guidance.NoCorpora);
+        Assert.True(session.Guidance.SettingsLinkVisible);
     }
 
     [Fact]
@@ -656,38 +637,57 @@ public class GuidanceViewModelTest
     [Fact]
     public void OpenIsOfferedForWebLinksOnly()
     {
-        var web = GuidanceCard.From(
-            JsonSerializer.SerializeToElement(Result("fx100-1_1_1")), "NICE");
-        var file = GuidanceCard.From(
-            JsonSerializer.SerializeToElement(Result("gout-1", url: "Gout.md", source: "text")),
-            "");
-        var none = GuidanceCard.From(JsonSerializer.SerializeToElement(Result("x-1", url: "")), "");
+        var web = Found(Result("fx100-1_1_1"));
+        var file = Found(Result("gout-1", url: "Gout.md", source: "text"));
+        var none = Found(Result("x-1", url: ""));
 
         Assert.True(web.CanOpen);
         Assert.False(file.CanOpen);
         Assert.False(none.CanOpen);
+        Assert.Equal(
+            "FX100 1.1.1, Fictional guideline\nhttps://example.test/fx100", web.CitationText);
+        Assert.Equal("FX100 1.1.1, Fictional guideline", file.CitationText);
     }
 
     [Fact]
-    public void CardsDisplayAsTheGuidelineWrites()
+    public void RecommendationsDisplayAsTheGuidelineWrites()
     {
-        var card = GuidanceCard.From(JsonSerializer.SerializeToElement(
-            Result("fx100-1_1_1", number: "", section: "", updateTag: "2015")), "NICE");
-        Assert.Equal("FX100", card.Reference);
-        Assert.Equal("[2015]", card.Tag);
-        Assert.False(card.LastUpdatedVisible);
-        Assert.Equal("Open FX100", card.OpenName);
-        Assert.Equal("Fictional guideline", card.Context);
+        var bare = Found(Result("fx100-1_1_1", number: "", section: "", updateTag: "2015"));
+        Assert.Equal("FX100", bare.Reference);
+        Assert.Equal("[2015]", bare.Tag);
+        Assert.False(bare.PathVisible);
+        Assert.Equal("Open FX100", bare.OpenName);
 
-        var stamped = GuidanceCard.From(JsonSerializer.SerializeToElement(
-            Result("fx100-1_1_1", lastUpdated: "2020-10-12T09:30:00Z")), "NICE");
-        Assert.Equal("Last updated 12 Oct 2020", stamped.LastUpdatedLabel);
-        Assert.Equal("Fictional guideline › 1.1 Referral", stamped.Context);
-        Assert.Equal("Matched: A sentence of the note.", stamped.Matched);
+        var found = Found(Result("fx100-1_1_1"));
+        Assert.Equal("1.1 Referral", found.Path);
+        Assert.Equal("Matched: “A sentence of the note.”", found.Matched);
+        Assert.True(found.LabelVisible);
 
-        var whole = GuidanceCard.From(
-            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE");
-        Assert.False(whole.MatchedVisible);
+        var whole = Found(Result("fx100-1_1_1", trigger: ""));
+        Assert.Equal("Matched: the note as a whole", whole.Matched);
+
+        var typed = GuidanceRecommendation.From(
+            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE", false);
+        Assert.False(typed.MatchedVisible);
+    }
+
+    [Fact]
+    public void ACardIsOneGuidelineWithItsRecommendationsInOrder()
+    {
+        var cards = GuidanceCard.Group(
+        [
+            Found(Result("fx100-1_1_1", lastUpdated: "2020-10-12T09:30:00Z")),
+            Found(Result("fx200-1_1_1")),
+            Found(Result("fx100-1_1_2", lastUpdated: "2020-10-12T09:30:00Z")),
+        ]).ToList();
+
+        Assert.Equal(["FX100", "FX200"], cards.Select(c => c.Code));
+        Assert.Equal("Fictional guideline", cards[0].Title);
+        Assert.Equal(["fx100-1_1_1", "fx100-1_1_2"],
+            cards[0].Recommendations.Select(r => r.ChunkId));
+        Assert.Equal("Updated 12 Oct 2020 · 2 recommendations", cards[0].Meta);
+        Assert.Equal("1 recommendation", cards[1].Meta);
+        Assert.Equal("NICE · FX100", cards[0].Chip);
     }
 
     [Fact]
@@ -702,7 +702,27 @@ public class GuidanceViewModelTest
             Result("fx100-1_1_3", trigger: ""),
         ]));
 
-        Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"],
-            session.Guidance.Cards.Select(c => c.ChunkId));
+        Assert.Single(session.Guidance.Cards);
+        Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"], Shown(session.Guidance));
+        Assert.Equal("1 guideline · 3 recommendations", session.Guidance.Summary);
+        Assert.True(session.Guidance.LimitationVisible);
+        Assert.Matches(@"^found in \d+\.\d s$", session.Guidance.FoundIn);
+    }
+
+    [Fact]
+    public async Task AGuidelineFoundBySentenceLeadsOneFoundByTheWholeNote()
+    {
+        var (session, engine) = await AfterNoteAsync();
+
+        engine.RaiseNotification("guidance/ready", Ready("s1",
+        [
+            Result("fx200-1_1_1", trigger: ""),
+            Result("fx100-1_1_1", trigger: "Second sentence."),
+            Result("fx200-1_1_2", trigger: "Third sentence."),
+        ]));
+
+        Assert.Equal(["FX100", "FX200"], session.Guidance.Cards.Select(c => c.Code));
+        Assert.Equal(["fx100-1_1_1", "fx200-1_1_2", "fx200-1_1_1"], Shown(session.Guidance));
+        Assert.Equal("2 guidelines · 3 recommendations", session.Guidance.Summary);
     }
 }

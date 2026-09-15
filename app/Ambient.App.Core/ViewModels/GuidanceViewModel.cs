@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -34,7 +35,8 @@ public enum GuidanceSection
 public sealed partial class GuidanceViewModel : ObservableObject
 {
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible), nameof(NoCorpora),
+    [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible),
+        nameof(SettingsLinkVisible),
         nameof(QueryBoxEnabled), nameof(SearchEnabled))]
     [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
     public partial GuidanceReadiness Readiness { get; private set; } = GuidanceReadiness.Loading;
@@ -63,11 +65,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [ObservableProperty]
     public partial bool NotStored { get; private set; }
 
-    /// <summary>Who the shown guidance is from: the attributions of corpora with a card.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AttributionVisible))]
-    public partial string Attribution { get; private set; } = "";
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchEnabled))]
     [NotifyCanExecuteChangedFor(nameof(SearchQueryCommand))]
@@ -83,6 +80,15 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(QueryCaption), nameof(QueryCaptionVisible))]
     public partial bool QueryFailed { get; private set; }
 
+    /// <summary>"found in 0.4 s" for the search that put the cards on screen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FoundInVisible))]
+    public partial string FoundIn { get; private set; } = "";
+
+    /// <summary>The note sentence under the pointer, for the note editor to light.</summary>
+    [ObservableProperty]
+    public partial string Hovered { get; set; } = "";
+
     /// <summary>A typed query's cards while one shows; otherwise the note's.</summary>
     public ObservableCollection<GuidanceCard> Cards { get; } = [];
 
@@ -91,8 +97,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public Func<string, Task>? SearchQueryRequested { get; set; }
 
-    private List<GuidanceCard> _noteCards = [];
-    private List<GuidanceCard>? _queryCards;
+    private readonly Stopwatch _noteClock = new();
+    private readonly Stopwatch _queryClock = new();
+    private List<GuidanceRecommendation> _noteResults = [];
+    private List<GuidanceRecommendation>? _queryResults;
     private string _queryText = "";
 
     public bool Visible => Section != GuidanceSection.Hidden;
@@ -103,14 +111,32 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public bool NotSearched => Section == GuidanceSection.NotSearched;
 
-    public bool NoCorpora => Readiness == GuidanceReadiness.NoCorpus;
+    public bool SettingsLinkVisible =>
+        Readiness is GuidanceReadiness.NoCorpus or GuidanceReadiness.Unavailable;
 
     public bool HasRecord => Section is GuidanceSection.Results
         or GuidanceSection.NothingMatched or GuidanceSection.NoCorpusAtSearch;
 
     public bool CardsVisible => Cards.Count > 0;
 
-    public bool AttributionVisible => Attribution.Length > 0;
+    public bool LimitationVisible => Cards.Count > 0;
+
+    public bool FoundInVisible => FoundIn.Length > 0;
+
+    /// <summary>"2 guidelines · 3 recommendations" for the cards on screen.</summary>
+    public string Summary
+    {
+        get
+        {
+            if (Cards.Count == 0)
+            {
+                return "";
+            }
+
+            var found = Cards.Sum(c => c.Recommendations.Count);
+            return $"{Count(Cards.Count, "guideline")} · {Count(found, "recommendation")}";
+        }
+    }
 
     public bool SearchAgainVisible => Stale && !Searching;
 
@@ -132,27 +158,28 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public string StateCaption => Section switch
     {
         GuidanceSection.Hidden or GuidanceSection.Results => "",
-        GuidanceSection.NothingMatched => "Nothing in the installed guidance matches this note",
+        GuidanceSection.NothingMatched => "Nothing came close enough to show. "
+            + "The installed guidance may still cover this condition.",
         GuidanceSection.NoCorpusAtSearch =>
-            "No guideline documents were installed when this note was searched",
-        GuidanceSection.Failed => "Guidance could not be searched - see the status bar",
+            "No guidance was installed when this note was searched.",
+        GuidanceSection.Failed => "Guidance could not be searched.",
         _ when Readiness != GuidanceReadiness.Ready => Readiness switch
         {
             GuidanceReadiness.Loading => "Loading the guidance model",
-            GuidanceReadiness.NoCorpus => "No guideline documents are installed",
-            _ => "Guidance is unavailable on this computer - see Settings",
+            GuidanceReadiness.NoCorpus => "No guidance is installed on this device.",
+            _ => "Guidance is unavailable on this device.",
         },
         GuidanceSection.FollowsNote => "Guidance follows the note",
-        GuidanceSection.Searching => "Searching the installed guidance",
+        GuidanceSection.Searching => "Finding guidance",
         _ => "Guidance was not searched for this consultation",
     };
 
     public string QueryCaption => QuerySearching ? "Searching"
-        : QueryFailed ? "Search failed - see the status bar"
-        : _queryCards is null ? ""
-        : _queryCards.Count switch
+        : QueryFailed ? "Search failed."
+        : _queryResults is null ? ""
+        : _queryResults.Count switch
         {
-            0 => "No match in the installed guidance",
+            0 => "Nothing came close enough to show.",
             1 => "1 result",
             var n => $"{n} results",
         };
@@ -170,9 +197,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
     private Task SearchQuery()
     {
         _queryText = Query.Trim();
-        _queryCards = null;
+        _queryResults = null;
         QueryFailed = false;
         QuerySearching = true;
+        _queryClock.Restart();
         QueryChanged();
         return SearchQueryRequested?.Invoke(_queryText) ?? Task.CompletedTask;
     }
@@ -181,18 +209,19 @@ public sealed partial class GuidanceViewModel : ObservableObject
     private void ClearQuery()
     {
         _queryText = "";
-        _queryCards = null;
+        _queryResults = null;
         QuerySearching = false;
         QueryFailed = false;
+        FoundIn = "";
         QueryChanged();
     }
 
     public void Reset()
     {
-        _noteCards = [];
+        _noteResults = [];
         Stale = false;
         NotStored = false;
-        Attribution = "";
+        FoundIn = "";
         Query = "";
         Section = GuidanceSection.Hidden;
         ClearQuery();
@@ -201,10 +230,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
     /// <summary>The note is being written; its search follows.</summary>
     public void NoteStarted()
     {
-        _noteCards = [];
+        _noteResults = [];
         Stale = false;
         NotStored = false;
-        Attribution = "";
+        FoundIn = "";
         Section = GuidanceSection.FollowsNote;
         ShowCards();
     }
@@ -215,6 +244,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         if (Section == GuidanceSection.FollowsNote)
         {
             Section = GuidanceSection.Searching;
+            _noteClock.Restart();
         }
     }
 
@@ -225,6 +255,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         Stale = false;
         Section = GuidanceSection.Searching;
+        _noteClock.Restart();
     }
 
     public void MarkStale()
@@ -239,11 +270,11 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public void LoadStored(JsonElement? guidance)
     {
         NotStored = false;
+        FoundIn = "";
         if (guidance is not { ValueKind: JsonValueKind.Object } record)
         {
-            _noteCards = [];
+            _noteResults = [];
             Stale = false;
-            Attribution = "";
             Section = GuidanceSection.NotSearched;
             ShowCards();
             return;
@@ -259,6 +290,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ApplyRecord(result);
         Stale = Flag(result, "stale");
         NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
+        FoundIn = Elapsed(_noteClock);
     }
 
     public void ApplyFailed() => Section = GuidanceSection.Failed;
@@ -271,9 +303,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
             return;
         }
 
-        _queryCards = ReadCards(result);
+        _queryResults = ReadResults(result, false);
         QuerySearching = false;
         QueryFailed = false;
+        FoundIn = Elapsed(_queryClock);
         QueryChanged();
     }
 
@@ -333,7 +366,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         if (Searching)
         {
-            Section = _noteCards.Count > 0
+            Section = _noteResults.Count > 0
                 ? GuidanceSection.Results
                 : GuidanceSection.NotSearched;
         }
@@ -343,9 +376,8 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     private void ApplyRecord(JsonElement record)
     {
-        _noteCards = ReadCards(record);
-        Attribution = string.Join(" · ", Attributions(record, _noteCards));
-        Section = _noteCards.Count > 0 ? GuidanceSection.Results
+        _noteResults = ReadResults(record, true);
+        Section = _noteResults.Count > 0 ? GuidanceSection.Results
             : SearchedCount(record) > 0 ? GuidanceSection.NothingMatched
             : GuidanceSection.NoCorpusAtSearch;
         ShowCards();
@@ -362,27 +394,40 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ShowCards();
     }
 
-    // A typed query stands in for the note's cards until it is cleared. The
-    // note's keep result order within each sentence, whole-note matches last
+    // A typed query stands in for the note's cards until it is cleared. Whole-note
+    // matches sort after the sentences, then each guideline takes one card
     private void ShowCards()
     {
         Cards.Clear();
-        IEnumerable<GuidanceCard> shown = QueryShown
-            ? _queryCards ?? []
-            : _noteCards
-                .GroupBy(c => c.Trigger, StringComparer.Ordinal)
-                .OrderBy(g => g.Key.Length == 0 ? 1 : 0)
-                .SelectMany(g => g);
-        foreach (var card in shown)
+        IEnumerable<GuidanceRecommendation> shown = QueryShown
+            ? _queryResults ?? []
+            : _noteResults.OrderBy(r => r.Trigger.Length == 0 ? 1 : 0);
+        foreach (var card in GuidanceCard.Group(shown))
         {
             Cards.Add(card);
         }
 
         OnPropertyChanged(nameof(CardsVisible));
+        OnPropertyChanged(nameof(LimitationVisible));
+        OnPropertyChanged(nameof(Summary));
+    }
+
+    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
+
+    // A search the clock never timed, such as a stored record, shows nothing
+    private static string Elapsed(Stopwatch clock)
+    {
+        if (!clock.IsRunning)
+        {
+            return "";
+        }
+
+        clock.Stop();
+        return $"found in {clock.Elapsed.TotalSeconds:0.0} s";
     }
 
     // The source label needs the corpus name, which only the searched list carries
-    private static List<GuidanceCard> ReadCards(JsonElement record)
+    private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var corpus in Searched(record))
@@ -390,29 +435,18 @@ public sealed partial class GuidanceViewModel : ObservableObject
             names[GuidanceCard.Field(corpus, "id")] = GuidanceCard.Field(corpus, "name");
         }
 
-        var cards = new List<GuidanceCard>();
+        var results = new List<GuidanceRecommendation>();
         if (record.TryGetProperty("shown", out var shown) && shown.ValueKind == JsonValueKind.Array)
         {
             foreach (var result in shown.EnumerateArray())
             {
                 var label = GuidanceCard.Field(result, "source") == "nice" ? "NICE"
                     : names.GetValueOrDefault(GuidanceCard.Field(result, "corpus"), "");
-                cards.Add(GuidanceCard.From(result, label));
+                results.Add(GuidanceRecommendation.From(result, label, fromNote));
             }
         }
 
-        return cards;
-    }
-
-    // Distinct, in searched order, for the corpora that put a card on screen
-    private static IEnumerable<string> Attributions(JsonElement record, List<GuidanceCard> cards)
-    {
-        var shown = cards.Select(c => c.Corpus).ToHashSet(StringComparer.Ordinal);
-        return Searched(record)
-            .Where(c => shown.Contains(GuidanceCard.Field(c, "id")))
-            .Select(c => GuidanceCard.Field(c, "attribution"))
-            .Where(a => a.Length > 0)
-            .Distinct(StringComparer.Ordinal);
+        return results;
     }
 
     private static List<JsonElement> Searched(JsonElement record) =>

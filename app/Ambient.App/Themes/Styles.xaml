@@ -25,6 +25,12 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
+    <!-- The recommendation is the body of a guidance card -->
+    <Style x:Key="RecommendationText" TargetType="TextBlock"
+           BasedOn="{StaticResource BodyText}">
+        <Setter Property="LineHeight" Value="22" />
+    </Style>
+
     <Style x:Key="CaptionText" TargetType="TextBlock"
            BasedOn="{StaticResource CaptionTextBlockStyle}">
         <Setter Property="Foreground" Value="{ThemeResource MutedTextBrush}" />

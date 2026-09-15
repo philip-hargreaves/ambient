@@ -76,6 +76,8 @@
                                             Text="&#x2022;  Automatic transcription, drafting and translation make mistakes - missed words, wrong speaker labels, wording that changes meaning. Ambient is built on the principle that a clinician checks every document against what was actually said." />
                                         <TextBlock TextWrapping="Wrap"
                                             Text="&#x2022;  Nothing Ambient produces is a substitute for clinical judgement; responsibility for any clinical record always rests with a clinician." />
+                                        <TextBlock TextWrapping="Wrap"
+                                            Text="&#x2022;  Guidelines shown under a note are matched to it by wording and are there for review. Nothing from them enters the note." />
                                         <TextBlock FontWeight="SemiBold" Margin="0,8,0,0" Text="Privacy" />
                                         <TextBlock TextWrapping="Wrap"
                                             Text="Everything runs on device. Audio, transcripts, notes and translations are processed and stored locally; nothing leaves the device." />

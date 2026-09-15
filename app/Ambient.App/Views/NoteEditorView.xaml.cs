@@ -19,6 +19,13 @@ public sealed partial class NoteEditorView : UserControl
         Select(DetailBox, ViewModel.Detail);
         GuidanceHost.Content = guidance;
         _fit = new TabFit(NoteBox, 0.5);
+        guidance.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GuidanceViewModel.Hovered))
+            {
+                LightSentence(guidance.ViewModel.Hovered);
+            }
+        };
         // A stored session brings its own options; the combos follow
         ViewModel.PropertyChanged += (_, e) =>
         {
@@ -44,6 +51,21 @@ public sealed partial class NoteEditorView : UserControl
     public void FitTabContent(TabView tabs) => _fit.Fit(tabs);
 
     public void FollowContent() => _fit.Follow();
+
+    // The hovered card's sentence, lit in the read-only note. An editor in
+    // use keeps its own selection
+    private void LightSentence(string sentence)
+    {
+        if (ViewModel.NoteEditing)
+        {
+            return;
+        }
+
+        var at = sentence.Length > 0
+            ? NoteBox.Text.IndexOf(sentence, StringComparison.Ordinal)
+            : -1;
+        NoteBox.Select(Math.Max(at, 0), at < 0 ? 0 : sentence.Length);
+    }
 
     // The mode must be visible: an accent border while editing, the flat
     // document look otherwise
