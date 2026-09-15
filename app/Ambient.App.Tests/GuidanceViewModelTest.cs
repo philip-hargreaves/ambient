@@ -164,6 +164,7 @@ public class GuidanceViewModelTest
             "Fictional inflammatory joint disease: assessment and management", card.Title);
         Assert.Equal("Updated 12 Oct 2020 · 1 recommendation", card.Meta);
         Assert.Equal("NICE · FX100", card.Chip);
+        Assert.Equal("nice", card.Source);
         var found = card.Recommendations.Single();
         Assert.Equal("FX100 1.1.1", found.Reference);
         Assert.Equal("[2009, amended 2018]", found.Tag);

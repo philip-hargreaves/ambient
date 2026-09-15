@@ -81,6 +81,9 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
 
     public string SourceLabel => First.SourceLabel;
 
+    /// <summary>The corpus kind on the wire: nice, text or upload.</summary>
+    public string Source => First.Source;
+
     /// <summary>
     /// "NICE · NG100", a text corpus by name, or the code when no source was named.
     /// </summary>
