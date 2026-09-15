@@ -41,12 +41,15 @@ void SynthesiseModel(const std::filesystem::path& dir, const std::string& device
         std::make_shared<ov::Model>(ov::OutputVector{doubled}, ov::ParameterVector{input});
     ov::serialize(model, (dir / "model.xml").string(), (dir / "model.bin").string());
 
+    // Sizes as the shipped manifests carry them. The load check is the size
     std::ofstream manifest(dir / "manifest.json");
     manifest << "{\"manifestVersion\": 1, \"id\": \"selftest\", \"task\": \"selftest\","
              << " \"tier\": \"default\", \"licence\": \"MIT\","
              << " \"runtime\": {\"device\": \"" << device << "\"}, \"files\": {"
              << "\"model.xml\": \"" << Sha256File(dir / "model.xml") << "\","
-             << "\"model.bin\": \"" << Sha256File(dir / "model.bin") << "\"}}";
+             << "\"model.bin\": \"" << Sha256File(dir / "model.bin") << "\"}, \"bytes\": {"
+             << "\"model.xml\": " << std::filesystem::file_size(dir / "model.xml") << ","
+             << "\"model.bin\": " << std::filesystem::file_size(dir / "model.bin") << "}}";
 }
 
 TEST(OvRuntime, ResolvesVerifiesCompilesAndInfersOnTheIntelGpu) {
@@ -71,7 +74,7 @@ TEST(OvRuntime, ResolvesVerifiesCompilesAndInfersOnTheIntelGpu) {
     }
 }
 
-TEST(OvRuntime, ATamperedModelNeverReachesCompilation) {
+TEST(OvRuntime, AModelFileOfTheWrongSizeNeverReachesCompilation) {
     TempRoot root;
     SynthesiseModel(root.path / "selftest", "GPU");
     {

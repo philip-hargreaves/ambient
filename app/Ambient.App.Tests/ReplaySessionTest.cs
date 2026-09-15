@@ -64,13 +64,13 @@ public class ReplaySessionTest
             await Task.Delay(TimeSpan.FromSeconds(20));
             Assert.Equal(pidAtStart, host.EnginePid);
 
-            // A silent wav has no transcript, so the real note lane reports
-            // failure; either signal proves the pipeline answered
+            // A silent wav has no transcript, so the real note lane refuses
+            // or fails. Any of the three proves the pipeline answered
             var noteDone = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             connection.NotificationReceived += (method, _) =>
             {
-                if (method is "note/ready" or "note/failed")
+                if (method is "note/ready" or "note/failed" or "note/refused")
                 {
                     noteDone.TrySetResult();
                 }
