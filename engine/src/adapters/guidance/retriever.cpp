@@ -17,6 +17,7 @@ Corpus Describe(const CorpusInfo& info) {
     c.name = info.name;
     c.licence = info.licence;
     c.attribution = info.attribution;
+    c.label = info.label;
     c.source = info.source;
     c.embedder = info.embedder_id;
     c.sha256 = info.sha256;

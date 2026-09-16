@@ -14,6 +14,7 @@ public class GuidanceViewModelTest
         name = "Fixture guidance corpus",
         licence = "invented",
         attribution = "Fixture attribution",
+        label = "NICE",
         source = "text",
         embedder = "gte-large-int8",
         sha256 = "",
@@ -44,7 +45,7 @@ public class GuidanceViewModelTest
         };
 
     private static GuidanceRecommendation Found(object result) =>
-        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true);
+        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true, true);
 
     private static readonly object DocumentCorpus = new
     {

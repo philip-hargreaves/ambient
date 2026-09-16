@@ -22,6 +22,7 @@ struct CorpusInfo {
     std::string name;
     std::string licence;
     std::string attribution;
+    std::string label;
     std::string source;
     std::string embedder_id;
     std::string embedder_rev;

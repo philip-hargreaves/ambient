@@ -36,6 +36,7 @@ json ToJson(const Corpus& c) {
                 {"name", c.name},
                 {"licence", c.licence},
                 {"attribution", c.attribution},
+                {"label", c.label},
                 {"source", c.source},
                 {"embedder", c.embedder},
                 {"sha256", c.sha256},
@@ -82,6 +83,7 @@ Corpus CorpusFromJson(const json& j) {
     c.name = Str(j, "name");
     c.licence = Str(j, "licence");
     c.attribution = Str(j, "attribution");
+    c.label = Str(j, "label");
     c.source = Str(j, "source");
     c.embedder = Str(j, "embedder");
     c.sha256 = Str(j, "sha256");

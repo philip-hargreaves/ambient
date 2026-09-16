@@ -33,7 +33,6 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                  const std::vector<Chunk>& chunks, std::span<const float> vectors) {
     Require(!spec.id.empty() && !spec.embedder.id.empty() && spec.embedder.dim > 0,
             "spec incomplete");
-    Require(spec.source == "nice" || spec.source == "text", "source must be nice or text");
     Require(vectors.size() == chunks.size() * static_cast<std::size_t>(spec.embedder.dim),
             "vectors do not match chunks by dim");
     const auto dim = static_cast<std::size_t>(spec.embedder.dim);
@@ -141,6 +140,7 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                             {"name", spec.name},
                             {"licence", spec.licence},
                             {"attribution", spec.attribution},
+                            {"label", spec.label},
                             {"source", spec.source},
                             {"embedder_id", spec.embedder.id},
                             {"embedder_rev", spec.embedder.rev},

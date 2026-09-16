@@ -664,6 +664,7 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     structured.name = "Fixture guidance corpus (structured)";
     structured.licence = "invented";
     structured.attribution = "none";
+    structured.label = "NICE";
     structured.source = "nice";
     structured.embedder = "gte-large-int8";
     structured.sha256 = "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f";

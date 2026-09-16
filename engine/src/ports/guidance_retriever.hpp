@@ -14,7 +14,8 @@ struct Corpus {
     std::string name;
     std::string licence;
     std::string attribution;
-    std::string source;  // "nice", "text", "upload"
+    std::string label;   // the chip's name for the publisher, "NICE", empty when the name serves
+    std::string source;  // the importer that built it, "upload" for an added document
     std::string embedder;
     std::string sha256;
     int chunks = 0;
@@ -33,8 +34,8 @@ struct Result {
     std::string text;
     std::string url;
     std::string last_updated;  // ISO 8601, from the guideline
-    std::string update_tag;    // NICE change marker on the recommendation
-    std::string source;        // the corpus source, "nice"/"text"/"upload"
+    std::string update_tag;    // the guideline's change marker, "2009, amended 2018"
+    std::string source;        // the corpus's source, "upload" for an added document
     std::string citation;      // code, number and title on one line, for the clipboard
     double score = 0;
     std::string trigger;  // the note sentence that found it, empty for the whole note or a query

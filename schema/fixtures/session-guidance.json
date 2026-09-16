@@ -34,6 +34,7 @@
                     "name": "Fixture guidance corpus (structured)",
                     "licence": "invented",
                     "attribution": "none",
+                    "label": "NICE",
                     "source": "nice",
                     "embedder": "gte-large-int8",
                     "sha256": "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f",

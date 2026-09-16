@@ -16,7 +16,8 @@ struct CorpusSpec {
     std::string name;
     std::string licence;
     std::string attribution;
-    std::string source;  // "nice" or "text"
+    std::string label;   // the chip's name for the publisher, optional
+    std::string source;  // the importer, "nice" or "text"
     EmbedderIdentity embedder;
     std::string built_at;  // ISO 8601 UTC
     std::string builder;

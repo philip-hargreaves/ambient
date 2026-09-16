@@ -52,6 +52,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         info.name = Str(manifest, "name");
         info.licence = Str(manifest, "licence");
         info.attribution = Str(manifest, "attribution");
+        info.label = manifest.value("label", std::string());
         info.embedder_id = Str(manifest, "embedder_id");
         info.embedder_rev = Str(manifest, "embedder_rev");
         info.built_at = Str(manifest, "built_at");

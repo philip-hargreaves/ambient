@@ -8,9 +8,11 @@ public sealed record GuidanceRecommendation(
     string Corpus, string ChunkId, string Code, string Number, string Title, string Section,
     string Text, string Link, string LastUpdated, string UpdateTag, string Source,
     string Citation, double Score, string Trigger, string SourceLabel, bool FromNote,
-    long Document = 0, int Page = 0, int Pages = 0)
+    long Document = 0, int Page = 0, int Pages = 0, bool Labelled = false)
 {
-    public static GuidanceRecommendation From(JsonElement result, string sourceLabel, bool fromNote)
+    /// <summary>Labelled when the corpus manifest names its publisher for the chip.</summary>
+    public static GuidanceRecommendation From(
+        JsonElement result, string sourceLabel, bool fromNote, bool labelled = false)
     {
         return new(
             Field(result, "corpus"), Field(result, "chunkId"), Field(result, "code"),
@@ -19,7 +21,7 @@ public sealed record GuidanceRecommendation(
             Field(result, "updateTag"), Field(result, "source"), Field(result, "citation"),
             Numeric(result, "score"), Field(result, "trigger"), sourceLabel, fromNote,
             Integer(result, "document"), (int)Numeric(result, "page"),
-            (int)Numeric(result, "pages"));
+            (int)Numeric(result, "pages"), labelled);
     }
 
     /// <summary>A passage from a document the clinician added.</summary>
@@ -133,14 +135,17 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
 
     public string SourceLabel => First.SourceLabel;
 
-    /// <summary>The corpus kind on the wire: nice, text or upload.</summary>
+    public bool Labelled => First.Labelled;
+
+    /// <summary>The corpus source on the wire, upload for an added document.</summary>
     public string Source => First.Source;
 
     /// <summary>
-    /// "Added document", "NICE · NG100", a text corpus by name, or the code alone.
+    /// "Added document", the manifest's label with the code, "NICE · NG100", a corpus by
+    /// name, or the code alone.
     /// </summary>
     public string Chip => FromDocument ? "Added document"
-        : First.Source == "nice" && SourceLabel.Length > 0 ? $"{SourceLabel} · {Code}"
+        : First.Labelled && Code.Length > 0 ? $"{SourceLabel} · {Code}"
         : SourceLabel.Length > 0 ? SourceLabel
         : Code;
 

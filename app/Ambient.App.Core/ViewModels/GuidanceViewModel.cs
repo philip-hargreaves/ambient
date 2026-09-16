@@ -452,7 +452,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
             else if (documents)
             {
                 documents = false;
-                var from = card.SourceLabel.Length > 0 ? card.SourceLabel : "installed guidance";
+                var from = card.Labelled ? card.SourceLabel : "installed guidance";
                 Cards.Add(card with { Divider = $"From {from}" });
             }
             else
@@ -484,9 +484,12 @@ public sealed partial class GuidanceViewModel : ObservableObject
     private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)
     {
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var corpus in Searched(record))
         {
-            names[GuidanceCard.Field(corpus, "id")] = GuidanceCard.Field(corpus, "name");
+            var id = GuidanceCard.Field(corpus, "id");
+            names[id] = GuidanceCard.Field(corpus, "name");
+            labels[id] = GuidanceCard.Field(corpus, "label");
         }
 
         var results = new List<GuidanceRecommendation>();
@@ -494,9 +497,12 @@ public sealed partial class GuidanceViewModel : ObservableObject
         {
             foreach (var result in shown.EnumerateArray())
             {
-                var label = GuidanceCard.Field(result, "source") == "nice" ? "NICE"
-                    : names.GetValueOrDefault(GuidanceCard.Field(result, "corpus"), "");
-                results.Add(GuidanceRecommendation.From(result, label, fromNote));
+                var corpus = GuidanceCard.Field(result, "corpus");
+                var label = labels.GetValueOrDefault(corpus, "");
+                var labelled = label.Length > 0;
+                results.Add(GuidanceRecommendation.From(
+                    result, labelled ? label : names.GetValueOrDefault(corpus, ""), fromNote,
+                    labelled));
             }
         }
 
