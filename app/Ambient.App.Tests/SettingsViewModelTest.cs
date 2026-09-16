@@ -614,7 +614,7 @@ public class SettingsViewModelTest
     }
 
     private static object Document(long id, string name, string state, int chunks = 0,
-        string? error = null) => new
+        string? error = null, int pages = 0, int pagesWithoutText = 0) => new
     {
         id,
         name,
@@ -624,8 +624,8 @@ public class SettingsViewModelTest
         addedAt = "2026-09-15T09:12:44Z",
         indexedAt = state == "ready" ? "2026-09-15T09:13:02Z" : null,
         bytes = 1000,
-        pages = 0,
-        pagesWithoutText = 0,
+        pages,
+        pagesWithoutText,
         chunks,
     };
 
@@ -675,8 +675,25 @@ public class SettingsViewModelTest
         var row = Assert.Single(settings.Documents);
         Assert.Equal("PMR pathway", row.Name);
         Assert.True(row.Working);
+        Assert.Equal("1 already added · 1 skipped, not PDF or text", settings.DocumentsCaption);
+    }
+
+    [Fact]
+    public void RowsSayWhyAPdfFailedAndHowLongAReadyOneIs()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(1, "Scan", "failed", error: "noText", pages: 40,
+            pagesWithoutText: 38));
+        engine.GuidanceDocuments.Add(Document(2, "Locked", "failed", error: "password"));
+        engine.GuidanceDocuments.Add(Document(3, "PMR", "ready", 310, pages: 41));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        Assert.Equal(["Locked", "PMR", "Scan"], settings.Documents.Select(d => d.Name));
+        Assert.Equal("Cannot be read: the PDF is password protected.", settings.Documents[0].Detail);
+        Assert.Equal("41 pages · 310 passages · added 15 Sep 2026", settings.Documents[1].Detail);
         Assert.Equal(
-            "1 already added · 1 skipped, not text or Markdown", settings.DocumentsCaption);
+            "Cannot be searched: 38 of 40 pages are images with no text.",
+            settings.Documents[2].Detail);
     }
 
     [Fact]

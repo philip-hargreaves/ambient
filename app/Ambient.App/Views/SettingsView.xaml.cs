@@ -78,6 +78,7 @@ public sealed partial class SettingsView : UserControl
             {
                 SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
             };
+            picker.FileTypeFilter.Add(".pdf");
             picker.FileTypeFilter.Add(".txt");
             picker.FileTypeFilter.Add(".md");
             if (!BindToWindow(picker))

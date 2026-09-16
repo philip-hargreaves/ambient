@@ -582,7 +582,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             parts.Add(group.Key switch
             {
                 "duplicate" => $"{n} already added",
-                "unsupported" => $"{n} skipped, not text or Markdown",
+                "unsupported" => $"{n} skipped, not PDF or text",
                 "noSpace" => $"{n} skipped, not enough free space",
                 _ => $"{n} could not be read",
             });

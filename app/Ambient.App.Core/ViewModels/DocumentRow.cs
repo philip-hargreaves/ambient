@@ -84,9 +84,14 @@ public sealed partial class DocumentRow : ObservableObject
         GuidanceCard.Field(document, "state") switch
         {
             "ready" => Ready(document),
-            "failed" => GuidanceCard.Field(document, "error") == "patientData"
-                ? "Not added: this looks like a document about a patient."
-                : "Could not be read. Remove it and add the file again.",
+            "failed" => GuidanceCard.Field(document, "error") switch
+            {
+                "patientData" => "Not added: this looks like a document about a patient.",
+                "password" => "Cannot be read: the PDF is password protected.",
+                "noText" => $"Cannot be searched: {Int(document, "pagesWithoutText")} of "
+                    + $"{Int(document, "pages")} pages are images with no text.",
+                _ => "Could not be read. Remove it and add the file again.",
+            },
             "stale" => "Added with an earlier guidance model. Remove it and add the file again.",
             _ => "Waiting",
         };
