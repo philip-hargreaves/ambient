@@ -250,6 +250,11 @@ add_dependencies(ambient_engine ambient_ingest_host)
 # Builds guidance corpora with the staged embedder; deployed beside the engine
 add_executable(ambient_index src/index_main.cpp)
 target_link_libraries(ambient_index PRIVATE ambient_guidance ambient_models ambient_warnings)
+
+# Prints a PDF's units for the plan's gates on real documents. A dev tool, not deployed
+add_executable(ambient_units src/units_main.cpp)
+target_link_libraries(ambient_units PRIVATE ambient_guidance nlohmann_json::nlohmann_json ambient_warnings)
+add_dependencies(ambient_units ambient_ingest_host)
 add_dependencies(ambient_index ov_engine_runtime)
 add_dependencies(ambient_engine ambient_index)
 

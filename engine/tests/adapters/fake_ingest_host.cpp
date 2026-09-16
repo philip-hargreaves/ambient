@@ -22,7 +22,7 @@ namespace {
 const char* const kPages =
     R"({"pages":[{"width":595,"height":842,"rotation":0,"images":0,"lines":[)"
     R"({"text":"1.1 Offer allopurinol after a first attack.","box":[72,72,400,84]},)"
-    R"({"text":"Check urate six weeks after any dose change.","box":[72,86,380,98]}]},)"
+    R"({"text":"1.2 Check urate six weeks after any dose change.","box":[72,100,560,112]}]},)"
     R"({"width":595,"height":842,"rotation":0,"images":1,"lines":[]}]})";
 
 }  // namespace

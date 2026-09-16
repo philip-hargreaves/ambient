@@ -1,12 +1,15 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "core/guidance_query.hpp"
+#include "core/page_clean.hpp"
 #include "core/page_text.hpp"
 #include "core/recommendation_marks.hpp"
+#include "core/reference_tail.hpp"
 
 namespace ambient::guidance {
 
@@ -27,10 +30,24 @@ inline constexpr int kSplitWords = 150;
 
 namespace detail {
 
-// Short, unnumbered and not a sentence: a title, a caption or a label
-inline bool IsHeading(const Paragraph& paragraph) {
+inline std::string WithoutStop(std::string_view s) {
+    while (!s.empty() && (s.back() == '.' || s.back() == ':' || s.back() == ' ')) {
+        s.remove_suffix(1);
+    }
+    return std::string(s);
+}
+
+// A bullet or a lower-case start carries a recommendation's own list on
+inline bool Continues(std::string_view text) {
+    return text.starts_with("\xE2\x80\xA2") || text.starts_with("\xE2\x80\x93") ||
+           text.starts_with('-') || text.starts_with('*') ||
+           (!text.empty() && std::islower(static_cast<unsigned char>(text.front())));
+}
+
+// Short, without a mark, a sentence end or a bullet: a title, a caption or a label
+inline bool IsHeading(const Paragraph& paragraph, Scheme scheme) {
     return WordCount(paragraph.text) < kHeadingWords && !EndsSentence(paragraph.text) &&
-           !StartsRecommendation(paragraph.text);
+           MarkOf(paragraph.text, scheme).empty() && !Continues(paragraph.text);
 }
 
 // A long paragraph in pieces of whole lines, each closed at a sentence end
@@ -57,73 +74,153 @@ inline std::vector<Paragraph> Split(const Paragraph& paragraph) {
     return out;
 }
 
+// Whether a token closes the unit within the paragraphs ahead, before a
+// heading, a mark or kMaxUnitWords, so a graded table row stays whole
+inline bool TokenAhead(const std::vector<Paragraph>& paragraphs, std::size_t from, int words,
+                       Scheme scheme) {
+    for (std::size_t i = from; i < paragraphs.size(); ++i) {
+        const auto& paragraph = paragraphs[i];
+        if (i > from && (IsHeading(paragraph, scheme) || !MarkOf(paragraph.text, scheme).empty())) {
+            return false;
+        }
+        words += WordCount(paragraph.text);
+        if (words > kMaxUnitWords) return false;
+        if (EndsWithToken(paragraph.text)) return true;
+    }
+    return false;
+}
+
 }  // namespace detail
 
-// Paragraphs in reading order become units: a heading labels the next unit
-// and its lines join that unit's, a recommendation starts its own, short
-// paragraphs merge forward to kMinUnitWords, and a paragraph past
-// kMaxUnitWords is split
+// The scheme most paragraphs open with, counting a mark only when it stands
+// alone or a capital follows, so "R33, R39" in a list of amendments does not
+inline Scheme DetectScheme(const std::vector<Paragraph>& paragraphs) {
+    static constexpr Scheme kAll[] = {Scheme::kDotted,   Scheme::kRoman, Scheme::kBracketed,
+                                      Scheme::kNumbered, Scheme::kWord,  Scheme::kLetterR};
+    Scheme best = Scheme::kNone;
+    int best_count = kSchemeMarks - 1;
+    for (const auto scheme : kAll) {
+        int count = 0;
+        for (const auto& paragraph : paragraphs) {
+            const auto mark = MarkOf(paragraph.text, scheme);
+            if (mark.empty()) continue;
+            const auto rest = detail::Trim(std::string_view(paragraph.text).substr(mark.size()));
+            if (rest.empty() || std::isupper(static_cast<unsigned char>(rest[0])) ||
+                rest[0] == '"') {
+                ++count;
+            }
+        }
+        if (count > best_count) {
+            best = scheme;
+            best_count = count;
+        }
+    }
+    return best;
+}
+
+// Paragraphs in reading order become units. A heading or a bare mark labels
+// the next unit and its lines join that unit's. A marked paragraph opens a
+// unit that takes its own bullets, or in a document with closing tokens runs
+// to the paragraph ending with one. Unmarked paragraphs merge forward to
+// kMinUnitWords, and a paragraph past kMaxUnitWords is split
 inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& paragraphs) {
+    const auto scheme = DetectScheme(paragraphs);
+    int closed = 0;
+    for (const auto& paragraph : paragraphs) closed += EndsWithToken(paragraph.text);
+    const bool tokens = closed >= kTokenParagraphs;
+
     std::vector<Unit> out;
     Unit current;
     std::string heading;
-    const Paragraph* heading_paragraph = nullptr;
+    std::string number;
+    const Paragraph* label = nullptr;
     int words = 0;
     bool open = false;
+    bool marked = false;
     const auto close = [&] {
         if (open) out.push_back(std::move(current));
         current = Unit{};
         words = 0;
         open = false;
+        marked = false;
     };
-    const auto mark = [&](const Paragraph& paragraph) {
+    const auto mark_lines = [&](const Paragraph& paragraph) {
         for (const auto& line : paragraph.lines) {
             if (line.box.right > line.box.left) {
                 current.boxes.emplace_back(paragraph.page, line.box);
             }
         }
     };
-    const auto take = [&](const Paragraph& paragraph) {
+    const auto take = [&](const Paragraph& paragraph, std::string_view mark) {
         if (!open) {
             current.page = paragraph.page;
             current.section = heading;
-            current.number = LeadingNumber(paragraph.text);
-            if (heading_paragraph != nullptr) mark(*heading_paragraph);
+            current.number = number.empty() ? detail::WithoutStop(mark) : number;
+            marked = !current.number.empty();
+            if (label != nullptr) mark_lines(*label);
             heading.clear();
-            heading_paragraph = nullptr;
+            number.clear();
+            label = nullptr;
             open = true;
         } else {
             current.text += ' ';
         }
         current.text += paragraph.text;
-        mark(paragraph);
+        mark_lines(paragraph);
         words += detail::WordCount(paragraph.text);
     };
-    for (const auto& paragraph : paragraphs) {
-        if (detail::IsHeading(paragraph)) {
+    for (std::size_t i = 0; i < paragraphs.size(); ++i) {
+        const auto& paragraph = paragraphs[i];
+        auto mark = MarkOf(paragraph.text, scheme);
+        if (detail::IsHeading(paragraph, scheme)) {
             close();
-            heading_paragraph = &paragraph;
-            heading = paragraph.text;
-            while (!heading.empty() && (heading.back() == ':' || heading.back() == ' ')) {
-                heading.pop_back();
-            }
+            label = &paragraph;
+            heading = detail::WithoutStop(paragraph.text);
             continue;
         }
-        const bool recommendation = StartsRecommendation(paragraph.text);
-        if (recommendation || words >= kMinUnitWords) close();
+        if (!mark.empty() && mark.size() == paragraph.text.size()) {
+            close();
+            label = &paragraph;
+            number = detail::WithoutStop(mark);
+            continue;
+        }
+        if (!mark.empty()) {
+            close();
+        } else if (marked && !tokens) {
+            if (!detail::Continues(paragraph.text)) close();
+        } else if (words >= kMinUnitWords &&
+                   !(tokens && detail::TokenAhead(paragraphs, i, words, scheme))) {
+            close();
+        }
         if (detail::WordCount(paragraph.text) > kMaxUnitWords) {
             close();
             for (const auto& piece : detail::Split(paragraph)) {
-                take(piece);
+                take(piece, mark);
+                mark = {};
                 close();
             }
             continue;
         }
-        take(paragraph);
-        if (recommendation) close();
+        take(paragraph, mark);
+        if (tokens && EndsWithToken(paragraph.text)) close();
     }
     close();
     return out;
+}
+
+// From the host's pages to the units stored: cleaned, in paragraphs, the
+// reference tail dropped
+inline std::vector<Unit> UnitsFromPages(std::vector<Page>& pages) {
+    CleanPages(pages);
+    auto paragraphs = ParagraphsFromPages(pages);
+    DropReferenceTail(paragraphs);
+    return UnitsFromParagraphs(paragraphs);
+}
+
+inline std::vector<Unit> UnitsFromText(const std::string& text) {
+    auto paragraphs = ParagraphsFromText(text);
+    DropReferenceTail(paragraphs);
+    return UnitsFromParagraphs(paragraphs);
 }
 
 }  // namespace ambient::guidance

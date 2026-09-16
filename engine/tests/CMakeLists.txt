@@ -65,6 +65,8 @@ add_executable(engine_tests
     core/document_units_test.cpp
     core/page_text_test.cpp
     core/page_clean_test.cpp
+    core/recommendation_marks_test.cpp
+    core/reference_tail_test.cpp
     core/patient_screen_test.cpp
     adapters/capture_devices_test.cpp
     adapters/handlers_test.cpp

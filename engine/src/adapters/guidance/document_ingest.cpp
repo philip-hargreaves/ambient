@@ -8,7 +8,6 @@
 #include <system_error>
 
 #include "core/document_units.hpp"
-#include "core/page_clean.hpp"
 #include "core/patient_screen.hpp"
 #include "ports/store_error.hpp"
 
@@ -316,16 +315,15 @@ void DocumentIngest::Index(const Queued& item) {
         }
         Progress(id, "reading", 0, 0);
         std::vector<Page> pages;
-        std::vector<Paragraph> paragraphs;
+        std::vector<Unit> units;
         if (mime == kPdf) {
             pages = Extract(bytes);
-            CleanPages(pages);
-            paragraphs = ParagraphsFromPages(pages);
+            units = UnitsFromPages(pages);
         } else {
-            paragraphs = ParagraphsFromText(std::string(bytes.begin(), bytes.end()));
+            units = UnitsFromText(std::string(bytes.begin(), bytes.end()));
         }
         std::string text;
-        for (const auto& para : paragraphs) text += para.text + "\n\n";
+        for (const auto& unit : units) text += unit.text + "\n\n";
         const int page_count = static_cast<int>(pages.size());
         int pages_without_text = 0;
         for (const auto& page : pages) {
@@ -338,7 +336,6 @@ void DocumentIngest::Index(const Queued& item) {
             Notify(Store().Get(id));
             return;
         }
-        const auto units = UnitsFromParagraphs(paragraphs);
         if (units.empty() && page_count > 0) {
             std::lock_guard<std::mutex> lock(store_mutex_);
             Store().Fail(id, "noText", page_count, pages_without_text);

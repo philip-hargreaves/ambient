@@ -102,5 +102,80 @@ TEST(DocumentUnits, TextWithoutBoxesGivesUnitsWithoutBoxes) {
     EXPECT_TRUE(units[0].boxes.empty());
 }
 
+TEST(DocumentUnits, AMarkedRecommendationTakesItsBulletsAndNotTheNextSentence) {
+    const auto units = UnitsFromParagraphs(
+        {Para("1.2.3 Offer allopurinol to people with:"),
+         Para("\xE2\x80\xA2 two or more flares a year"), Para("\xE2\x80\xA2 tophi"),
+         Para("For a short explanation of why the committee made this recommendation, see the "
+              "rationale."),
+         Para("1.2.4 Consider febuxostat.")});
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[0].number, "1.2.3");
+    EXPECT_EQ(units[0].text,
+              "1.2.3 Offer allopurinol to people with: \xE2\x80\xA2 two or more flares a year "
+              "\xE2\x80\xA2 tophi");
+    EXPECT_EQ(units[1].number, "");
+    EXPECT_EQ(units[2].number, "1.2.4");
+}
+
+TEST(DocumentUnits, ANiceDateTagClosesTheRecommendationWithItsBulletsAndLastSentence) {
+    const auto units = UnitsFromParagraphs(
+        {Para("1.1.5 Refer the person for an assessment if 4 or more criteria are present:"),
+         Para("\xE2\x80\xA2 buttock pain"), Para("\xE2\x80\xA2 improvement with movement."),
+         Para("If exactly 3 of the criteria are present, perform an HLA-B27 test. [2017]"),
+         Para("For a short explanation of why the committee made this recommendation, see the "
+              "rationale."),
+         Para(
+             "1.1.6 Advise the person to seek repeat assessment if new symptoms develop. [2017]")});
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[0].number, "1.1.5");
+    EXPECT_TRUE(units[0].text.ends_with("perform an HLA-B27 test. [2017]"));
+    EXPECT_EQ(units[1].number, "");
+    EXPECT_EQ(units[2].number, "1.1.6");
+}
+
+TEST(DocumentUnits, AGradedRecommendationRunsToItsToken) {
+    const auto units = UnitsFromParagraphs(
+        {Para("(i) Offer urate lowering therapy after a first flare. LoE: Ia; SOR: 95% (range "
+              "80-100%)."),
+         Para("(ii) Start allopurinol at 100 mg"), Para("and titrate monthly. LoE: IIb; SOR: 90%."),
+         Para("Rationale"),
+         Para("Allopurinol is the first-line urate lowering therapy in most patients.")});
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[0].number, "(i)");
+    EXPECT_EQ(units[1].number, "(ii)");
+    EXPECT_EQ(units[1].text,
+              "(ii) Start allopurinol at 100 mg and titrate monthly. LoE: IIb; SOR: 90%.");
+    EXPECT_EQ(units[2].section, "Rationale");
+}
+
+TEST(DocumentUnits, ABareLabelNumbersTheNextUnitAndJoinsItsLines) {
+    const auto units = UnitsFromParagraphs(
+        {Para("Recommendation 3", 0, 0.30F, 0.32F),
+         Para("All people should be assessed for disease (GRADE 1C, SoA 98%).", 0, 0.34F, 0.40F),
+         Para("Recommendation 4", 0, 0.42F, 0.44F),
+         Para("Treat early (GRADE 2B, SoA 95%).", 0, 0.46F, 0.50F)});
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_EQ(units[0].number, "Recommendation 3");
+    EXPECT_EQ(units[0].text, "All people should be assessed for disease (GRADE 1C, SoA 98%).");
+    ASSERT_EQ(units[0].boxes.size(), 2u);
+    EXPECT_FLOAT_EQ(units[0].boxes[0].second.top, 0.30F);
+    EXPECT_EQ(units[1].number, "Recommendation 4");
+}
+
+TEST(DocumentUnits, AGradedRowWithoutMarksHoldsUntilItsToken) {
+    const auto units = UnitsFromParagraphs(
+        {Para("Offer sulfasalazine when methotrexate is contraindicated or not tolerated in people "
+              "with active disease despite other treatment options being considered carefully "
+              "first in every single case."),
+         Para("Review at three months (GRADE 2C, SoA 92%)."),
+         Para("Offer leflunomide as an alternative when sulfasalazine fails or is not tolerated by "
+              "the person after an adequate trial at a full dose for three months."),
+         Para("Review again (GRADE 2C, SoA 90%).")});
+    ASSERT_EQ(units.size(), 2u);
+    EXPECT_TRUE(units[0].text.ends_with("(GRADE 2C, SoA 92%)."));
+    EXPECT_TRUE(units[1].text.ends_with("(GRADE 2C, SoA 90%)."));
+}
+
 }  // namespace
 }  // namespace ambient::guidance
