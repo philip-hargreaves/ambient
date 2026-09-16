@@ -34,9 +34,22 @@ TEST(ReferenceTail, TheHeadingAndItsCitationsGoAndAnAppendixAfterThemStays) {
     paragraphs.push_back(Para("8 References"));
     const auto citations = Citations(8);
     paragraphs.insert(paragraphs.end(), citations.begin(), citations.end());
+    paragraphs.push_back(Para("2010;62:1060-8."));
+    paragraphs.push_back(Para("Nat Rev Rheumatol"));
+    paragraphs.push_back(
+        Para("46. de Man YA, Hazes JM, van der Heide H et al. Association of higher "
+             "rheumatoid arthritis disease activity during pregnancy with lower "
+             "birth weight and preterm delivery, results of a national prospective "
+             "study across many centres with"));
+    paragraphs.push_back(
+        Para("lower birth weight: results of a national prospective study. Arthritis "
+             "Rheum 2009;60:3196-206."));
+    paragraphs.push_back(
+        Para("9 Roddy E, Zhang W, Doherty M. Evidence-based guidelines. J Eval Clin "
+             "Pract 2006;12:347-52."));
     paragraphs.push_back(Para("Supplementary Table 1 Doses in pregnancy"));
     paragraphs.push_back(
-        Para("Hydroxychloroquine 400 mg daily is compatible (GRADE 1B, SoA 100%)."));
+        Para("1 Hydroxychloroquine 400 mg daily is compatible (GRADE 1B, SoA 100%)."));
     DropReferenceTail(paragraphs);
     ASSERT_EQ(paragraphs.size(), 32u);
     EXPECT_EQ(paragraphs[30].text, "Supplementary Table 1 Doses in pregnancy");
