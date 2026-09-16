@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ambient::guidance {
@@ -42,22 +43,39 @@ inline Box Union(const Box& a, const Box& b) {
             std::max(a.bottom, b.bottom)};
 }
 
-// Lines in the order the host gave them. A paragraph closes at the end of a
-// page, when the next line jumps back up the page, or when the gap down to it
-// is more than half a line
+namespace detail {
+
+// Closing quotes, brackets and spaces stripped, then a full stop, question or
+// exclamation mark
+inline bool EndsSentence(std::string_view s) {
+    while (!s.empty() && (s.back() == '"' || s.back() == '\'' || s.back() == ')' ||
+                          s.back() == ' ' || static_cast<unsigned char>(s.back()) > 127)) {
+        s.remove_suffix(1);
+    }
+    return !s.empty() && (s.back() == '.' || s.back() == '?' || s.back() == '!');
+}
+
+}  // namespace detail
+
+// Lines in the host's order, which is the reading order of the PDFs measured.
+// A paragraph closes at a gap of more than half a line or a jump back up the
+// page, unless it stopped mid-sentence and the next line begins in lower
+// case, which carries it across a column or a page
 inline std::vector<Paragraph> ParagraphsFromPages(const std::vector<Page>& pages) {
     std::vector<Paragraph> out;
+    int last_page = -1;
+    float last_bottom = 0;
+    float last_height = 0;
     for (std::size_t p = 0; p < pages.size(); ++p) {
-        bool open = false;
-        float last_bottom = 0;
-        float last_height = 0;
         for (const auto& line : pages[p].lines) {
             if (line.text.empty()) continue;
             const float height = line.box.bottom - line.box.top;
             const float gap = line.box.top - last_bottom;
-            const bool follows =
-                open && gap > -0.5F * height && gap <= 0.5F * std::max(height, last_height);
-            if (follows) {
+            const bool adjacent = static_cast<int>(p) == last_page && gap > -0.5F * height &&
+                                  gap <= 0.5F * std::max(height, last_height);
+            const bool runs_on = !out.empty() && !detail::EndsSentence(out.back().text) &&
+                                 std::islower(static_cast<unsigned char>(line.text.front()));
+            if (adjacent || runs_on) {
                 auto& para = out.back();
                 para.text += ' ';
                 para.text += line.text;
@@ -65,8 +83,8 @@ inline std::vector<Paragraph> ParagraphsFromPages(const std::vector<Page>& pages
                 para.lines.push_back(line);
             } else {
                 out.push_back({static_cast<int>(p), line.text, line.box, {line}});
-                open = true;
             }
+            last_page = static_cast<int>(p);
             last_bottom = line.box.bottom;
             last_height = height;
         }

@@ -27,14 +27,6 @@ inline constexpr int kSplitWords = 150;
 
 namespace detail {
 
-inline bool EndsSentence(std::string_view s) {
-    while (!s.empty() && (s.back() == '"' || s.back() == '\'' || s.back() == ')' ||
-                          s.back() == ' ' || static_cast<unsigned char>(s.back()) > 127)) {
-        s.remove_suffix(1);
-    }
-    return !s.empty() && (s.back() == '.' || s.back() == '?' || s.back() == '!');
-}
-
 // Short, unnumbered and not a sentence: a title, a caption or a label
 inline bool IsHeading(const Paragraph& paragraph) {
     return WordCount(paragraph.text) < kHeadingWords && !EndsSentence(paragraph.text) &&
