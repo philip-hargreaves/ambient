@@ -61,6 +61,9 @@ add_executable(engine_tests
     adapters/guidance_retriever_test.cpp
     adapters/upload_store_test.cpp
     adapters/document_ingest_test.cpp
+    adapters/ingest_host_test.cpp
+    core/document_units_test.cpp
+    core/page_text_test.cpp
     core/patient_screen_test.cpp
     adapters/capture_devices_test.cpp
     adapters/handlers_test.cpp
@@ -97,6 +100,16 @@ target_link_libraries(fake_note_host PRIVATE ambient_ipc ambient_models ambient_
 add_dependencies(engine_tests fake_note_host)
 target_compile_definitions(engine_tests PRIVATE
     AMBIENT_FAKE_NOTE_HOST="$<TARGET_FILE:fake_note_host>")
+
+# The ingest host's stand-in: canned pages, a chosen exit, a stall or garbage,
+# picked by the bytes it is given
+add_executable(fake_ingest_host
+    adapters/fake_ingest_host.cpp)
+target_link_libraries(fake_ingest_host PRIVATE ambient_warnings)
+add_dependencies(engine_tests fake_ingest_host ambient_ingest_host)
+target_compile_definitions(engine_tests PRIVATE
+    AMBIENT_FAKE_INGEST_HOST="$<TARGET_FILE:fake_ingest_host>"
+    AMBIENT_INGEST_HOST="$<TARGET_FILE:ambient_ingest_host>")
 target_link_libraries(engine_tests PRIVATE
     ambient_ipc ambient_audio ambient_diarisation ambient_guidance ambient_guidance_record
     ambient_models ambient_note ambient_storage ambient_transcription ambient_warnings

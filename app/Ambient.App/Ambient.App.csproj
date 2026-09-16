@@ -33,6 +33,8 @@
   </PropertyGroup>
   <ItemGroup Condition="Exists('$(EngineBinary)')">
     <Content Include="$(EngineBinary)" Link="ambient_engine.exe" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The PDF reader. Without it added PDFs are skipped -->
+    <Content Include="..\..\build\$(EnginePreset)\engine\ambient_ingest_host.exe" Link="ambient_ingest_host.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\build\$(EnginePreset)\engine\ambient_ingest_host.exe')" />
     <!-- The note worker; without it the engine writes notes in-process -->
     <Content Include="..\..\build\$(EnginePreset)\engine\ambient_note_host.exe" Link="ambient_note_host.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\build\$(EnginePreset)\engine\ambient_note_host.exe')" />
     <!-- The engine's OpenVINO runtime, deployed beside it by the CMake build -->

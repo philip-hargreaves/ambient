@@ -31,6 +31,18 @@ function(ambient_deploy_openvino stamp_target)
     add_custom_target(${stamp_target} DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/ov.deployed")
 endfunction()
 
+# The PDF reader the ingest host links, fetched and pinned by tools/get-pdfium.ps1
+set(_pdfium_root "${ambient_SOURCE_DIR}/external/pdfium")
+if(NOT EXISTS "${_pdfium_root}")
+    message(FATAL_ERROR "PDFium not found: run tools/get-pdfium.ps1 first")
+endif()
+add_library(pdfium SHARED IMPORTED)
+set_target_properties(pdfium PROPERTIES
+    IMPORTED_LOCATION "${_pdfium_root}/bin/pdfium.dll"
+    IMPORTED_IMPLIB "${_pdfium_root}/lib/pdfium.dll.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${_pdfium_root}/include"
+    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_pdfium_root}/include")
+
 include(FetchContent)
 FetchContent_Declare(
     nlohmann_json
@@ -139,6 +151,7 @@ add_library(ambient_guidance STATIC
     src/adapters/guidance/chunker.cpp
     src/adapters/guidance/corpus_builder.cpp
     src/adapters/guidance/document_ingest.cpp
+    src/adapters/guidance/ingest_host.cpp
     src/adapters/guidance/corpus_store.cpp
     src/adapters/guidance/embedder.cpp
     src/adapters/guidance/guidance_lane.cpp
@@ -223,6 +236,16 @@ target_link_libraries(ambient_note_host PRIVATE
     ambient_ipc ambient_models ambient_note ambient_warnings)
 add_dependencies(ambient_note_host ov_engine_runtime)
 add_dependencies(ambient_engine ambient_note_host)
+
+# Reads PDFs in a process of its own, so a parser fault costs one document
+add_executable(ambient_ingest_host src/ingest_host_main.cpp)
+target_link_libraries(ambient_ingest_host PRIVATE
+    ambient_core pdfium nlohmann_json::nlohmann_json wer ambient_warnings)
+add_custom_command(TARGET ambient_ingest_host POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_pdfium_root}/bin/pdfium.dll"
+            "$<TARGET_FILE_DIR:ambient_ingest_host>"
+    VERBATIM)
+add_dependencies(ambient_engine ambient_ingest_host)
 
 # Builds guidance corpora with the staged embedder; deployed beside the engine
 add_executable(ambient_index src/index_main.cpp)
