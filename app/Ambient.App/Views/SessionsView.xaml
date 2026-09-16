@@ -171,8 +171,10 @@
                             VerticalContentAlignment="Stretch" />
                     </StackPanel>
                 </ScrollViewer>
-                <!-- Page-height card; the transcript scrolls inside -->
+                <!-- Page-height card with the transcript scrolling inside. The page
+                     view of an added document takes its place while it is open -->
                 <Border
+                    x:Name="TranscriptCard"
                     Grid.Column="1"
                     Padding="12,8,12,12"
                     VerticalAlignment="Stretch"
@@ -182,6 +184,12 @@
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch" />
                 </Border>
+                <ContentControl
+                    x:Name="PageHostWide"
+                    Grid.Column="1"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"
+                    Visibility="Collapsed" />
             </Grid>
 
             <Grid
@@ -212,6 +220,16 @@
                         <TabViewItem Header="Transcript" IsClosable="False">
                             <ContentControl
                                 x:Name="TranscriptHost"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch" />
+                        </TabViewItem>
+                        <TabViewItem
+                            x:Name="PageTab"
+                            Header="Document page"
+                            IsClosable="False"
+                            Visibility="Collapsed">
+                            <ContentControl
+                                x:Name="PageHost"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch" />
                         </TabViewItem>

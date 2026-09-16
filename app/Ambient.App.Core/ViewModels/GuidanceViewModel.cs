@@ -102,6 +102,17 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public Func<string, Task>? SearchQueryRequested { get; set; }
 
+    /// <summary>A card's Show in document and Open, answered by the page view.</summary>
+    public Func<GuidanceRecommendation, Task>? ShowInDocumentRequested { get; set; }
+
+    public Func<GuidanceRecommendation, Task>? OpenDocumentRequested { get; set; }
+
+    public Task ShowInDocumentAsync(GuidanceRecommendation found) =>
+        ShowInDocumentRequested?.Invoke(found) ?? Task.CompletedTask;
+
+    public Task OpenDocumentAsync(GuidanceRecommendation found) =>
+        OpenDocumentRequested?.Invoke(found) ?? Task.CompletedTask;
+
     private readonly Stopwatch _noteClock = new();
     private readonly Stopwatch _queryClock = new();
     private List<GuidanceRecommendation> _noteResults = [];
@@ -139,7 +150,16 @@ public sealed partial class GuidanceViewModel : ObservableObject
             }
 
             var found = Cards.Sum(c => c.Recommendations.Count);
-            return $"{Count(Cards.Count, "guideline")} · {Count(found, "recommendation")}";
+            var documents = Cards.Count(c => c.FromDocument);
+            var guidelines = Cards.Count - documents;
+            if (documents > 0 && guidelines > 0)
+            {
+                return $"{Count(documents, "added document")} · {Count(guidelines, "guideline")}";
+            }
+
+            return documents > 0
+                ? $"{Count(documents, "added document")} · {Count(found, "recommendation")}"
+                : $"{Count(guidelines, "guideline")} · {Count(found, "recommendation")}";
         }
     }
 
@@ -412,17 +432,33 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ShowCards();
     }
 
-    // A typed query stands in for the note's cards until it is cleared. Whole-note
-    // matches sort after the sentences, then each guideline takes one card
+    // A typed query stands in for the note's cards until it is cleared. Added
+    // documents lead, whole-note matches sort after the sentences, then each
+    // guideline takes one card, the first after the documents under a divider
     private void ShowCards()
     {
         Cards.Clear();
         IEnumerable<GuidanceRecommendation> shown = QueryShown
             ? _queryResults ?? []
             : _noteResults.OrderBy(r => r.Trigger.Length == 0 ? 1 : 0);
-        foreach (var card in GuidanceCard.Group(shown))
+        var documents = false;
+        foreach (var card in GuidanceCard.Group(shown.OrderBy(r => r.FromDocument ? 0 : 1)))
         {
-            Cards.Add(card);
+            if (card.FromDocument)
+            {
+                documents = true;
+                Cards.Add(card);
+            }
+            else if (documents)
+            {
+                documents = false;
+                var from = card.SourceLabel.Length > 0 ? card.SourceLabel : "installed guidance";
+                Cards.Add(card with { Divider = $"From {from}" });
+            }
+            else
+            {
+                Cards.Add(card);
+            }
         }
 
         OnPropertyChanged(nameof(CardsVisible));

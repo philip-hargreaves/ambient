@@ -25,6 +25,11 @@
             <SolidColorBrush x:Key="NiceChipBrush" Color="{StaticResource BrandNhs}" />
             <SolidColorBrush x:Key="NiceChipSoftBrush" Color="{StaticResource ColorAccentSoft}" />
             <SolidColorBrush x:Key="NiceChipBorderBrush" Color="{StaticResource ColorAccentBorder}" />
+            <SolidColorBrush x:Key="OnDeviceChipBorderBrush" Color="{StaticResource StatusSecureBorder}" />
+            <!-- The page stays white in both themes, so its marks keep one colour -->
+            <SolidColorBrush x:Key="PageMarkBrush" Color="#66FFD54F" />
+            <SolidColorBrush x:Key="PageSheetBrush" Color="#DDE1E6" />
+            <SolidColorBrush x:Key="PageEdgeBrush" Color="#B8BEC6" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Default">
@@ -42,6 +47,10 @@
             <SolidColorBrush x:Key="NiceChipBrush" Color="#7DB8F0" />
             <SolidColorBrush x:Key="NiceChipSoftBrush" Color="#1B2C40" />
             <SolidColorBrush x:Key="NiceChipBorderBrush" Color="#2B4666" />
+            <SolidColorBrush x:Key="OnDeviceChipBorderBrush" Color="#2E5A40" />
+            <SolidColorBrush x:Key="PageMarkBrush" Color="#66FFD54F" />
+            <SolidColorBrush x:Key="PageSheetBrush" Color="#1E1E1E" />
+            <SolidColorBrush x:Key="PageEdgeBrush" Color="#4A4A4A" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -59,6 +68,10 @@
             <SolidColorBrush x:Key="NiceChipBrush" Color="{ThemeResource SystemColorHotlightColor}" />
             <SolidColorBrush x:Key="NiceChipSoftBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="NiceChipBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OnDeviceChipBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PageMarkBrush" Opacity="0.4" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PageSheetBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PageEdgeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>

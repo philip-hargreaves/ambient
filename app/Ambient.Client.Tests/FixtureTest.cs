@@ -326,6 +326,33 @@ public class FixtureTest
     }
 
     [Fact]
+    public void GuidancePageAndOpenFixturesCarryAPathAndTheBoxes()
+    {
+        var page = LoadFixture("guidance-page.json").RootElement.GetProperty("result");
+        Assert.EndsWith(".bmp", page.GetProperty("path").GetString());
+        Assert.True(page.GetProperty("width").GetInt32() > 0);
+        Assert.True(page.GetProperty("height").GetInt32() > 0);
+        Assert.True(page.GetProperty("pages").GetInt32() > 0);
+        foreach (var box in page.GetProperty("boxes").EnumerateArray())
+        {
+            Assert.True(box.GetProperty("page").GetInt32() < page.GetProperty("pages").GetInt32());
+            Assert.True(box.GetProperty("left").GetDouble() < box.GetProperty("right").GetDouble());
+            Assert.True(box.GetProperty("top").GetDouble() < box.GetProperty("bottom").GetDouble());
+            Assert.True(box.GetProperty("bottom").GetDouble() <= 1);
+        }
+
+        var opened = LoadFixture("guidance-documents-open.json").RootElement.GetProperty("result");
+        Assert.EndsWith(".pdf", opened.GetProperty("path").GetString());
+
+        var shown = LoadFixture("guidance-ready.json").RootElement.GetProperty("params")
+            .GetProperty("shown");
+        foreach (var result in shown.EnumerateArray())
+        {
+            Assert.Equal(JsonValueKind.Number, result.GetProperty("pages").ValueKind);
+        }
+    }
+
+    [Fact]
     public void GuidanceDocumentNotificationsCarryTheirParams()
     {
         var document = LoadFixture("guidance-document.json").RootElement;

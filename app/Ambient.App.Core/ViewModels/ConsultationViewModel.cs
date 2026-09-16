@@ -73,6 +73,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public GuidanceViewModel Guidance { get; }
 
+    /// <summary>The page of an added document beside the note, when a card asks.</summary>
+    public PageViewModel PageView { get; } = new();
+
     public StatusBarViewModel Status { get; }
 
     public ConsultationViewModel(
@@ -99,6 +102,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.SavePatientRequested = SavePatientAsync;
         Guidance.SearchNoteRequested = SearchGuidanceAsync;
         Guidance.SearchQueryRequested = SearchGuidanceAsync;
+        Guidance.ShowInDocumentRequested = PageView.ShowAsync;
+        Guidance.OpenDocumentRequested = PageView.OpenAsync;
+        PageView.Request = (method, parameters) =>
+            _engine.RequestAsync(method, parameters, RequestTimeout);
+        PageView.Report = line => Status.Append(line);
         // Persisted options applied before the change callback is wired,
         // so restoring them is not itself a change
         if (preferences is not null)
@@ -524,6 +532,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         _regenerating = false;
         Note.Reset();
         Guidance.Reset();
+        PageView.Hide();
         Note.ReflectAvailable = true;  // stored, so it will still be there
         Note.HasReflection = hasReflection;
         await LoadFinalTranscriptAsync(id).ConfigureAwait(true);
@@ -588,6 +597,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         await RequestAsync("session/close").ConfigureAwait(true);
         Note.Reset();
         Guidance.Reset();
+        PageView.Hide();
         Transcript.Clear();
         Phase = FinalisePhase.None;
         _regenerating = false;
@@ -752,6 +762,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             State = SessionState.Idle;
             Note.Reset();
             Guidance.Reset();
+            PageView.Hide();
             Status.SetDecodeActive(false);
             Status.Append("Stop failed - session kept");
             return;
@@ -1033,6 +1044,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 ActiveReplay = null;
                 Note.Reset();
                 Guidance.Reset();
+                PageView.Hide();
                 Status.SetMicVisible(false);
                 Status.SetDecodeActive(false);
                 Status.Append(parameters.ValueKind == JsonValueKind.Object

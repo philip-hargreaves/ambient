@@ -278,6 +278,16 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
                 new { documents = GuidanceDocuments.ToArray() }));
         }
 
+        if (method == "guidance/page" && PageReply is not null)
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(PageReply));
+        }
+
+        if (method == "guidance/documents/open")
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(new { path = OpenedPath }));
+        }
+
         if (method == "guidance/documents/add")
         {
             return Task.FromResult(JsonSerializer.SerializeToElement(new
@@ -297,6 +307,12 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
     public List<object> AddedDocuments { get; } = [];
 
     public List<object> SkippedDocuments { get; } = [];
+
+    /// <summary>Served by guidance/page when set.</summary>
+    public object? PageReply { get; set; }
+
+    /// <summary>Served by guidance/documents/open.</summary>
+    public string? OpenedPath { get; set; }
 
     /// <summary>Served by guidance/corpora: the embedder's state, ready by default.</summary>
     public string GuidanceState { get; set; } = "ready";

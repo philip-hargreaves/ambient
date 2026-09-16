@@ -10,7 +10,7 @@ public sealed partial class ConsultationView : UserControl
         ShellViewModel shell, SessionControlsView controls, TranscriptPaneView transcript,
         NotePaneView note, StatusBarView status, DemoTrayView demoTray, SettingsViewModel settings,
         MicViewModel mic, ConsultationViewModel consultation, Ambient.Client.IEngineClient engine,
-        Ambient.App.Core.IUiDispatcher dispatcher, StatusBarViewModel statusBar)
+        Ambient.App.Core.IUiDispatcher dispatcher, StatusBarViewModel statusBar, PageView page)
     {
         Shell = shell;
         Controls = controls.ViewModel;
@@ -31,8 +31,27 @@ public sealed partial class ConsultationView : UserControl
         ControlsHost.Content = controls;
         TranscriptHost.Content = transcript;
         NoteHost.Content = note;
+        PageHost.Content = page;
         StatusHost.Content = status;
         DemoTrayHost.Content = demoTray;
+
+        void PlacePage()
+        {
+            var open = consultation.PageView.Visible;
+            var wide = new GridLength(1.15, GridUnitType.Star);
+            TranscriptColumn.Width = open ? new GridLength(0) : wide;
+            PageColumn.Width = open ? wide : new GridLength(0);
+            TranscriptHost.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+            PageHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        }
+        PlacePage();
+        consultation.PageView.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PageViewModel.Visible))
+            {
+                PlacePage();
+            }
+        };
 
         // The tray exists only while the settings toggle says so
         void Apply() => DemoTrayHost.Visibility =

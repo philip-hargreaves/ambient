@@ -125,8 +125,9 @@
                     Visibility="{x:Bind Controls.CentreStageVisible, Mode=OneWay}" />
                 <Grid ColumnSpacing="20" Visibility="{x:Bind Controls.PanesVisible, Mode=OneWay}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.15*" />
+                        <ColumnDefinition x:Name="TranscriptColumn" Width="1.15*" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="PageColumn" Width="0" />
                     </Grid.ColumnDefinitions>
                     <Grid.ChildrenTransitions>
                         <TransitionCollection>
@@ -142,6 +143,12 @@
                     <ContentControl
                         x:Name="NoteHost"
                         Grid.Column="1"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch" />
+                    <!-- The page view takes the transcript's place while it is open -->
+                    <ContentControl
+                        x:Name="PageHost"
+                        Grid.Column="2"
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch" />
                 </Grid>

@@ -7,24 +7,37 @@ namespace Ambient.App.Core.ViewModels;
 public sealed record GuidanceRecommendation(
     string Corpus, string ChunkId, string Code, string Number, string Title, string Section,
     string Text, string Link, string LastUpdated, string UpdateTag, string Source,
-    string Citation, double Score, string Trigger, string SourceLabel, bool FromNote)
+    string Citation, double Score, string Trigger, string SourceLabel, bool FromNote,
+    long Document = 0, int Page = 0, int Pages = 0)
 {
     public static GuidanceRecommendation From(JsonElement result, string sourceLabel, bool fromNote)
     {
-        var score = result.TryGetProperty("score", out var value)
-            && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : 0;
         return new(
             Field(result, "corpus"), Field(result, "chunkId"), Field(result, "code"),
             Field(result, "number"), Field(result, "title"), Field(result, "section"),
             Field(result, "text").TrimEnd(), Field(result, "url"), Field(result, "lastUpdated"),
             Field(result, "updateTag"), Field(result, "source"), Field(result, "citation"),
-            score, Field(result, "trigger"), sourceLabel, fromNote);
+            Numeric(result, "score"), Field(result, "trigger"), sourceLabel, fromNote,
+            Integer(result, "document"), (int)Numeric(result, "page"),
+            (int)Numeric(result, "pages"));
     }
 
-    /// <summary>"NG100 1.1.1", or the code alone when the recommendation has no number.</summary>
-    public string Reference => Number.Length > 0
-        ? $"{Code.ToUpperInvariant()} {Number}"
-        : Code.ToUpperInvariant();
+    /// <summary>A passage from a document the clinician added.</summary>
+    public bool FromDocument => Source == "upload";
+
+    /// <summary>"Page 2" of an added PDF, empty for anything without pages.</summary>
+    public string PageLabel => Pages > 0 ? $"Page {Page + 1}" : "";
+
+    public bool PageLabelVisible => PageLabel.Length > 0;
+
+    /// <summary>
+    /// "NG100 1.1.1", the code alone, or for a document its number, its page or its title.
+    /// </summary>
+    public string Reference => Code.Length > 0
+        ? Number.Length > 0 ? $"{Code.ToUpperInvariant()} {Number}" : Code.ToUpperInvariant()
+        : Number.Length > 0 ? Number
+        : PageLabel.Length > 0 ? PageLabel
+        : Title;
 
     /// <summary>"[2009, amended 2018]" as the guideline marks it, empty when unmarked.</summary>
     public string Tag => UpdateTag.Length > 0 ? $"[{UpdateTag}]" : "";
@@ -36,7 +49,8 @@ public sealed record GuidanceRecommendation(
 
     public bool PathVisible => Section.Length > 0;
 
-    public bool LabelVisible => Number.Length > 0 || Section.Length > 0 || UpdateTag.Length > 0;
+    public bool LabelVisible =>
+        Number.Length > 0 || Section.Length > 0 || UpdateTag.Length > 0 || PageLabelVisible;
 
     /// <summary>
     /// The note sentence that found it, or the whole note. A typed query has no line.
@@ -47,15 +61,27 @@ public sealed record GuidanceRecommendation(
 
     public bool MatchedVisible => Matched.Length > 0;
 
+    /// <summary>A web link opens in the browser, a document as a copy in the PDF viewer.</summary>
+    public bool CanOpen => FromDocument || HasWebLink;
+
     /// <summary>A plain-text corpus carries a file name here, which nothing can open.</summary>
-    public bool CanOpen =>
+    private bool HasWebLink =>
         Uri.TryCreate(Link, UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     /// <summary>The citation, with the web address on its own line when there is one.</summary>
-    public string CitationText => CanOpen ? $"{Citation}\n{Link}" : Citation;
+    public string CitationText => HasWebLink ? $"{Citation}\n{Link}" : Citation;
 
-    public string OpenName => $"Open {Reference}";
+    public string OpenTip => FromDocument
+        ? "Opens a copy in your PDF viewer. The copy is removed when Ambient closes."
+        : "";
+
+    /// <summary>Show in document: the page view, for a document with pages.</summary>
+    public bool ShowVisible => FromDocument && Pages > 0;
+
+    public string ShowName => $"Show {Reference} in the document";
+
+    public string OpenName => FromDocument ? $"Open {Title}" : $"Open {Reference}";
 
     public string CopyName => $"Copy citation for {Reference}";
 
@@ -65,6 +91,22 @@ public sealed record GuidanceRecommendation(
         && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? ""
             : "";
+
+    internal static double Numeric(JsonElement element, string property) =>
+        element.ValueKind == JsonValueKind.Object
+        && element.TryGetProperty(property, out var value)
+        && value.ValueKind == JsonValueKind.Number
+            ? value.GetDouble()
+            : 0;
+
+    // A document id is a random 63-bit number, past what a double keeps exactly
+    internal static long Integer(JsonElement element, string property) =>
+        element.ValueKind == JsonValueKind.Object
+        && element.TryGetProperty(property, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var integer)
+            ? integer
+            : 0;
 }
 
 /// <summary>One guideline, or one document, with the recommendations found in it.</summary>
@@ -74,7 +116,14 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
     public static IEnumerable<GuidanceCard> Group(IEnumerable<GuidanceRecommendation> shown) =>
         shown.GroupBy(r => (r.Corpus, r.Code)).Select(g => new GuidanceCard([.. g]));
 
+    /// <summary>"From NICE" above the first guideline after the added documents.</summary>
+    public string Divider { get; init; } = "";
+
+    public bool DividerVisible => Divider.Length > 0;
+
     private GuidanceRecommendation First => Recommendations[0];
+
+    public bool FromDocument => First.FromDocument;
 
     public string Corpus => First.Corpus;
 
@@ -88,14 +137,16 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
     public string Source => First.Source;
 
     /// <summary>
-    /// "NICE · NG100", a text corpus by name, or the code when no source was named.
+    /// "Added document", "NICE · NG100", a text corpus by name, or the code alone.
     /// </summary>
-    public string Chip => First.Source == "nice" && SourceLabel.Length > 0
-        ? $"{SourceLabel} · {Code}"
-        : SourceLabel.Length > 0 ? SourceLabel : Code;
+    public string Chip => FromDocument ? "Added document"
+        : First.Source == "nice" && SourceLabel.Length > 0 ? $"{SourceLabel} · {Code}"
+        : SourceLabel.Length > 0 ? SourceLabel
+        : Code;
 
     /// <summary>
-    /// "Updated 12 Oct 2020 · 3 recommendations", or the count alone without a date.
+    /// "Updated 12 Oct 2020 · 3 recommendations", or for a document
+    /// "5 pages · added 15 Sep 2026 · 3 recommendations".
     /// </summary>
     public string Meta
     {
@@ -105,7 +156,24 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
                 ? "1 recommendation"
                 : $"{Recommendations.Count} recommendations";
             var date = ShortDate(First.LastUpdated);
-            return date.Length > 0 ? $"Updated {date} · {count}" : count;
+            if (!FromDocument)
+            {
+                return date.Length > 0 ? $"Updated {date} · {count}" : count;
+            }
+
+            var parts = new List<string>();
+            if (First.Pages > 0)
+            {
+                parts.Add(First.Pages == 1 ? "1 page" : $"{First.Pages} pages");
+            }
+
+            if (date.Length > 0)
+            {
+                parts.Add($"added {date}");
+            }
+
+            parts.Add(count);
+            return string.Join(" · ", parts);
         }
     }
 

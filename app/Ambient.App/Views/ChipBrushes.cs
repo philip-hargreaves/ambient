@@ -25,6 +25,7 @@ public static class ChipBrushes
     public static Brush Stroke(string source) => Find(source switch
     {
         "nice" => "NiceChipBorderBrush",
+        "upload" => "OnDeviceChipBorderBrush",
         _ => "CardStrokeColorDefaultBrush",
     });
 
