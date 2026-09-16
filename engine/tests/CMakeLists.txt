@@ -64,6 +64,7 @@ add_executable(engine_tests
     adapters/ingest_host_test.cpp
     core/document_units_test.cpp
     core/page_text_test.cpp
+    core/page_clean_test.cpp
     core/patient_screen_test.cpp
     adapters/capture_devices_test.cpp
     adapters/handlers_test.cpp

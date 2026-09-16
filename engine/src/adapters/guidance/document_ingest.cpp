@@ -8,6 +8,7 @@
 #include <system_error>
 
 #include "core/document_units.hpp"
+#include "core/page_clean.hpp"
 #include "core/patient_screen.hpp"
 #include "ports/store_error.hpp"
 
@@ -318,6 +319,7 @@ void DocumentIngest::Index(const Queued& item) {
         std::vector<Paragraph> paragraphs;
         if (mime == kPdf) {
             pages = Extract(bytes);
+            CleanPages(pages);
             paragraphs = ParagraphsFromPages(pages);
         } else {
             paragraphs = ParagraphsFromText(std::string(bytes.begin(), bytes.end()));

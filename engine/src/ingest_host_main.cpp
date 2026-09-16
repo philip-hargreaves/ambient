@@ -28,6 +28,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/utf8.hpp"
+
 namespace {
 
 using json = nlohmann::json;
@@ -52,24 +54,6 @@ std::vector<unsigned char> ReadStdin() {
     return bytes;
 }
 
-void Encode(std::string& out, unsigned int cp) {
-    if (cp < 0x80) {
-        out.push_back(static_cast<char>(cp));
-    } else if (cp < 0x800) {
-        out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    } else if (cp < 0x10000) {
-        out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    } else {
-        out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-        out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    }
-}
-
 // Code points arrive as UTF-16 units. A lone surrogate becomes U+FFFD
 void AppendUtf8(std::string& out, unsigned int unit, unsigned int& high) {
     if (unit >= 0xD800 && unit <= 0xDBFF) {
@@ -80,10 +64,10 @@ void AppendUtf8(std::string& out, unsigned int unit, unsigned int& high) {
     if (unit >= 0xDC00 && unit <= 0xDFFF) {
         cp = high != 0 ? 0x10000 + ((high - 0xD800) << 10) + (unit - 0xDC00) : 0xFFFD;
     } else if (high != 0) {
-        Encode(out, 0xFFFD);
+        ambient::utf8::Encode(out, 0xFFFD);
     }
     high = 0;
-    Encode(out, cp);
+    ambient::utf8::Encode(out, cp);
 }
 
 void Trim(std::string& s) {
