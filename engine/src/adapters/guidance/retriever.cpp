@@ -1,6 +1,7 @@
 #include "adapters/guidance/retriever.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <stdexcept>
 
@@ -35,11 +36,25 @@ std::string Key(const Located& l) {
     return std::to_string(l.corpus) + ":" + std::to_string(l.ord);
 }
 
-// "BSR PMR guidelines 2009, page 3, 1.2": the name, then what the document gives
+// "15 Sep 2026" from "2026-09-15T09:12:44Z", empty from anything shorter
+std::string ShortDate(const std::string& iso) {
+    static const char* const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    if (iso.size() < 10) return "";
+    const int month = std::atoi(iso.substr(5, 2).c_str());
+    const int day = std::atoi(iso.substr(8, 2).c_str());
+    if (month < 1 || month > 12 || day < 1) return "";
+    return std::to_string(day) + " " + kMonths[month - 1] + " " + iso.substr(0, 4);
+}
+
+// "BSR PMR guidelines 2009, page 3, 1.2 (added 15 Sep 2026)": the name, then
+// what the document gives, then when it was added
 std::string UploadCitation(const UploadSnapshot::Row& row) {
     std::string out = row.name;
-    if (row.page > 0) out += ", page " + std::to_string(row.page + 1);
+    if (row.pages > 0) out += ", page " + std::to_string(row.page + 1);
     if (!row.number.empty()) out += ", " + row.number;
+    const auto added = ShortDate(row.added_at);
+    if (!added.empty()) out += " (added " + added + ")";
     return out;
 }
 
@@ -210,6 +225,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
             result.document = row.document;
             result.page = row.page;
+            result.pages = row.pages;
             out.shown.push_back(std::move(result));
             ++shown;
         }

@@ -3,9 +3,11 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <system_error>
 
-#include "adapters/guidance/chunker.hpp"
+#include "core/document_units.hpp"
 #include "core/patient_screen.hpp"
 #include "ports/store_error.hpp"
 
@@ -15,14 +17,33 @@ namespace {
 constexpr std::uintmax_t kSpareBytes = 200ull << 20;
 constexpr auto kPoll = std::chrono::milliseconds(200);
 constexpr auto kProgressEvery = std::chrono::milliseconds(250);
+constexpr auto kHoldSource = std::chrono::seconds(60);
+constexpr std::size_t kHoldBytes = 64u << 20;
+constexpr std::size_t kDrawnPages = 8;
+constexpr int kRenderDpi = 144;
 
-// PDF and HTML arrive with their readers
+constexpr const char* kPdf = "application/pdf";
+
 std::string Mime(const std::filesystem::path& path) {
     auto ext = path.extension().string();
     for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (ext == ".txt") return "text/plain";
     if (ext == ".md" || ext == ".markdown") return "text/markdown";
+    if (ext == ".pdf") return kPdf;
     return "";
+}
+
+// The unit's line boxes as fractions of the page, each with its page
+std::string BoxesJson(const Unit& unit) {
+    nlohmann::json boxes = nlohmann::json::array();
+    for (const auto& [page, box] : unit.boxes) {
+        boxes.push_back({{"page", page},
+                         {"left", box.left},
+                         {"top", box.top},
+                         {"right", box.right},
+                         {"bottom", box.bottom}});
+    }
+    return boxes.dump();
 }
 
 std::string Utf8(const std::filesystem::path& path) {
@@ -30,20 +51,22 @@ std::string Utf8(const std::filesystem::path& path) {
     return std::string(u8.begin(), u8.end());
 }
 
-// The chunker wants a guideline code, so a document's name stands in
-std::string Slug(const std::string& name) {
-    std::string out;
-    for (const unsigned char c : name) {
-        out += std::isalnum(c) ? static_cast<char>(std::tolower(c)) : '-';
-    }
-    return out.empty() ? "document" : out;
-}
-
 }  // namespace
 
 DocumentIngest::DocumentIngest(Retriever& retriever, std::filesystem::path root,
-                               std::function<bool()> busy)
-    : retriever_(retriever), root_(std::move(root)), busy_(std::move(busy)) {}
+                               std::function<bool()> busy, std::filesystem::path host_exe,
+                               HostLimits host_limits)
+    : retriever_(retriever),
+      root_(std::move(root)),
+      busy_(std::move(busy)),
+      host_(host_exe, host_limits),
+      has_host_(!host_exe.empty()),
+      scratch_(root_ / "scratch") {
+    // Whatever a previous run left decrypted goes before anything else
+    std::error_code ignored;
+    std::filesystem::remove_all(scratch_, ignored);
+    std::filesystem::create_directories(scratch_, ignored);
+}
 
 DocumentIngest::~DocumentIngest() {
     {
@@ -52,8 +75,12 @@ DocumentIngest::~DocumentIngest() {
         wake_.notify_all();
     }
     if (worker_.joinable()) worker_.join();
+    std::error_code ignored;
+    std::filesystem::remove_all(scratch_, ignored);
 }
 
+// Opening publishes what is already ready, so a restart searches the documents
+// from the first list or add
 UploadStore& DocumentIngest::Store() {
     if (!store_) {
         if (retriever_.Status().phase != Readiness::Phase::kReady) {
@@ -62,6 +89,7 @@ UploadStore& DocumentIngest::Store() {
         std::string reason;
         store_ = UploadStore::Open(root_, retriever_.Identity(), reason);
         if (!store_) throw store::StoreError(store::StoreCode::kIo, reason);
+        Publish();
     }
     return *store_;
 }
@@ -80,7 +108,7 @@ Accepted DocumentIngest::Add(const std::vector<std::filesystem::path>& paths) {
                 continue;
             }
             const auto mime = Mime(path);
-            if (mime.empty()) {
+            if (mime.empty() || (mime == kPdf && !has_host_)) {
                 out.skipped.push_back({Utf8(path), "unsupported"});
                 continue;
             }
@@ -157,6 +185,87 @@ std::size_t DocumentIngest::RemoveAll() {
     return count;
 }
 
+PageRender DocumentIngest::Render(std::int64_t id, int page, std::int64_t chunk) {
+    PageRender out;
+    std::string boxes;
+    {
+        std::lock_guard<std::mutex> lock(store_mutex_);
+        const auto info = Store().Get(id);
+        if (info.mime != kPdf) throw store::StoreError(store::StoreCode::kOther, "not a PDF");
+        out.pages = info.pages;
+        boxes = Store().ReadChunk(id, chunk).boxes;
+    }
+    const auto source = Source(id);
+    Bitmap bitmap;
+    try {
+        bitmap = host_.Render(*source, page, kRenderDpi);
+    } catch (const HostError& e) {
+        throw store::StoreError(store::StoreCode::kOther, e.Reason());
+    }
+    out.path = scratch_ / ("page-" + std::to_string(id) + "-" + std::to_string(page) + ".bmp");
+    {
+        std::ofstream file(out.path, std::ios::binary | std::ios::trunc);
+        file.write(reinterpret_cast<const char*>(bitmap.bmp.data()),
+                   static_cast<std::streamsize>(bitmap.bmp.size()));
+        if (!file) throw store::StoreError(store::StoreCode::kIo, "the page could not be written");
+    }
+    Keep(out.path);
+    out.width = bitmap.width;
+    out.height = bitmap.height;
+    out.boxes = std::move(boxes);
+    return out;
+}
+
+std::filesystem::path DocumentIngest::OpenCopy(std::int64_t id) {
+    const auto path = scratch_ / (std::to_string(id) + ".pdf");
+    if (std::filesystem::exists(path)) return path;
+    const auto source = Source(id);
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    file.write(reinterpret_cast<const char*>(source->data()),
+               static_cast<std::streamsize>(source->size()));
+    if (!file) throw store::StoreError(store::StoreCode::kIo, "the copy could not be written");
+    return path;
+}
+
+// The decrypted document, kept a minute so page turns do not decrypt again
+std::shared_ptr<const std::vector<std::uint8_t>> DocumentIngest::Source(std::int64_t id) {
+    std::lock_guard<std::mutex> lock(scratch_mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    std::size_t held = 0;
+    for (auto it = sources_.begin(); it != sources_.end();) {
+        if (now - it->second.at > kHoldSource) {
+            it = sources_.erase(it);
+        } else {
+            held += it->second.bytes->size();
+            ++it;
+        }
+    }
+    if (const auto it = sources_.find(id); it != sources_.end()) {
+        it->second.at = now;
+        return it->second.bytes;
+    }
+    std::vector<std::uint8_t> bytes;
+    {
+        std::lock_guard<std::mutex> store_lock(store_mutex_);
+        bytes = Store().ReadFile(id);
+    }
+    auto shared = std::make_shared<const std::vector<std::uint8_t>>(std::move(bytes));
+    if (held + shared->size() <= kHoldBytes) sources_[id] = {shared, now};
+    return shared;
+}
+
+// The last few pages drawn stay on disk, older ones go
+void DocumentIngest::Keep(const std::filesystem::path& path) {
+    std::lock_guard<std::mutex> lock(scratch_mutex_);
+    std::erase(drawn_, path);
+    drawn_.push_back(path);
+    std::error_code ignored;
+    while (drawn_.size() > kDrawnPages) {
+        std::filesystem::remove(drawn_.front(), ignored);
+        drawn_.pop_front();
+    }
+}
+
 void DocumentIngest::SetListener(std::function<void(const IngestProgress&)> progress,
                                  std::function<void(const DocumentInfo&)> document) {
     std::lock_guard<std::mutex> lock(listener_mutex_);
@@ -197,28 +306,50 @@ void DocumentIngest::Index(const Queued& item) {
         Notify(removed);
     };
     try {
-        std::string name, text;
+        std::string mime;
+        std::vector<std::uint8_t> bytes;
         {
             std::lock_guard<std::mutex> lock(store_mutex_);
-            name = Store().Get(id).name;
-            const auto bytes = Store().ReadFile(id);
-            text.assign(bytes.begin(), bytes.end());
+            mime = Store().Get(id).mime;
+            bytes = Store().ReadFile(id);
+        }
+        Progress(id, "reading", 0, 0);
+        std::vector<Page> pages;
+        std::vector<Paragraph> paragraphs;
+        if (mime == kPdf) {
+            pages = Extract(bytes);
+            paragraphs = ParagraphsFromPages(pages);
+        } else {
+            paragraphs = ParagraphsFromText(std::string(bytes.begin(), bytes.end()));
+        }
+        std::string text;
+        for (const auto& para : paragraphs) text += para.text + "\n\n";
+        const int page_count = static_cast<int>(pages.size());
+        int pages_without_text = 0;
+        for (const auto& page : pages) {
+            if (page.lines.empty()) ++pages_without_text;
         }
         Progress(id, "reading", 1, 1);
         if (LooksLikePatientData(text)) {
             std::lock_guard<std::mutex> lock(store_mutex_);
-            Store().Fail(id, "patientData");
+            Store().Fail(id, "patientData", page_count, pages_without_text);
             Notify(Store().Get(id));
             return;
         }
-        const auto chunks = ChunksFromText(Slug(name), name, text);
+        const auto units = UnitsFromParagraphs(paragraphs);
+        if (units.empty() && page_count > 0) {
+            std::lock_guard<std::mutex> lock(store_mutex_);
+            Store().Fail(id, "noText", page_count, pages_without_text);
+            Notify(Store().Get(id));
+            return;
+        }
         std::vector<UploadChunk> ready;
         auto last = std::chrono::steady_clock::now() - kProgressEvery;
-        for (std::size_t i = 0; i < chunks.size(); ++i) {
+        for (std::size_t i = 0; i < units.size(); ++i) {
             bool paused = false;
             while (busy_ && busy_() && !cancelled()) {
                 if (!paused)
-                    Progress(id, "paused", static_cast<int>(i), static_cast<int>(chunks.size()));
+                    Progress(id, "paused", static_cast<int>(i), static_cast<int>(units.size()));
                 paused = true;
                 std::this_thread::sleep_for(kPoll);
             }
@@ -226,18 +357,25 @@ void DocumentIngest::Index(const Queued& item) {
                 remove();
                 return;
             }
-            const auto embedding = retriever_.Embed(chunks[i].text);
-            ready.push_back(
-                {0, chunks[i].number, chunks[i].section, chunks[i].text, embedding.vector, "[]"});
+            const auto& unit = units[i];
+            const auto embedding = retriever_.Embed(unit.text);
+            ready.push_back({unit.page, unit.number, unit.section, unit.text, embedding.vector,
+                             BoxesJson(unit)});
             const auto now = std::chrono::steady_clock::now();
-            if (paused || now - last >= kProgressEvery || i + 1 == chunks.size()) {
-                Progress(id, "preparing", static_cast<int>(i + 1), static_cast<int>(chunks.size()));
+            if (paused || now - last >= kProgressEvery || i + 1 == units.size()) {
+                Progress(id, "preparing", static_cast<int>(i + 1), static_cast<int>(units.size()));
                 last = now;
             }
         }
         std::lock_guard<std::mutex> lock(store_mutex_);
-        Store().Finish(id, ready, 0, 0);
+        Store().Finish(id, ready, page_count, pages_without_text);
         Publish();
+        Notify(Store().Get(id));
+    } catch (const HostError& e) {
+        std::fprintf(stderr, "ambient-engine: document %lld %s: %s\n", static_cast<long long>(id),
+                     e.Reason().c_str(), e.what());
+        std::lock_guard<std::mutex> lock(store_mutex_);
+        Store().Fail(id, e.Reason());
         Notify(Store().Get(id));
     } catch (const std::exception& e) {
         std::fprintf(stderr, "ambient-engine: document %lld failed: %s\n",
@@ -248,6 +386,16 @@ void DocumentIngest::Index(const Queued& item) {
             Notify(Store().Get(id));
         } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
         }
+    }
+}
+
+// A crash gets one more try. Any other refusal stands
+std::vector<Page> DocumentIngest::Extract(const std::vector<std::uint8_t>& bytes) {
+    try {
+        return host_.Extract(bytes);
+    } catch (const HostError& e) {
+        if (e.Reason() != "crashed") throw;
+        return host_.Extract(bytes);
     }
 }
 
@@ -268,9 +416,9 @@ void DocumentIngest::Publish() {
         for (auto& chunk : store_->ReadChunks(doc.id)) {
             snapshot->matrix.insert(snapshot->matrix.end(), chunk.vector.begin(),
                                     chunk.vector.end());
-            snapshot->rows.push_back({doc.id, chunk.page, doc.name, std::move(chunk.number),
-                                      std::move(chunk.section), std::move(chunk.text),
-                                      std::move(chunk.boxes), doc.added_at});
+            snapshot->rows.push_back({doc.id, chunk.page, doc.pages, doc.name,
+                                      std::move(chunk.number), std::move(chunk.section),
+                                      std::move(chunk.text), std::move(chunk.boxes), doc.added_at});
         }
     }
     retriever_.PublishUploads(std::move(snapshot));

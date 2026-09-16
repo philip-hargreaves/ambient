@@ -117,6 +117,13 @@ std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest&
 std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest);
 std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
                                                 const json& params);
+// guidance/page: one page of an added PDF drawn to a bitmap under the scratch
+// folder, with the cited chunk's boxes. guidance/documents/open: a decrypted
+// copy for the PDF viewer, removed when the engine ends
+std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
+                                              const json& params);
+std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
+                                              const json& params);
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
                              ambient::guidance::IGuidanceLane& lane,

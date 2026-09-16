@@ -27,6 +27,7 @@ struct UploadSnapshot {
     struct Row {
         std::int64_t document = 0;
         int page = 0;
+        int pages = 0;  // the document's page count, 0 for text
         std::string name;
         std::string number;
         std::string section;

@@ -24,7 +24,8 @@
                 "score": 0.897,
                 "trigger": "Examination shows synovitis of several MCP joints.",
                 "document": 0,
-                "page": 0
+                "page": 0,
+                "pages": 0
             },
             {
                 "corpus": "fixture",
@@ -42,7 +43,8 @@
                 "score": 0.861,
                 "trigger": "",
                 "document": 0,
-                "page": 0
+                "page": 0,
+                "pages": 0
             }
         ],
         "searched": [

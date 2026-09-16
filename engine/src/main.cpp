@@ -462,8 +462,14 @@ int main(int argc, char* argv[]) {
                                       models_root.parent_path() / "demo" / "reflections");
         // Added documents embed between note searches and wait while a
         // consultation runs
-        ambient::guidance::DocumentIngest ingest(guidance_retriever, store_root / "uploads",
-                                                 [&controller] { return controller.Running(); });
+        wchar_t engine_path[MAX_PATH]{};
+        GetModuleFileNameW(nullptr, engine_path, MAX_PATH);
+        const auto ingest_host =
+            std::filesystem::path(engine_path).parent_path() / "ambient_ingest_host.exe";
+        ambient::guidance::DocumentIngest ingest(
+            guidance_retriever, store_root / "uploads",
+            [&controller] { return controller.Running(); },
+            std::filesystem::exists(ingest_host) ? ingest_host : std::filesystem::path());
         ingest.SetListener(
             [&server](const ambient::guidance::IngestProgress& progress) {
                 server.PushNotification("guidance/progress", ambient::ipc::ProgressJson(progress));

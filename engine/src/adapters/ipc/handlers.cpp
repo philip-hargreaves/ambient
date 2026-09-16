@@ -994,6 +994,60 @@ std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentInge
     }
 }
 
+namespace {
+
+std::string Utf8(const std::filesystem::path& path) {
+    const auto u8 = path.u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
+std::variant<json, Error> DocumentsRefused(const std::exception& e) {
+    if (const auto* store = dynamic_cast<const ambient::store::StoreError*>(&e);
+        store != nullptr && store->Code() == ambient::store::StoreCode::kNotFound) {
+        return Error{kInvalidParams, "Invalid params", json("unknown document")};
+    }
+    return DocumentsError(e);
+}
+
+}  // namespace
+
+std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
+                                              const json& params) {
+    const json id = params.is_object() ? params.value("id", json()) : json();
+    const json page = params.is_object() ? params.value("page", json()) : json();
+    const std::string chunk_id = params.is_object() ? params.value("chunkId", "") : "";
+    // The chunk id is "upload:<document>-<ord>"
+    const auto dash = chunk_id.rfind('-');
+    if (!id.is_number_integer() || !page.is_number_integer() || page.get<int>() < 0 ||
+        dash == std::string::npos || dash + 1 >= chunk_id.size()) {
+        return Error{kInvalidParams, "Invalid params", json("id, page and chunkId are required")};
+    }
+    try {
+        const auto ord = std::stoll(chunk_id.substr(dash + 1));
+        const auto drawn = ingest.Render(id.get<std::int64_t>(), page.get<int>(), ord);
+        return json{{"path", Utf8(drawn.path)},
+                    {"width", drawn.width},
+                    {"height", drawn.height},
+                    {"pages", drawn.pages},
+                    {"boxes", json::parse(drawn.boxes)}};
+    } catch (const std::exception& e) {
+        return DocumentsRefused(e);
+    }
+}
+
+std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
+                                              const json& params) {
+    const json id = params.is_object() ? params.value("id", json()) : json();
+    if (!id.is_number_integer()) {
+        return Error{kInvalidParams, "Invalid params", json("id must be an integer")};
+    }
+    try {
+        return json{{"path", Utf8(ingest.OpenCopy(id.get<std::int64_t>()))}};
+    } catch (const std::exception& e) {
+        return DocumentsRefused(e);
+    }
+}
+
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
                              ambient::guidance::IGuidanceLane& lane,
@@ -1021,6 +1075,12 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
                           [&ingest](const json&) { return HandleDocumentsList(ingest); });
     server.RegisterMethod("guidance/documents/remove", [&ingest](const json& params) {
         return HandleDocumentsRemove(ingest, params);
+    });
+    server.RegisterMethod("guidance/page", [&ingest](const json& params) {
+        return HandleDocumentsPage(ingest, params);
+    });
+    server.RegisterMethod("guidance/documents/open", [&ingest](const json& params) {
+        return HandleDocumentsOpen(ingest, params);
     });
     server.RegisterMethod("guidance/documents/removeAll",
                           [&ingest](const json&) -> std::variant<json, Error> {

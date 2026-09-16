@@ -878,9 +878,49 @@ struct FakeIngest : ambient::guidance::IDocumentIngest {
     std::size_t RemoveAll() override {
         return 3;
     }
+    ambient::guidance::PageRender Render(std::int64_t id, int page, std::int64_t chunk) override {
+        if (id != ReadyDocument().id) {
+            throw ambient::store::StoreError(ambient::store::StoreCode::kNotFound, "no document");
+        }
+        rendered.emplace_back(page, chunk);
+        return {Scratch() / "page-7302914125883421-2.bmp", 1191, 1684, 5,
+                R"([{"page":2,"left":0.118,"top":0.412,"right":0.882,"bottom":0.463},)"
+                R"({"page":3,"left":0.118,"top":0.094,"right":0.882,"bottom":0.121}])"};
+    }
+    std::filesystem::path OpenCopy(std::int64_t id) override {
+        if (id != ReadyDocument().id) {
+            throw ambient::store::StoreError(ambient::store::StoreCode::kNotFound, "no document");
+        }
+        return Scratch() / "7302914125883421.pdf";
+    }
+    static std::filesystem::path Scratch() {
+        return R"(C:\Users\clinician\AppData\Local\ambient\store\uploads\scratch)";
+    }
     void SetListener(std::function<void(const ambient::guidance::IngestProgress&)>,
                      std::function<void(const ambient::guidance::DocumentInfo&)>) override {}
+
+    std::vector<std::pair<int, std::int64_t>> rendered;
 };
+
+TEST(Handlers, PageAndOpenMatchTheFixtures) {
+    FakeIngest ingest;
+    const auto page = HandleDocumentsPage(
+        ingest,
+        json{{"id", ReadyDocument().id}, {"page", 2}, {"chunkId", "upload:7302914125883421-4"}});
+    EXPECT_EQ(ResultOf(page), LoadFixture("guidance-page.json")["result"]);
+    ASSERT_EQ(ingest.rendered.size(), 1u);
+    EXPECT_EQ(ingest.rendered[0], std::make_pair(2, std::int64_t{4}));
+    EXPECT_EQ(ResultOf(HandleDocumentsOpen(ingest, json{{"id", ReadyDocument().id}})),
+              LoadFixture("guidance-documents-open.json")["result"]);
+
+    EXPECT_TRUE(std::holds_alternative<Error>(
+        HandleDocumentsPage(ingest, json{{"id", ReadyDocument().id}, {"page", 2}})));
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsPage(
+        ingest, json{{"id", ReadyDocument().id}, {"page", -1}, {"chunkId", "upload:1-0"}})));
+    EXPECT_TRUE(std::holds_alternative<Error>(
+        HandleDocumentsPage(ingest, json{{"id", 1}, {"page", 0}, {"chunkId", "upload:1-0"}})));
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsOpen(ingest, json{{"id", 1}})));
+}
 
 TEST(Handlers, DocumentsMatchTheFixtures) {
     FakeIngest ingest;

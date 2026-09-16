@@ -40,6 +40,16 @@ struct Accepted {
     std::vector<Skipped> skipped;
 };
 
+// One page drawn for the page view: a BMP under the scratch folder, its
+// size, the document's page count and the chunk's boxes as JSON
+struct PageRender {
+    std::filesystem::path path;
+    int width = 0;
+    int height = 0;
+    int pages = 0;
+    std::string boxes;
+};
+
 // The clinician's added documents: accepted at once, read and embedded on a
 // thread of their own, paused while a consultation runs. The listeners hear
 // progress and every change of state, including removal
@@ -51,6 +61,9 @@ class IDocumentIngest {
     virtual std::vector<DocumentInfo> List() = 0;
     virtual void Remove(std::int64_t id) = 0;
     virtual std::size_t RemoveAll() = 0;
+    virtual PageRender Render(std::int64_t id, int page, std::int64_t chunk) = 0;
+    // A decrypted copy under the scratch folder, for the PDF viewer
+    virtual std::filesystem::path OpenCopy(std::int64_t id) = 0;
     virtual void SetListener(std::function<void(const IngestProgress&)> progress,
                              std::function<void(const DocumentInfo&)> document) = 0;
 };

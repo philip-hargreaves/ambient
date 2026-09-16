@@ -283,14 +283,19 @@ void UploadStore::Finish(std::int64_t id, const std::vector<UploadChunk>& chunks
     txn.Commit();
 }
 
-void UploadStore::Fail(std::int64_t id, const std::string& error) {
+void UploadStore::Fail(std::int64_t id, const std::string& error, int pages,
+                       int pages_without_text) {
     Db::Transaction txn(db_);
     auto clear = db_.Prepare("DELETE FROM chunks WHERE document_id = ?");
     clear.BindInt64(1, id);
     clear.Step();
-    auto failed = db_.Prepare("UPDATE documents SET state = 'failed', error = ? WHERE id = ?");
+    auto failed = db_.Prepare(
+        "UPDATE documents SET state = 'failed', error = ?, pages = ?, pages_without_text = ?"
+        " WHERE id = ?");
     failed.BindText(1, error);
-    failed.BindInt64(2, id);
+    failed.BindInt64(2, pages);
+    failed.BindInt64(3, pages_without_text);
+    failed.BindInt64(4, id);
     failed.Step();
     if (db_.QueryInt64("SELECT changes()") == 0) {
         throw StoreError(StoreCode::kNotFound, "no document " + std::to_string(id));
@@ -298,31 +303,50 @@ void UploadStore::Fail(std::int64_t id, const std::string& error) {
     txn.Commit();
 }
 
+namespace {
+
+constexpr const char* kSelectChunks =
+    "SELECT ord, page, section, text, vec, boxes FROM chunks WHERE document_id = ?";
+
+UploadChunk ChunkRow(Db::Stmt& select, const ChunkCipher& doc_key, std::int64_t id,
+                     std::size_t dim) {
+    const auto ord = static_cast<std::uint64_t>(select.ColumnInt64(0));
+    UploadChunk chunk;
+    chunk.page = static_cast<int>(select.ColumnInt64(1));
+    const auto heading = nlohmann::json::parse(
+        Text(doc_key.Open(Domain::kUploadSection, Aad(id), ord, select.ColumnBlob(2))));
+    chunk.number = heading.value("number", "");
+    chunk.section = heading.value("section", "");
+    chunk.text = Text(doc_key.Open(Domain::kUploadText, Aad(id), ord, select.ColumnBlob(3)));
+    const auto vec = doc_key.Open(Domain::kUploadVector, Aad(id), ord, select.ColumnBlob(4));
+    Guard(vec.size() == dim * sizeof(float), "a stored vector has the wrong length");
+    chunk.vector.resize(dim);
+    std::memcpy(chunk.vector.data(), vec.data(), vec.size());
+    chunk.boxes = Text(doc_key.Open(Domain::kUploadBoxes, Aad(id), ord, select.ColumnBlob(5)));
+    return chunk;
+}
+
+}  // namespace
+
 std::vector<UploadChunk> UploadStore::ReadChunks(std::int64_t id) {
     const auto doc_key = KeyFor(id);
     const auto dim = static_cast<std::size_t>(embedder_.dim);
     std::vector<UploadChunk> out;
-    auto select = db_.Prepare(
-        "SELECT ord, page, section, text, vec, boxes FROM chunks WHERE document_id = ?"
-        " ORDER BY ord");
+    auto select = db_.Prepare((std::string(kSelectChunks) + " ORDER BY ord").c_str());
     select.BindInt64(1, id);
-    while (select.Step()) {
-        const auto ord = static_cast<std::uint64_t>(select.ColumnInt64(0));
-        UploadChunk chunk;
-        chunk.page = static_cast<int>(select.ColumnInt64(1));
-        const auto heading = nlohmann::json::parse(
-            Text(doc_key.Open(Domain::kUploadSection, Aad(id), ord, select.ColumnBlob(2))));
-        chunk.number = heading.value("number", "");
-        chunk.section = heading.value("section", "");
-        chunk.text = Text(doc_key.Open(Domain::kUploadText, Aad(id), ord, select.ColumnBlob(3)));
-        const auto vec = doc_key.Open(Domain::kUploadVector, Aad(id), ord, select.ColumnBlob(4));
-        Guard(vec.size() == dim * sizeof(float), "a stored vector has the wrong length");
-        chunk.vector.resize(dim);
-        std::memcpy(chunk.vector.data(), vec.data(), vec.size());
-        chunk.boxes = Text(doc_key.Open(Domain::kUploadBoxes, Aad(id), ord, select.ColumnBlob(5)));
-        out.push_back(std::move(chunk));
-    }
+    while (select.Step()) out.push_back(ChunkRow(select, doc_key, id, dim));
     return out;
+}
+
+UploadChunk UploadStore::ReadChunk(std::int64_t id, std::int64_t ord) {
+    const auto doc_key = KeyFor(id);
+    auto select = db_.Prepare((std::string(kSelectChunks) + " AND ord = ?").c_str());
+    select.BindInt64(1, id);
+    select.BindInt64(2, ord);
+    if (!select.Step()) {
+        throw StoreError(StoreCode::kNotFound, "no chunk " + std::to_string(ord));
+    }
+    return ChunkRow(select, doc_key, id, static_cast<std::size_t>(embedder_.dim));
 }
 
 std::vector<std::uint8_t> UploadStore::ReadFile(std::int64_t id) {

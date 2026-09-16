@@ -50,9 +50,10 @@ class UploadStore {
     // The passages land in one transaction and the row turns ready
     void Finish(std::int64_t id, const std::vector<UploadChunk>& chunks, int pages,
                 int pages_without_text);
-    void Fail(std::int64_t id, const std::string& error);
+    void Fail(std::int64_t id, const std::string& error, int pages = 0, int pages_without_text = 0);
 
     std::vector<UploadChunk> ReadChunks(std::int64_t id);
+    UploadChunk ReadChunk(std::int64_t id, std::int64_t ord);
     std::vector<std::uint8_t> ReadFile(std::int64_t id);
 
     // Row, passages, file and key go together. What lingers in free pages is

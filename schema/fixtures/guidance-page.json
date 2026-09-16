@@ -1,0 +1,26 @@
+{
+    "jsonrpc": "2.0",
+    "id": 17,
+    "result": {
+        "path": "C:\\Users\\clinician\\AppData\\Local\\ambient\\store\\uploads\\scratch\\page-7302914125883421-2.bmp",
+        "width": 1191,
+        "height": 1684,
+        "pages": 5,
+        "boxes": [
+            {
+                "page": 2,
+                "left": 0.118,
+                "top": 0.412,
+                "right": 0.882,
+                "bottom": 0.463
+            },
+            {
+                "page": 3,
+                "left": 0.118,
+                "top": 0.094,
+                "right": 0.882,
+                "bottom": 0.121
+            }
+        ]
+    }
+}

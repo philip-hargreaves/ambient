@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "guidance_fixture.hpp"
+#include "tiny_pdf.hpp"
 
 namespace ambient::guidance {
 namespace {
@@ -52,12 +53,13 @@ struct Harness {
     Retriever retriever{[] { return std::make_unique<WordEmbedder>(); }, dir.path / "corpora",
                         RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
     std::atomic<bool> busy{false};
-    DocumentIngest ingest{retriever, dir.path / "uploads", [this] { return busy.load(); }};
+    DocumentIngest ingest;
     std::mutex mutex;
     std::vector<DocumentInfo> documents;
     std::vector<IngestProgress> progress;
 
-    Harness() {
+    explicit Harness(std::filesystem::path host = {})
+        : ingest(retriever, dir.path / "uploads", [this] { return busy.load(); }, std::move(host)) {
         std::filesystem::create_directories(dir.path / "corpora");
         retriever.Prepare();
         ingest.SetListener(
@@ -75,6 +77,11 @@ struct Harness {
         const auto path = dir.path / name;
         std::ofstream(path, std::ios::binary) << text;
         return path;
+    }
+
+    std::filesystem::path WritePdf(const char* name, const std::vector<std::string>& lines) {
+        const auto pdf = fixture::TinyPdf(lines);
+        return Write(name, std::string(pdf.begin(), pdf.end()));
     }
 
     bool WaitForState(std::int64_t id, const char* state, int seconds = 10) {
@@ -157,6 +164,127 @@ TEST(DocumentIngest, SkipsWhatItCannotTakeAndRefusesPatientData) {
         if (row.id == letter) EXPECT_EQ(row.error, "patientData");
     }
     ASSERT_TRUE(h.WaitForState(accepted.documents[0].id, "ready"));
+}
+
+TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
+    Harness h(AMBIENT_INGEST_HOST);
+    const std::vector<std::string> lines = {
+        "Offer allopurinol after a first attack when urate stays high.",
+        "Check urate six weeks after any dose change."};
+    const auto path = h.WritePdf("gout.pdf", lines);
+    const auto id = h.ingest.Add({path}).documents[0].id;
+    ASSERT_TRUE(h.WaitForState(id, "ready"));
+    const auto row = h.ingest.List()[0];
+    EXPECT_EQ(row.pages, 1);
+    EXPECT_EQ(row.pages_without_text, 0);
+    EXPECT_GE(row.chunks, 1);
+
+    const auto results =
+        h.retriever.Search("allopurinol after a first attack", 3, SearchMode::kQuery);
+    ASSERT_FALSE(results.shown.empty());
+    EXPECT_EQ(results.shown[0].document, id);
+    EXPECT_EQ(results.shown[0].page, 0);
+    EXPECT_EQ(results.shown[0].pages, 1);
+    EXPECT_TRUE(results.shown[0].citation.starts_with("gout, page 1 (added "))
+        << results.shown[0].citation;
+    EXPECT_NE(results.shown[0].text.find("allopurinol"), std::string::npos);
+
+    std::string reason;
+    auto store = UploadStore::Open(h.dir.path / "uploads", h.retriever.Identity(), reason);
+    ASSERT_TRUE(store) << reason;
+    const auto chunks = store->ReadChunks(id);
+    ASSERT_FALSE(chunks.empty());
+    EXPECT_EQ(chunks[0].page, 0);
+    EXPECT_NE(chunks[0].boxes.find("\"page\":0"), std::string::npos);
+
+    // The page view: a bitmap under scratch with the chunk's boxes, and a copy to open
+    const auto drawn = h.ingest.Render(id, 0, 0);
+    EXPECT_EQ(drawn.width, 1190);
+    EXPECT_EQ(drawn.height, 1684);
+    EXPECT_EQ(drawn.pages, 1);
+    EXPECT_EQ(drawn.boxes, chunks[0].boxes);
+    EXPECT_TRUE(std::filesystem::exists(drawn.path));
+    EXPECT_EQ(drawn.path.parent_path().filename(), "scratch");
+    const auto copy = h.ingest.OpenCopy(id);
+    EXPECT_EQ(copy, h.ingest.OpenCopy(id));
+    EXPECT_EQ(std::filesystem::file_size(copy), fixture::TinyPdf(lines).size());
+    EXPECT_THROW(h.ingest.Render(id, 3, 0), store::StoreError);
+}
+
+TEST(DocumentIngest, HostRefusalsBecomeTheRowsError) {
+    Harness h(AMBIENT_FAKE_INGEST_HOST);
+    const auto accepted =
+        h.ingest.Add({h.Write("locked.pdf", "FAKE exit 3"), h.Write("broken.pdf", "FAKE crash"),
+                      h.Write("fine.pdf", "%PDF canned")});
+    ASSERT_EQ(accepted.documents.size(), 3u);
+    const auto locked = accepted.documents[0].id;
+    const auto broken = accepted.documents[1].id;
+    const auto fine = accepted.documents[2].id;
+    ASSERT_TRUE(h.WaitForState(locked, "failed"));
+    ASSERT_TRUE(h.WaitForState(broken, "failed"));
+    ASSERT_TRUE(h.WaitForState(fine, "ready"));
+    for (const auto& row : h.ingest.List()) {
+        if (row.id == locked) EXPECT_EQ(row.error, "password");
+        if (row.id == broken) EXPECT_EQ(row.error, "crashed");
+        if (row.id == fine) {
+            EXPECT_EQ(row.pages, 2);
+            EXPECT_EQ(row.pages_without_text, 1);
+            EXPECT_GE(row.chunks, 1);
+        }
+    }
+    const auto results = h.retriever.Search("Offer allopurinol", 3, SearchMode::kQuery);
+    ASSERT_FALSE(results.shown.empty());
+    EXPECT_EQ(results.shown[0].number, "1.1");
+    EXPECT_TRUE(results.shown[0].citation.starts_with("fine, page 1, 1.1 (added "))
+        << results.shown[0].citation;
+}
+
+TEST(DocumentIngest, AReadyDocumentIsSearchedAgainAfterARestart) {
+    fixture::TempDir dir{"ingest-restart"};
+    std::filesystem::create_directories(dir.path / "corpora");
+    const auto path = dir.path / "guideline.md";
+    std::ofstream(path, std::ios::binary) << kGuideline;
+    {
+        Retriever retriever{[] { return std::make_unique<WordEmbedder>(); }, dir.path / "corpora",
+                            RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+        retriever.Prepare();
+        DocumentIngest ingest(retriever, dir.path / "uploads", [] { return false; });
+        std::mutex mutex;
+        bool ready = false;
+        ingest.SetListener([](const IngestProgress&) {},
+                           [&](const DocumentInfo& d) {
+                               std::lock_guard<std::mutex> lock(mutex);
+                               ready = ready || d.state == "ready";
+                           });
+        const auto id = ingest.Add({path}).documents[0].id;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::lock_guard<std::mutex> lock(mutex);
+            if (ready || std::chrono::steady_clock::now() > deadline) break;
+        }
+        ASSERT_GT(id, 0);
+    }
+
+    Retriever retriever{[] { return std::make_unique<WordEmbedder>(); }, dir.path / "corpora",
+                        RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+    retriever.Prepare();
+    DocumentIngest ingest(retriever, dir.path / "uploads", [] { return false; });
+    EXPECT_TRUE(retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery)
+                    .shown.empty());
+    ASSERT_EQ(ingest.List().size(), 1u);
+    const auto results =
+        retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery);
+    ASSERT_FALSE(results.shown.empty());
+    EXPECT_EQ(results.shown[0].source, "upload");
+}
+
+TEST(DocumentIngest, WithoutAHostAPdfIsSkipped) {
+    Harness h;
+    const auto accepted = h.ingest.Add({h.Write("scan.pdf", "%PDF")});
+    EXPECT_TRUE(accepted.documents.empty());
+    ASSERT_EQ(accepted.skipped.size(), 1u);
+    EXPECT_EQ(accepted.skipped[0].reason, "unsupported");
 }
 
 TEST(DocumentIngest, PausesWhileAConsultationRunsAndCancelRemovesTheDocument) {

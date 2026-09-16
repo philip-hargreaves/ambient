@@ -40,6 +40,7 @@ struct Result {
     std::string trigger;  // the note sentence that found it, empty for the whole note or a query
     std::int64_t document = 0;  // an added document's id, 0 for a corpus
     int page = 0;               // 0-based page of an added PDF, 0 otherwise
+    int pages = 0;              // the added PDF's page count, 0 otherwise
 };
 
 struct Results {
