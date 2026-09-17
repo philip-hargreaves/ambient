@@ -105,13 +105,15 @@ public class GuidanceViewModelTest
     private static JsonElement Failed(string? id, string detail) =>
         JsonSerializer.SerializeToElement(new { id, detail });
 
-    private static JsonElement Record(object[] shown, bool stale = false) =>
+    private static JsonElement Record(
+        object[] shown, bool stale = false, bool documentsChanged = false) =>
         JsonSerializer.SerializeToElement(new
         {
             version = 1,
             noteRevision = 1,
             generatedAt = "2026-09-13T01:00:00Z",
             stale,
+            documentsChanged,
             shown,
             searched = new[] { Corpus },
             considered = shown.Length,
@@ -456,6 +458,70 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
+    public async Task ABurstOfDocumentChangesSearchesTheNoteOnceAfterTheySettle()
+    {
+        var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
+        session.DocumentsSettle = TimeSpan.FromMilliseconds(80);
+        var before = engine.Requests.Count(r => r.Method == "guidance/search");
+
+        // Thirty documents finishing in quick succession
+        for (var i = 0; i < 30; i++)
+        {
+            engine.RaiseNotification("guidance/documentsChanged",
+                JsonSerializer.SerializeToElement(new { }));
+        }
+
+        Assert.True(session.Guidance.Stale);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (engine.Requests.Count(r => r.Method == "guidance/search") == before
+            && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        await Task.Delay(300);  // long enough for any second search to have fired
+        Assert.Equal(before + 1, engine.Requests.Count(r => r.Method == "guidance/search"));
+    }
+
+    [Fact]
+    public async Task AReopenedNoteOlderThanTheDocumentsIsStaleAndSearchesAgainByItself()
+    {
+        var (session, engine, _) = await ReopenedAsync(
+            Record([], documentsChanged: true));
+        session.DocumentsSettle = TimeSpan.FromMilliseconds(80);
+
+        Assert.True(session.Guidance.Stale);
+        Assert.Equal(
+            "Added documents changed since this guidance was found.",
+            session.Guidance.StaleCaption);
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (!engine.Requests.Any(r => r.Method == "guidance/search")
+            && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Contains(engine.Requests, r => r.Method == "guidance/search");
+    }
+
+    [Fact]
+    public async Task DocumentChangesLeaveATypedQueryAlone()
+    {
+        var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
+        session.DocumentsSettle = TimeSpan.FromMilliseconds(50);
+        session.Guidance.Query = "allopurinol";
+        await session.Guidance.SearchQueryCommand.ExecuteAsync(null);
+        var before = engine.Requests.Count(r => r.Method == "guidance/search");
+
+        engine.RaiseNotification("guidance/documentsChanged",
+            JsonSerializer.SerializeToElement(new { }));
+        await Task.Delay(300);
+
+        Assert.Equal(before, engine.Requests.Count(r => r.Method == "guidance/search"));
+    }
+
+    [Fact]
     public async Task SavingAnUnchangedNoteSendsNothingAndMarksNothing()
     {
         var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
@@ -579,7 +645,7 @@ public class GuidanceViewModelTest
         Assert.False(session.Guidance.QuerySearching);
         Assert.Empty(session.Guidance.Cards);
         Assert.Equal("", session.Guidance.Summary);
-        Assert.False(session.Guidance.LimitationVisible);
+        Assert.False(session.Guidance.CardsVisible);
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
         Assert.False(session.Guidance.CaptionVisible, "the query bar replaces the note caption");
 
@@ -720,7 +786,7 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public void EveryCorpusRefusedReadsAsNoCorpus()
+    public void NoInstalledCorpusStillSearchesSinceAddedDocumentsCan()
     {
         var engine = new FakeEngineClient(autoNotify: false);
         engine.GuidanceCorpora.Clear();
@@ -729,8 +795,9 @@ public class GuidanceViewModelTest
             engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
             new StatusBarViewModel());
 
-        Assert.Equal(GuidanceReadiness.NoCorpus, session.Guidance.Readiness);
-        Assert.True(session.Guidance.SettingsLinkVisible);
+        Assert.Equal(GuidanceReadiness.Ready, session.Guidance.Readiness);
+        Assert.False(session.Guidance.SettingsLinkVisible);
+        Assert.Equal(["nice: sha256 differs"], session.Guidance.RefusedCorpora);
     }
 
     [Fact]
@@ -816,7 +883,7 @@ public class GuidanceViewModelTest
         Assert.Single(session.Guidance.Cards);
         Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"], Shown(session.Guidance));
         Assert.Equal("1 guideline · 3 recommendations", session.Guidance.Summary);
-        Assert.True(session.Guidance.LimitationVisible);
+        Assert.True(session.Guidance.CardsVisible);
         Assert.Matches(@"^found in \d+\.\d s$", session.Guidance.FoundIn);
     }
 

@@ -6,12 +6,11 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Ambient.App.Core.ViewModels;
 
-/// <summary>Whether the engine can search at all: the embedder and the installed corpora.</summary>
+/// <summary>Whether the engine's embedder has loaded, so it can search at all.</summary>
 public enum GuidanceReadiness
 {
     Loading,
     Ready,
-    NoCorpus,
     Unavailable,
 }
 
@@ -49,7 +48,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Visible), nameof(Searching), nameof(Failed),
-        nameof(NotSearched), nameof(HasRecord), nameof(StateCaption), nameof(CaptionVisible),
+        nameof(NotSearched), nameof(StateCaption), nameof(CaptionVisible),
         nameof(SearchAgainVisible), nameof(QueryBoxEnabled), nameof(SearchEnabled))]
     [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
     public partial GuidanceSection Section { get; private set; } = GuidanceSection.Hidden;
@@ -63,6 +62,9 @@ public sealed partial class GuidanceViewModel : ObservableObject
     public partial string StaleCaption { get; private set; } = NoteStaleCaption;
 
     private const string NoteStaleCaption = "This guidance was found before your note edits.";
+
+    private const string DocumentsStaleCaption =
+        "Added documents changed since this guidance was found.";
 
     /// <summary>
     /// The engine showed these results but could not keep them with the session.
@@ -127,15 +129,12 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public bool NotSearched => Section == GuidanceSection.NotSearched;
 
-    public bool SettingsLinkVisible =>
-        Readiness is GuidanceReadiness.NoCorpus or GuidanceReadiness.Unavailable;
+    public bool SettingsLinkVisible => Readiness == GuidanceReadiness.Unavailable;
 
     public bool HasRecord => Section is GuidanceSection.Results
         or GuidanceSection.NothingMatched or GuidanceSection.NoCorpusAtSearch;
 
     public bool CardsVisible => Cards.Count > 0;
-
-    public bool LimitationVisible => Cards.Count > 0;
 
     public bool FoundInVisible => FoundIn.Length > 0;
 
@@ -165,7 +164,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public bool SearchAgainVisible => Stale && !Searching;
 
-    /// <summary>The box waits while either search runs; the button also needs a query.</summary>
+    /// <summary>The box waits while either search runs. The button also needs a query.</summary>
     public bool QueryBoxEnabled => Readiness == GuidanceReadiness.Ready && Visible
         && !Searching && !QuerySearching;
 
@@ -184,14 +183,13 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         GuidanceSection.Hidden or GuidanceSection.Results => "",
         GuidanceSection.NothingMatched => "Nothing came close enough to show. "
-            + "The installed guidance may still cover this condition.",
+            + "Your documents or the installed guidance may still cover this condition.",
         GuidanceSection.NoCorpusAtSearch =>
             "No guidance was installed when this note was searched.",
         GuidanceSection.Failed => "Guidance could not be searched.",
         _ when Readiness != GuidanceReadiness.Ready => Readiness switch
         {
             GuidanceReadiness.Loading => "Loading the guidance model",
-            GuidanceReadiness.NoCorpus => "No guidance is installed on this device.",
             _ => "Guidance is unavailable on this device.",
         },
         GuidanceSection.FollowsNote => "Guidance follows the note",
@@ -246,7 +244,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _noteResults = [];
         Stale = false;
         NotStored = false;
-        FoundIn = "";
         Query = "";
         Section = GuidanceSection.Hidden;
         ClearQuery();
@@ -297,13 +294,23 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         if (HasRecord && !Stale)
         {
-            StaleCaption = "Added documents changed since this guidance was found.";
+            StaleCaption = DocumentsStaleCaption;
             Stale = true;
         }
     }
 
-    /// <summary>A reopened session's record, or null when it was never searched.</summary>
-    public void LoadStored(JsonElement? guidance)
+    /// <summary>
+    /// Whether the note's search should run again by itself once added documents settle:
+    /// there is a result to refresh and no typed query on screen to clobber.
+    /// </summary>
+    public bool WantsSearchAfterDocuments =>
+        HasRecord && !QueryShown && !Searching && Readiness == GuidanceReadiness.Ready;
+
+    /// <summary>
+    /// A reopened session's record, or null when it was never searched. True when the
+    /// added documents have changed since, so the caller can search again.
+    /// </summary>
+    public bool LoadStored(JsonElement? guidance)
     {
         NotStored = false;
         FoundIn = "";
@@ -313,20 +320,24 @@ public sealed partial class GuidanceViewModel : ObservableObject
             Stale = false;
             Section = GuidanceSection.NotSearched;
             ShowCards();
-            return;
+            return false;
         }
 
         ApplyRecord(record);
-        StaleCaption = NoteStaleCaption;
-        Stale = Flag(record, "stale");
+        if (!Flag(record, "documentsChanged") || !HasRecord)
+        {
+            return false;
+        }
+
+        StaleCaption = DocumentsStaleCaption;
+        Stale = true;
+        return true;
     }
 
     /// <summary>The note's search came back, for the consultation on screen.</summary>
     public void ApplyReady(JsonElement result)
     {
         ApplyRecord(result);
-        StaleCaption = NoteStaleCaption;
-        Stale = Flag(result, "stale");
         NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
         FoundIn = Elapsed(_noteClock);
     }
@@ -359,12 +370,14 @@ public sealed partial class GuidanceViewModel : ObservableObject
         QueryFailed = true;
     }
 
-    /// <summary>guidance/corpora: the embedder's state and what it can search.</summary>
+    /// <summary>
+    /// guidance/corpora: the embedder's state. Searching needs only that, since added
+    /// documents are searched whether or not any corpus is installed.
+    /// </summary>
     public void ApplyCorpora(JsonElement corpora)
     {
         ReadinessDetail = GuidanceCard.Field(corpora, "detail");
         var refused = new List<string>();
-        var loaded = 0;
         if (corpora.TryGetProperty("corpora", out var list)
             && list.ValueKind == JsonValueKind.Array)
         {
@@ -375,10 +388,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
                 {
                     refused.Add($"{GuidanceCard.Field(corpus, "id")}: {reason}");
                 }
-                else
-                {
-                    loaded++;
-                }
             }
         }
 
@@ -386,7 +395,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         Readiness = GuidanceCard.Field(corpora, "state") switch
         {
             "loading" => GuidanceReadiness.Loading,
-            "ready" => loaded > 0 ? GuidanceReadiness.Ready : GuidanceReadiness.NoCorpus,
+            "ready" => GuidanceReadiness.Ready,
             _ => GuidanceReadiness.Unavailable,
         };
     }
@@ -399,7 +408,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         Readiness = GuidanceReadiness.Unavailable;
     }
 
-    /// <summary>Searches in flight when the engine went never finish; the cards stay.</summary>
+    /// <summary>Searches in flight when the engine went never finish. The cards stay.</summary>
     public void ConnectionLost()
     {
         if (Searching)
@@ -416,8 +425,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         _noteResults = ReadResults(record, true);
         Section = _noteResults.Count > 0 ? GuidanceSection.Results
-            : SearchedCount(record) > 0 ? GuidanceSection.NothingMatched
+            : Searched(record).Count > 0 ? GuidanceSection.NothingMatched
             : GuidanceSection.NoCorpusAtSearch;
+        StaleCaption = NoteStaleCaption;
+        Stale = Flag(record, "stale");
         ShowCards();
     }
 
@@ -462,11 +473,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(CardsVisible));
-        OnPropertyChanged(nameof(LimitationVisible));
         OnPropertyChanged(nameof(Summary));
     }
 
-    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
+    private static string Count(int n, string noun) => GuidanceCard.Count(n, noun);
 
     // A search the clock never timed, such as a stored record, shows nothing
     private static string Elapsed(Stopwatch clock)
@@ -514,8 +524,6 @@ public sealed partial class GuidanceViewModel : ObservableObject
         && searched.ValueKind == JsonValueKind.Array
             ? [.. searched.EnumerateArray()]
             : [];
-
-    private static int SearchedCount(JsonElement record) => Searched(record).Count;
 
     private static bool Flag(JsonElement element, string property) =>
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;

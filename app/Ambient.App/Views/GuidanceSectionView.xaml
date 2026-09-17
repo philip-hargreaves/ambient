@@ -81,7 +81,7 @@
                     Style="{StaticResource MicroText}"
                     Text="These recommendations match the wording of the note. The guideline may be for another condition, so check each title."
                     TextWrapping="Wrap"
-                    Visibility="{x:Bind ViewModel.LimitationVisible, Mode=OneWay}" />
+                    Visibility="{x:Bind ViewModel.CardsVisible, Mode=OneWay}" />
                 <!-- A typed query stands in for the note's cards until Clear -->
                 <Grid ColumnSpacing="8" Visibility="{x:Bind ViewModel.QueryShown, Mode=OneWay}">
                     <Grid.ColumnDefinitions>

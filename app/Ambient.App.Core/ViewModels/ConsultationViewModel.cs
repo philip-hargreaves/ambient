@@ -17,6 +17,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(180);
 
     private readonly IEngineClient _engine;
+    private readonly IUiDispatcher _dispatcher;
+    private int _documentsGeneration;
     private readonly Metrics.PerformanceCollector? _metrics;
     private readonly AppPreferences? _preferences;
 
@@ -85,6 +87,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         AppPreferences? preferences = null, GuidanceViewModel? guidance = null)
     {
         _engine = engine;
+        _dispatcher = dispatcher;
         _metrics = metrics;
         _preferences = preferences;
         _readinessPollInterval = readinessPollInterval ?? TimeSpan.FromSeconds(2);
@@ -189,6 +192,27 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     // Search again on the note as it is now: an unsaved edit is saved first,
     // and a consultation opened meanwhile is left alone
+    /// <summary>How long added documents must stop changing before the note is searched again.</summary>
+    public TimeSpan DocumentsSettle { get; set; } = TimeSpan.FromSeconds(3);
+
+    // A batch of documents finishing one after another searches once, when the last has
+    // landed: every change starts a new generation and only the latest one's timer acts
+    private void SearchAfterDocumentsSettle()
+    {
+        var generation = ++_documentsGeneration;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(DocumentsSettle).ConfigureAwait(false);
+            _dispatcher.Post(() =>
+            {
+                if (generation == _documentsGeneration && Guidance.WantsSearchAfterDocuments)
+                {
+                    _ = SearchGuidanceAsync();
+                }
+            });
+        });
+    }
+
     private async Task SearchGuidanceAsync()
     {
         var id = _finalisedSessionId;
@@ -562,11 +586,15 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         {
             var guidance = await RequestValueAsync("session/guidance", null, new { id })
                 .ConfigureAwait(true);
-            Guidance.LoadStored(
-                guidance is { ValueKind: JsonValueKind.Object } g
+            var stored = guidance is { ValueKind: JsonValueKind.Object } g
                 && g.TryGetProperty("guidance", out var record)
                     ? record
-                    : null);
+                    : (JsonElement?)null;
+            // Documents added since this note was searched: refresh once the view has settled
+            if (Guidance.LoadStored(stored))
+            {
+                SearchAfterDocumentsSettle();
+            }
         }
 
         Phase = FinalisePhase.Streaming;  // the panes show, no centre spinner
@@ -1026,6 +1054,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 break;
             case "guidance/documentsChanged":
                 Guidance.DocumentsChanged();
+                SearchAfterDocumentsSettle();
                 break;
             case "audio.level" when parameters.ValueKind == JsonValueKind.Object:
                 Status.SetMicLevel(
