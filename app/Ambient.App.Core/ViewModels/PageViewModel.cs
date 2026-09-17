@@ -10,9 +10,9 @@ namespace Ambient.App.Core.ViewModels;
 public sealed record PageBox(double Left, double Top, double Width, double Height);
 
 /// <summary>
-/// The page view beside the note: one page of an added document with the cited
-/// passage's lines marked. The consultation view model supplies the engine calls,
-/// the view supplies the file launcher and the clipboard.
+/// The page view beside the note: a page of an added document, opened on the cited
+/// passage with its lines marked and turnable from there. The consultation view model
+/// supplies the engine calls, the view supplies the file launcher and the clipboard.
 /// </summary>
 public sealed partial class PageViewModel : ObservableObject
 {
@@ -20,7 +20,7 @@ public sealed partial class PageViewModel : ObservableObject
 
     private GuidanceRecommendation? _shown;
     private int _page;
-    private List<int> _boxPages = [];
+    private int _pages;
     private List<(int Page, double Left, double Top, double Right, double Bottom)> _boxes = [];
     private int _load;
 
@@ -38,7 +38,7 @@ public sealed partial class PageViewModel : ObservableObject
     [ObservableProperty]
     public partial string DocumentName { get; private set; } = "";
 
-    /// <summary>"Page 2 of 5", or "Pages 2-3" when the passage spans two.</summary>
+    /// <summary>"Page 2 of 5".</summary>
     [ObservableProperty]
     public partial string PageLabel { get; private set; } = "";
 
@@ -63,9 +63,10 @@ public sealed partial class PageViewModel : ObservableObject
     [ObservableProperty]
     public partial double Height { get; private set; } = 842;
 
+    /// <summary>The page has been turned away from the passage.</summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(PreviousPageCommand), nameof(NextPageCommand))]
-    public partial bool Spans { get; private set; }
+    [NotifyCanExecuteChangedFor(nameof(BackToPassageCommand))]
+    public partial bool OffPassage { get; private set; }
 
     public ObservableCollection<PageBox> Boxes { get; } = [];
 
@@ -78,20 +79,22 @@ public sealed partial class PageViewModel : ObservableObject
     public bool PlaceholderVisible => Loading || Failed;
 
     public string ImageName => _shown is null ? ""
+        : Boxes.Count == 0 ? $"Page {_page + 1} of {DocumentName}"
         : $"Page {_page + 1} of {DocumentName}, "
           + $"{(_shown.Number.Length > 0 ? _shown.Number : "the passage")} highlighted";
 
     public string Citation => _shown?.Citation ?? "";
 
-    public bool CanGoBack => Spans && _boxPages.IndexOf(_page) > 0;
+    public bool CanGoBack => _page > 0;
 
-    public bool CanGoForward => Spans && _boxPages.IndexOf(_page) < _boxPages.Count - 1;
+    public bool CanGoForward => _page < _pages - 1;
 
     /// <summary>Opens on the passage's page and asks the engine to draw it.</summary>
     public async Task ShowAsync(GuidanceRecommendation found)
     {
         _shown = found;
         _page = found.Page;
+        _pages = found.Pages;
         DocumentName = found.Title;
         Visible = true;
         await LoadAsync().ConfigureAwait(true);
@@ -127,13 +130,21 @@ public sealed partial class PageViewModel : ObservableObject
         _load++;
     }
 
-    /// <summary>guidance/page: the bitmap, its size and the passage's boxes.</summary>
+    /// <summary>
+    /// guidance/page: the bitmap, its size and the passage's boxes. The boxes come whole
+    /// each time, so a page without any is a page the passage is not on.
+    /// </summary>
     public void Apply(JsonElement reply)
     {
         Width = Numeric(reply, "width");
         Height = Numeric(reply, "height");
         ImagePath = Field(reply, "path");
         var pages = (int)Numeric(reply, "pages");
+        if (pages > 0)
+        {
+            _pages = pages;
+        }
+
         _boxes = [];
         if (reply.TryGetProperty("boxes", out var boxes) && boxes.ValueKind == JsonValueKind.Array)
         {
@@ -144,7 +155,6 @@ public sealed partial class PageViewModel : ObservableObject
             }
         }
 
-        _boxPages = _boxes.Select(b => b.Page).Distinct().Order().ToList();
         Boxes.Clear();
         var onPage = _boxes.Where(b => b.Page == _page).ToList();
         foreach (var box in onPage)
@@ -158,15 +168,10 @@ public sealed partial class PageViewModel : ObservableObject
             (onPage.Max(b => b.Right) - onPage.Min(b => b.Left)) * Width,
             (onPage.Max(b => b.Bottom) - onPage.Min(b => b.Top)) * Height);
 
-        Spans = _boxPages.Count > 1;
-        PageLabel = Spans
-            ? $"Pages {_boxPages[0] + 1}-{_boxPages[^1] + 1}"
-            : pages > 0 ? $"Page {_page + 1} of {pages}" : $"Page {_page + 1}";
+        PageLabel = _pages > 0 ? $"Page {_page + 1} of {_pages}" : $"Page {_page + 1}";
         Loading = false;
         Slow = false;
         OnPropertyChanged(nameof(ImageName));
-        PreviousPageCommand.NotifyCanExecuteChanged();
-        NextPageCommand.NotifyCanExecuteChanged();
     }
 
     private async Task LoadAsync()
@@ -183,7 +188,10 @@ public sealed partial class PageViewModel : ObservableObject
         Boxes.Clear();
         Focus = null;
         ImagePath = "";
-        PageLabel = $"Page {_page + 1}";
+        PageLabel = _pages > 0 ? $"Page {_page + 1} of {_pages}" : $"Page {_page + 1}";
+        OffPassage = _page != _shown.Page;
+        PreviousPageCommand.NotifyCanExecuteChanged();
+        NextPageCommand.NotifyCanExecuteChanged();
         _ = MarkSlowAsync(load);
         try
         {
@@ -195,13 +203,14 @@ public sealed partial class PageViewModel : ObservableObject
                 Apply(reply);
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
             if (load == _load)
             {
                 Failed = true;
                 Loading = false;
                 Slow = false;
+                Report?.Invoke($"The page could not be shown: {e.Message}");
             }
         }
     }
@@ -224,14 +233,21 @@ public sealed partial class PageViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanGoBack))]
     private Task PreviousPage()
     {
-        _page = _boxPages[_boxPages.IndexOf(_page) - 1];
+        _page--;
         return LoadAsync();
     }
 
     [RelayCommand(CanExecute = nameof(CanGoForward))]
     private Task NextPage()
     {
-        _page = _boxPages[_boxPages.IndexOf(_page) + 1];
+        _page++;
+        return LoadAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(OffPassage))]
+    private Task BackToPassage()
+    {
+        _page = _shown?.Page ?? _page;
         return LoadAsync();
     }
 

@@ -29,6 +29,13 @@ double Num(const json& j, const char* key) {
     return it->get<double>();
 }
 
+// A document id is 63 bits, past what a double keeps exactly
+std::int64_t Int64(const json& j, const char* key) {
+    const auto it = j.find(key);
+    if (it == j.end() || !it->is_number_integer()) return 0;
+    return it->get<std::int64_t>();
+}
+
 }  // namespace
 
 json ToJson(const Corpus& c) {
@@ -118,7 +125,7 @@ Results FromJson(const json& j) {
             result.citation = Str(r, "citation");
             result.score = Num(r, "score");
             result.trigger = Str(r, "trigger");
-            result.document = static_cast<std::int64_t>(Num(r, "document"));
+            result.document = Int64(r, "document");
             result.page = Int(r, "page");
             result.pages = Int(r, "pages");
             out.shown.push_back(std::move(result));
