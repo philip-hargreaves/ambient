@@ -67,33 +67,63 @@ public class PageViewModelTest
         Assert.NotNull(view.Focus);
         Assert.Equal(100, view.Focus.Left, 3);
         Assert.Equal(500, view.Focus.Width, 3);
-        Assert.False(view.Spans);
+        Assert.True(view.CanGoBack);
+        Assert.True(view.CanGoForward);
+        Assert.False(view.OffPassage);
         Assert.Equal("Page 2 of BSR PMR guidelines 2009, 1.2 highlighted", view.ImageName);
         var request = Assert.Single(engine.Requests, r => r.Method == "guidance/page");
         Assert.Equal("{\"id\":7,\"page\":1,\"chunkId\":\"upload:7-4\"}", request.Params);
     }
 
     [Fact]
-    public async Task APassageOverTwoPagesTurnsBetweenThem()
+    public async Task ThePagesTurnOneAtATimeAndTheMarksFollowThePassage()
     {
         var (view, engine) =
             Create(Reply(Box(1, 0.1, 0.8, 0.9, 0.95), Box(2, 0.1, 0.05, 0.9, 0.2)));
 
         await view.ShowAsync(Found());
 
-        Assert.True(view.Spans);
-        Assert.Equal("Pages 2-3", view.PageLabel);
+        Assert.Equal("Page 2 of 5", view.PageLabel);
         Assert.Equal(0.8 * 1400, Assert.Single(view.Boxes).Top, 3);
-        Assert.False(view.CanGoBack);
-        Assert.True(view.CanGoForward);
 
         await view.NextPageCommand.ExecuteAsync(null);
 
         Assert.Equal(2, engine.Requests.Count(r => r.Method == "guidance/page"));
         Assert.Contains("\"page\":2", engine.Requests[^1].Params);
+        Assert.Equal("Page 3 of 5", view.PageLabel);
         Assert.Equal(0.05 * 1400, Assert.Single(view.Boxes).Top, 3);
-        Assert.True(view.CanGoBack);
+        Assert.True(view.OffPassage);
+
+        await view.NextPageCommand.ExecuteAsync(null);
+
+        Assert.Equal("Page 4 of 5", view.PageLabel);
+        Assert.Empty(view.Boxes);
+        Assert.Null(view.Focus);
+        Assert.Equal("Page 4 of BSR PMR guidelines 2009", view.ImageName);
+
+        await view.NextPageCommand.ExecuteAsync(null);
+
+        Assert.Equal("Page 5 of 5", view.PageLabel);
         Assert.False(view.CanGoForward);
+        Assert.False(view.NextPageCommand.CanExecute(null));
+
+        await view.BackToPassageCommand.ExecuteAsync(null);
+
+        Assert.Equal("Page 2 of 5", view.PageLabel);
+        Assert.False(view.OffPassage);
+        Assert.Single(view.Boxes);
+    }
+
+    [Fact]
+    public async Task TheFirstPageHasNoPrevious()
+    {
+        var (view, _) = Create(Reply(Box(0, 0.1, 0.2, 0.6, 0.3)));
+
+        await view.ShowAsync(Found(page: 0));
+
+        Assert.False(view.CanGoBack);
+        Assert.False(view.PreviousPageCommand.CanExecute(null));
+        Assert.True(view.CanGoForward);
     }
 
     [Fact]
