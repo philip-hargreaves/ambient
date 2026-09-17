@@ -116,7 +116,8 @@ public sealed partial class NoteEditorView : UserControl
             return;
         }
 
-        await System.IO.File.WriteAllTextAsync(path, ViewModel.ClinicalNoteText);
+        await System.IO.File.WriteAllTextAsync(
+            path, SavePickerHelper.ExportMarker + ViewModel.ClinicalNoteText);
         _status.Append($"Saved to {System.IO.Path.GetFileName(path)} - outside the encrypted store");
     }
 

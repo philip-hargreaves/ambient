@@ -66,7 +66,7 @@ public sealed partial class PatientEditorView : UserControl
             return;
         }
 
-        var text = ViewModel.PatientInfoText;
+        var text = SavePickerHelper.ExportMarker + ViewModel.PatientInfoText;
         if (ViewModel.TranslationText.Length > 0)
         {
             text += "\n\n" + ViewModel.TranslationCaption + "\n\n" + ViewModel.TranslationText;
