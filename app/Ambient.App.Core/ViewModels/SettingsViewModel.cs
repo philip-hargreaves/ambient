@@ -60,6 +60,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         KeepConsultations = preferences?.KeepConsultations ?? false;
         ShowPerformanceMetrics = preferences?.ShowPerformanceMetrics ?? false;
         DeveloperToolsExpanded = preferences?.DeveloperToolsExpanded ?? false;
+        IncludeResearchGuidance = preferences?.IncludeResearchGuidance ?? false;
         Theme = preferences?.Theme ?? "system";
         _noteTier = preferences?.NoteTier ?? "default";
         _initialising = false;
@@ -383,10 +384,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Why nothing is listed, empty when corpora are shown.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(GuidanceCaptionVisible))]
+    [NotifyPropertyChangedFor(nameof(GuidanceCaptionVisible), nameof(GuidanceInstalledVisible))]
     public partial string GuidanceCaption { get; set; } = "";
 
     public bool GuidanceCaptionVisible => GuidanceCaption.Length > 0;
+
+    /// <summary>Hidden when nothing is installed, so no empty card shows.</summary>
+    public bool GuidanceInstalledVisible => GuidanceCorpora.Count > 0 || GuidanceCaption.Length > 0;
 
     private async Task LoadGuidanceCorporaAsync()
     {
@@ -406,13 +410,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             GuidanceCorpora.Clear();
             GuidanceCaption = "Unavailable";
-            GuidanceReady = false;
         }
     }
 
     private void ApplyGuidanceCorpora(JsonElement reply)
     {
-        GuidanceReady = GuidanceCard.Field(reply, "state") == "ready";
         GuidanceCorpora.Clear();
         if (reply.TryGetProperty("corpora", out var list) && list.ValueKind == JsonValueKind.Array)
         {
@@ -427,12 +429,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             "loading" => "Loading",
             "unavailable" => detail.Length > 0 ? $"Unavailable: {detail}" : "Unavailable",
-            _ when GuidanceCorpora.Count == 0 => "None installed",
             _ => "",
         };
+        OnPropertyChanged(nameof(GuidanceInstalledVisible));
     }
 
-    // A refused corpus keeps its place, so unused guidance is visible, not missing
+    // A refused corpus keeps its place, so unused guidance stays visible
     private static CorpusRow RowFrom(JsonElement corpus)
     {
         var refused = GuidanceCard.Field(corpus, "unavailable");
@@ -462,13 +464,16 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     // ---- added documents --------------------------------------------------
 
-    /// <summary>The clinician's added documents: the batch in progress, then by name.</summary>
+    /// <summary>The documents in the guidelines folder: the batch in progress, then by name.</summary>
     public ObservableCollection<DocumentRow> Documents { get; } = [];
 
-    /// <summary>Documents can be added once the embedder is ready.</summary>
+    /// <summary>The guidelines folder the engine watches.</summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(AddDocumentsCommand), nameof(AddFolderCommand))]
-    public partial bool GuidanceReady { get; private set; }
+    public partial string GuidelinesFolder { get; private set; } = "";
+
+    /// <summary>The folder and its parent were out of reach at the last scan.</summary>
+    [ObservableProperty]
+    public partial bool FolderMissing { get; private set; }
 
     /// <summary>What the last add skipped, or why nothing could be added.</summary>
     [ObservableProperty]
@@ -486,16 +491,25 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool DocumentsPresent => Documents.Count > 0;
 
-    /// <summary>The view supplies the pickers and the dialogs.</summary>
+    /// <summary>The view supplies the picker, the folder reveal and the dialogs.</summary>
     public Func<Task<IReadOnlyList<string>>>? PickDocuments { get; set; }
 
-    public Func<Task<string?>>? PickFolder { get; set; }
+    public Action<string>? RevealFolder { get; set; }
 
     public Func<string, Task<bool>>? ConfirmRemoveDocument { get; set; }
 
     public Func<int, Task<bool>>? ConfirmRemoveAllDocuments { get; set; }
 
-    [RelayCommand(CanExecute = nameof(GuidanceReady))]
+    [RelayCommand]
+    private void OpenFolder()
+    {
+        if (GuidelinesFolder.Length > 0)
+        {
+            RevealFolder?.Invoke(GuidelinesFolder);
+        }
+    }
+
+    [RelayCommand]
     private async Task AddDocuments()
     {
         if (PickDocuments is null)
@@ -508,32 +522,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             await AddPathsAsync(paths).ConfigureAwait(true);
         }
-    }
-
-    /// <summary>Every file in the folder. The engine skips what it cannot read.</summary>
-    [RelayCommand(CanExecute = nameof(GuidanceReady))]
-    private async Task AddFolder()
-    {
-        if (PickFolder is null)
-        {
-            return;
-        }
-
-        var folder = await PickFolder().ConfigureAwait(true);
-        if (folder is null)
-        {
-            return;
-        }
-
-        var paths = Directory.EnumerateFiles(folder)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
-        if (paths.Length == 0)
-        {
-            DocumentsCaption = "The folder has no files";
-            return;
-        }
-
-        await AddPathsAsync(paths).ConfigureAwait(true);
     }
 
     private async Task AddPathsAsync(IReadOnlyList<string> paths)
@@ -581,7 +569,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             var n = group.Count();
             parts.Add(group.Key switch
             {
-                "duplicate" => $"{n} already added",
                 "unsupported" => $"{n} skipped, not PDF or text",
                 "noSpace" => $"{n} skipped, not enough free space",
                 _ => $"{n} could not be read",
@@ -603,18 +590,24 @@ public sealed partial class SettingsViewModel : ObservableObject
             var reply = await _client
                 .RequestAsync("guidance/documents", null, TimeSpan.FromSeconds(5))
                 .ConfigureAwait(true);
+            GuidelinesFolder = GuidanceCard.Field(reply, "folder");
+            FolderMissing = reply.TryGetProperty("found", out var found) && !found.GetBoolean();
+            var unsupported = reply.TryGetProperty("unsupported", out var u) ? u.GetInt32() : 0;
             Documents.Clear();
             foreach (var document in reply.GetProperty("documents").EnumerateArray())
             {
                 Upsert(document);
             }
+
+            DocumentsCaption = unsupported == 0 ? ""
+                : unsupported == 1 ? "1 other file is not searched, not PDF or text"
+                : $"{unsupported} other files are not searched, not PDF or text";
         }
         catch (Exception)
         {
             Documents.Clear();
         }
 
-        DocumentsCaption = "";
         OnPropertyChanged(nameof(DocumentsPresent));
         RefreshBatch();
     }
@@ -684,15 +677,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void RefreshBatch()
     {
         var working = Documents.Count(r => r.Working);
-        BatchCaption = working switch
-        {
-            0 => "",
-            1 => "Adding 1 document",
-            _ => $"Adding {working} documents",
-        };
+        BatchCaption = working == 0 ? "" : $"Reading {GuidanceCard.Count(working, "document")}";
     }
 
-    /// <summary>Cancel asks nothing while the row works. Remove asks once it has settled.</summary>
+    /// <summary>Remove sends the file to the Recycle Bin, so it always confirms.</summary>
     [RelayCommand]
     private async Task RemoveDocument(DocumentRow? row)
     {
@@ -701,7 +689,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        if (!row.Working && ConfirmRemoveDocument is not null
+        if (ConfirmRemoveDocument is not null
             && !await ConfirmRemoveDocument(row.Name).ConfigureAwait(true))
         {
             return;
@@ -744,25 +732,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task CancelAll()
-    {
-        if (_client is null || !_client.Connected)
-        {
-            return;
-        }
-
-        try
-        {
-            await _client.RequestAsync("guidance/documents/cancel", null, RequestTimeout)
-                .ConfigureAwait(true);
-        }
-        catch (Exception e)
-        {
-            _status?.Log($"guidance/documents/cancel failed: {e.Message}");
-        }
-    }
-
     /// <summary>
     /// Off by default: a consultation is erased when it is left. On: the
     /// encrypted history. Applies to consultations from now on; audio is
@@ -772,9 +741,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool KeepConsultations { get; set; }
 
     /// <summary>
-    /// Turning the history ON starts accumulating patient records, so it is
-    /// confirmed, never just toggled; the view supplies the dialog. Off is
-    /// frictionless - reducing retention is never gated.
+    /// Turning the history on starts accumulating patient records, so the view confirms it
+    /// first. Turning it off is never gated.
     /// </summary>
     public Func<Task<bool>>? ConfirmKeepConsultations { get; set; }
 
@@ -981,6 +949,56 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Shows the status-bar model and memory chips. For testing.</summary>
     [ObservableProperty]
     public partial bool ShowPerformanceMetrics { get; set; }
+
+    /// <summary>
+    /// Dev builds only: include the local research corpus, the NICE demo. Hidden in a
+    /// release build.
+    /// </summary>
+    public bool ResearchToggleVisible { get; } =
+#if DEBUG
+        true;
+#else
+        false;
+#endif
+
+    [ObservableProperty]
+    public partial bool IncludeResearchGuidance { get; set; }
+
+    partial void OnIncludeResearchGuidanceChanged(bool value)
+    {
+        if (_initialising)
+        {
+            return;
+        }
+
+        if (_preferences is not null)
+        {
+            _preferences.IncludeResearchGuidance = value;
+            _preferences.Save();
+        }
+
+        _ = ApplyResearchAsync(value);
+    }
+
+    // The engine reloads its corpora live and announces the change, so the
+    // list follows without a restart
+    private async Task ApplyResearchAsync(bool include)
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            await _client.RequestAsync("guidance/research", new { include }, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/research failed: {e.Message}");
+        }
+    }
 
     partial void OnShowPerformanceMetricsChanged(bool value)
     {

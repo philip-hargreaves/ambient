@@ -274,8 +274,13 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
 
         if (method == "guidance/documents")
         {
-            return Task.FromResult(JsonSerializer.SerializeToElement(
-                new { documents = GuidanceDocuments.ToArray() }));
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                folder = GuidelinesFolder,
+                found = GuidelinesFolderFound,
+                unsupported = UnsupportedFiles,
+                documents = GuidanceDocuments.ToArray(),
+            }));
         }
 
         if (method == "guidance/page" && PageReply is not null)
@@ -302,6 +307,13 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
 
     /// <summary>Served by guidance/documents, empty by default.</summary>
     public List<object> GuidanceDocuments { get; } = [];
+
+    /// <summary>The guidelines folder guidance/documents reports.</summary>
+    public string GuidelinesFolder { get; set; } = @"C:\Users\clinician\Documents\Ambient guidelines";
+
+    public bool GuidelinesFolderFound { get; set; } = true;
+
+    public int UnsupportedFiles { get; set; }
 
     /// <summary>Served by guidance/documents/add: accepted rows and skipped files.</summary>
     public List<object> AddedDocuments { get; } = [];

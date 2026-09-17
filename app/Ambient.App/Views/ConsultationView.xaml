@@ -81,6 +81,11 @@
                                         <TextBlock FontWeight="SemiBold" Margin="0,8,0,0" Text="Privacy" />
                                         <TextBlock TextWrapping="Wrap"
                                             Text="Everything runs on device. Audio, transcripts, notes and translations are processed and stored locally; nothing leaves the device." />
+                                        <TextBlock TextWrapping="Wrap"
+                                            Text="Guideline documents you add are kept in a folder in your Documents and searched on this device. The app reads them where they are and sends nothing anywhere." />
+                                        <TextBlock FontWeight="SemiBold" Margin="0,8,0,0" Text="Third-party software" />
+                                        <TextBlock TextWrapping="Wrap"
+                                            Text="PDFs are read with PDFium (The PDFium Authors, BSD 3-Clause licence) from the pdfium-binaries build (Benoit Blanchon, MIT licence). The licence texts sit in the licences folder beside the app." />
                                         <TextBlock FontWeight="SemiBold" Margin="0,8,0,0" Text="Minimum system requirements" />
                                         <TextBlock TextWrapping="Wrap"
                                             Text="&#x2022;  Windows 11, 64-bit&#x0a;&#x2022;  Intel Core Ultra Series 2 processor with Intel Arc iGPU&#x0a;&#x2022;  32 GB RAM&#x0a;&#x2022;  20 GB free disk space, for the models and their compiled caches" />

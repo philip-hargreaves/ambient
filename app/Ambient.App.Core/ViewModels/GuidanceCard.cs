@@ -7,7 +7,7 @@ namespace Ambient.App.Core.ViewModels;
 public sealed record GuidanceRecommendation(
     string Corpus, string ChunkId, string Code, string Number, string Title, string Section,
     string Text, string Link, string LastUpdated, string UpdateTag, string Source,
-    string Citation, double Score, string Trigger, string SourceLabel, bool FromNote,
+    string Citation, string Trigger, string SourceLabel, bool FromNote,
     long Document = 0, int Page = 0, int Pages = 0, bool Labelled = false)
 {
     /// <summary>Labelled when the corpus manifest names its publisher for the chip.</summary>
@@ -19,7 +19,7 @@ public sealed record GuidanceRecommendation(
             Field(result, "number"), Field(result, "title"), Field(result, "section"),
             Field(result, "text").TrimEnd(), Field(result, "url"), Field(result, "lastUpdated"),
             Field(result, "updateTag"), Field(result, "source"), Field(result, "citation"),
-            Numeric(result, "score"), Field(result, "trigger"), sourceLabel, fromNote,
+            Field(result, "trigger"), sourceLabel, fromNote,
             Integer(result, "document"), (int)Numeric(result, "page"),
             (int)Numeric(result, "pages"), labelled);
     }
@@ -74,9 +74,7 @@ public sealed record GuidanceRecommendation(
     /// <summary>The citation, with the web address on its own line when there is one.</summary>
     public string CitationText => HasWebLink ? $"{Citation}\n{Link}" : Citation;
 
-    public string OpenTip => FromDocument
-        ? "Opens a copy in your PDF viewer. The copy is removed when Ambient closes."
-        : "";
+    public string OpenTip => FromDocument ? "Opens the file in your PDF viewer." : "";
 
     /// <summary>Show in document: the page view, for a document with pages.</summary>
     public bool ShowVisible => FromDocument && Pages > 0;
@@ -127,8 +125,6 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
 
     public bool FromDocument => First.FromDocument;
 
-    public string Corpus => First.Corpus;
-
     public string Code => First.Code.ToUpperInvariant();
 
     public string Title => First.Title;
@@ -157,9 +153,7 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
     {
         get
         {
-            var count = Recommendations.Count == 1
-                ? "1 recommendation"
-                : $"{Recommendations.Count} recommendations";
+            var count = Count(Recommendations.Count, "recommendation");
             var date = ShortDate(First.LastUpdated);
             if (!FromDocument)
             {
@@ -169,7 +163,7 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
             var parts = new List<string>();
             if (First.Pages > 0)
             {
-                parts.Add(First.Pages == 1 ? "1 page" : $"{First.Pages} pages");
+                parts.Add(Count(First.Pages, "page"));
             }
 
             if (date.Length > 0)
@@ -191,4 +185,7 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
 
     internal static string Field(JsonElement element, string property) =>
         GuidanceRecommendation.Field(element, property);
+
+    /// <summary>"1 page", "12 pages".</summary>
+    internal static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n:N0} {noun}s";
 }

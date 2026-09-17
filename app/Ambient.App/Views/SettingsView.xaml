@@ -129,7 +129,9 @@
                 </Border>
 
                 <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Guideline documents" />
-                <Border Style="{StaticResource SettingsCard}">
+                <Border
+                    Style="{StaticResource SettingsCard}"
+                    Visibility="{x:Bind ViewModel.GuidanceInstalledVisible, Mode=OneWay}">
                     <StackPanel>
                         <Border
                             Padding="16,12"
@@ -179,21 +181,26 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="Added documents" />
+                                    <TextBlock Text="Your guideline documents" />
                                     <TextBlock
                                         Style="{StaticResource SettingsDescription}"
-                                        Text="Add medical documents or guidelines to search alongside each note." />
+                                        Text="PDF, text and Markdown files here are searched after each note for medical guidance. Do not add patient-identifiable documents." />
                                     <StackPanel Margin="0,4,0,0" Orientation="Horizontal" Spacing="12">
                                         <HyperlinkButton
                                             Padding="0"
-                                            Command="{x:Bind ViewModel.AddFolderCommand}"
-                                            Content="Add a folder" />
+                                            Command="{x:Bind ViewModel.OpenFolderCommand}"
+                                            Content="Open folder" />
                                         <HyperlinkButton
                                             Padding="0"
                                             Command="{x:Bind ViewModel.RemoveAllDocumentsCommand}"
                                             Content="Remove all"
                                             Visibility="{x:Bind ViewModel.DocumentsPresent, Mode=OneWay}" />
                                     </StackPanel>
+                                    <TextBlock
+                                        Foreground="{ThemeResource CautionBrush}"
+                                        Style="{StaticResource SettingsDescription}"
+                                        Text="The folder could not be reached. Nothing has been removed."
+                                        Visibility="{x:Bind ViewModel.FolderMissing, Mode=OneWay}" />
                                     <TextBlock
                                         Style="{StaticResource SettingsDescription}"
                                         Text="{x:Bind ViewModel.DocumentsCaption, Mode=OneWay}"
@@ -211,19 +218,11 @@
                         <Border
                             Style="{StaticResource SettingsRowChrome}"
                             Visibility="{x:Bind ViewModel.BatchVisible, Mode=OneWay}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock
-                                    Margin="0"
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource SettingsDescription}"
-                                    Text="{x:Bind ViewModel.BatchCaption, Mode=OneWay}" />
-                                <HyperlinkButton
-                                    Padding="0"
-                                    VerticalAlignment="Center"
-                                    Command="{x:Bind ViewModel.CancelAllCommand}"
-                                    Content="Cancel all"
-                                    FontSize="12" />
-                            </StackPanel>
+                            <TextBlock
+                                Margin="0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SettingsDescription}"
+                                Text="{x:Bind ViewModel.BatchCaption, Mode=OneWay}" />
                         </Border>
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Documents}">
                             <ItemsControl.ItemTemplate>
@@ -236,6 +235,10 @@
                                             </Grid.ColumnDefinitions>
                                             <StackPanel VerticalAlignment="Center" Spacing="2">
                                                 <TextBlock Text="{x:Bind Name}" TextWrapping="Wrap" />
+                                                <TextBlock
+                                                    Style="{StaticResource SettingsDescription}"
+                                                    Text="{x:Bind Where}"
+                                                    Visibility="{x:Bind Located}" />
                                                 <TextBlock
                                                     Style="{StaticResource SettingsDescription}"
                                                     Text="{x:Bind Detail, Mode=OneWay}"
@@ -259,8 +262,7 @@
                                                 VerticalAlignment="Center"
                                                 Command="{x:Bind Remove}"
                                                 CommandParameter="{x:Bind}"
-                                                Content="{x:Bind ControlLabel, Mode=OneWay}"
-                                                Visibility="{x:Bind ControlVisible, Mode=OneWay}" />
+                                                Content="Remove" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -312,6 +314,15 @@
                                 MinWidth="0"
                                 AutomationProperties.Name="Seed data"
                                 IsOn="{x:Bind ViewModel.SeedDataEnabled, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="Search the local research corpus, the NICE demo. Never ships"
+                            Title="Include research guidance"
+                            Visibility="{x:Bind ViewModel.ResearchToggleVisible}">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Include research guidance"
+                                IsOn="{x:Bind ViewModel.IncludeResearchGuidance, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="Model and speed figures in the status bar"

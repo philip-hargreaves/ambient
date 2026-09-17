@@ -4,13 +4,14 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Ambient.App.Core.ViewModels;
 
-/// <summary>One added document, as Settings lists it.</summary>
+/// <summary>One document in the guidelines folder, as Settings lists it.</summary>
 public sealed partial class DocumentRow : ObservableObject
 {
     public DocumentRow(JsonElement document, IRelayCommand<DocumentRow>? remove = null)
     {
         Id = document.GetProperty("id").GetInt64();
         Name = GuidanceCard.Field(document, "name");
+        Where = Subfolder(GuidanceCard.Field(document, "path"));
         Remove = remove;
         Apply(document);
     }
@@ -19,12 +20,16 @@ public sealed partial class DocumentRow : ObservableObject
 
     public string Name { get; }
 
-    /// <summary>Cancel while the row works, remove once it has settled.</summary>
+    /// <summary>The subfolder crumb when the file sits below the folder root.</summary>
+    public string Where { get; }
+
+    public bool Located => Where.Length > 0;
+
+    /// <summary>Remove sends the file to the Recycle Bin.</summary>
     public IRelayCommand<DocumentRow>? Remove { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Working), nameof(Failed), nameof(Plain), nameof(Waiting),
-        nameof(ControlLabel), nameof(ControlVisible))]
+    [NotifyPropertyChangedFor(nameof(Working), nameof(Failed), nameof(Plain), nameof(Waiting))]
     public partial string State { get; private set; } = "indexing";
 
     [ObservableProperty]
@@ -36,21 +41,16 @@ public sealed partial class DocumentRow : ObservableObject
 
     // What the ingest last said it was doing, empty before it starts
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Waiting), nameof(ControlVisible))]
+    [NotifyPropertyChangedFor(nameof(Waiting))]
     public partial string Phase { get; private set; } = "";
 
     public bool Working => State == "indexing";
 
-    public bool Failed => State is "failed" or "stale";
+    public bool Failed => State == "failed";
 
     public bool Plain => !Failed;
 
     public bool Waiting => Working && Phase.Length == 0;
-
-    public string ControlLabel => Working ? "Cancel" : "Remove";
-
-    /// <summary>Nothing to cancel while the consultation has the machine.</summary>
-    public bool ControlVisible => Phase != "paused";
 
     /// <summary>guidance/document: the row as the engine now has it.</summary>
     public void Apply(JsonElement document)
@@ -80,19 +80,25 @@ public sealed partial class DocumentRow : ObservableObject
         };
     }
 
-    private static string Describe(JsonElement document) =>
-        GuidanceCard.Field(document, "state") switch
+    private static string Subfolder(string path)
+    {
+        var cut = path.LastIndexOfAny(['\\', '/']);
+        return cut > 0 ? path[..cut].Replace('\\', '/').Replace("/", " › ") : "";
+    }
+
+    private string Describe(JsonElement document) =>
+        State switch
         {
             "ready" => Ready(document),
             "failed" => GuidanceCard.Field(document, "error") switch
             {
-                "patientData" => "Not added: this looks like a document about a patient.",
+                "patientData" => "Not searched: this looks like a document about a patient. "
+                    + "Delete it or move it out of the folder.",
                 "password" => "Cannot be read: the PDF is password protected.",
                 "noText" => $"Cannot be searched: {Int(document, "pagesWithoutText")} of "
                     + $"{Int(document, "pages")} pages are images with no text.",
-                _ => "Could not be read. Remove it and add the file again.",
+                _ => "Could not be read.",
             },
-            "stale" => "Added with an earlier guidance model. Remove it and add the file again.",
             _ => "Waiting",
         };
 
@@ -102,10 +108,10 @@ public sealed partial class DocumentRow : ObservableObject
         var pages = Int(document, "pages");
         if (pages > 0)
         {
-            parts.Add(Count(pages, "page"));
+            parts.Add(GuidanceCard.Count(pages, "page"));
         }
 
-        parts.Add(Count(Int(document, "chunks"), "passage"));
+        parts.Add(GuidanceCard.Count(Int(document, "chunks"), "passage"));
         var added = GuidanceCard.ShortDate(GuidanceCard.Field(document, "addedAt"));
         if (added.Length > 0)
         {
@@ -114,8 +120,6 @@ public sealed partial class DocumentRow : ObservableObject
 
         return string.Join(" · ", parts);
     }
-
-    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n:N0} {noun}s";
 
     private static int Int(JsonElement element, string property) =>
         element.TryGetProperty(property, out var value) && value.TryGetInt32(out var n) ? n : 0;
