@@ -59,7 +59,7 @@ add_executable(engine_tests
     adapters/guidance_lane_test.cpp
     adapters/guidance_record_test.cpp
     adapters/guidance_retriever_test.cpp
-    adapters/upload_store_test.cpp
+    adapters/document_index_test.cpp
     adapters/document_ingest_test.cpp
     adapters/ingest_host_test.cpp
     core/document_units_test.cpp

@@ -5,7 +5,6 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
-#include <string_view>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -50,15 +49,14 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
     const auto final_path = dir / kCorpusFile;
     const auto temp_path = dir / (std::string(kCorpusFile) + ".tmp");
     std::filesystem::remove(temp_path);
+    const int shard_count = static_cast<int>((chunks.size() + kShardVectors - 1) / kShardVectors);
     {
         store::Db db(temp_path, store::Db::Mode::kBuild);
         db.Exec("PRAGMA page_size=65536");
         db.Exec("PRAGMA journal_mode=DELETE");
         db.Exec("PRAGMA synchronous=OFF");
-        db.Exec(("PRAGMA application_id=" + std::to_string(kCorpusApplicationId)).c_str());
+        db.SetApplicationId(kCorpusApplicationId);
         db.Exec(kCorpusSchemaSql);
-        const int shard_count =
-            static_cast<int>((chunks.size() + kShardVectors - 1) / kShardVectors);
         {
             store::Db::Transaction txn(db);
             auto meta = db.Prepare(
@@ -123,7 +121,7 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
             }
             txn.Commit();
         }
-        db.Exec(("PRAGMA user_version=" + std::to_string(kCorpusFormat)).c_str());
+        db.SetUserVersion(kCorpusFormat);
         db.Exec("PRAGMA synchronous=FULL");
         db.Exec("VACUUM");
         db.Exec("PRAGMA optimize");
@@ -142,13 +140,14 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                             {"attribution", spec.attribution},
                             {"label", spec.label},
                             {"source", spec.source},
+                            {"research", spec.research},
                             {"embedder_id", spec.embedder.id},
                             {"embedder_rev", spec.embedder.rev},
                             {"query_prefix", spec.embedder.query_prefix},
                             {"max_tokens", spec.embedder.max_tokens},
                             {"dim", spec.embedder.dim},
                             {"chunks", chunks.size()},
-                            {"shards", (chunks.size() + kShardVectors - 1) / kShardVectors},
+                            {"shards", shard_count},
                             {"file", kCorpusFile},
                             {"bytes", std::filesystem::file_size(final_path)},
                             {"sha256", models::Sha256File(final_path)},

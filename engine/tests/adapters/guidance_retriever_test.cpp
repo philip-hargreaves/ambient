@@ -110,6 +110,35 @@ TEST(Retriever, ListsEveryCorpusDirectoryWithTheStaleOneUnavailable) {
     EXPECT_EQ(corpora[2].chunks, 0);
 }
 
+TEST(Retriever, AResearchCorpusIsHiddenUntilAskedForAndReloadsLive) {
+    fixture::TempDir dir{"research-root"};
+    WordEmbedder words;
+    fixture::Build(dir.path / "licensed", "licensed", words,
+                   fixture::Chunks(kFixtureDir, {"fx100", "fx200"}));
+    fixture::Build(dir.path / "demo", "demo", words, fixture::Chunks(kFixtureDir, {"fx300"}), true);
+
+    RetrieverOptions shipped;
+    shipped.floor = 0.2;
+    Retriever plain([] { return std::make_unique<WordEmbedder>(); }, dir.path, shipped);
+    plain.Prepare();
+    const auto listed = plain.Corpora();
+    ASSERT_EQ(listed.size(), 1u) << "the research corpus is not loaded or listed";
+    EXPECT_EQ(listed[0].id, "licensed");
+    EXPECT_FALSE(listed[0].research);
+    const auto searched = plain.Search(NoteText("joint-referral"), 3, SearchMode::kNote).searched;
+    for (const auto& c : searched) EXPECT_NE(c.id, "demo") << "the research corpus is not searched";
+
+    plain.SetResearch(true);
+    const auto both = plain.Corpora();
+    ASSERT_EQ(both.size(), 2u) << "the research corpus appears with no restart";
+    const auto demo =
+        std::find_if(both.begin(), both.end(), [](const Corpus& c) { return c.id == "demo"; });
+    ASSERT_NE(demo, both.end());
+    EXPECT_TRUE(demo->research);
+    plain.SetResearch(false);
+    EXPECT_EQ(plain.Corpora().size(), 1u) << "and goes again";
+}
+
 TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
     Root root;
     auto retriever = root.Make();

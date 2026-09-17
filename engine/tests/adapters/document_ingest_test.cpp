@@ -2,10 +2,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <mutex>
 #include <thread>
 
@@ -48,19 +50,38 @@ struct WordEmbedder : IEmbedder {
     }
 };
 
+constexpr auto kScan = std::chrono::milliseconds(100);
+
+Retriever MakeRetriever(const std::filesystem::path& dir) {
+    std::filesystem::create_directories(dir / "corpora");
+    return Retriever{[] { return std::make_unique<WordEmbedder>(); }, dir / "corpora",
+                     RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+}
+
+void Delete(const std::filesystem::path& path) {
+    std::filesystem::remove(path);
+}
+
 struct Harness {
     fixture::TempDir dir{"ingest"};
-    Retriever retriever{[] { return std::make_unique<WordEmbedder>(); }, dir.path / "corpora",
-                        RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+    Retriever retriever = MakeRetriever(dir.path);
+    std::filesystem::path folder = dir.path / "guidelines";
     std::atomic<bool> busy{false};
+    std::vector<std::filesystem::path> binned;  // what Remove sent to the bin
     DocumentIngest ingest;
     std::mutex mutex;
     std::vector<DocumentInfo> documents;
     std::vector<IngestProgress> progress;
 
     explicit Harness(std::filesystem::path host = {})
-        : ingest(retriever, dir.path / "uploads", [this] { return busy.load(); }, std::move(host)) {
-        std::filesystem::create_directories(dir.path / "corpora");
+        : ingest(
+              retriever, folder, dir.path / "index", [this] { return busy.load(); },
+              std::move(host), HostLimits{},
+              [this](const std::filesystem::path& path) {
+                  binned.push_back(path);
+                  Delete(path);
+              },
+              kScan) {
         retriever.Prepare();
         ingest.SetListener(
             [this](const IngestProgress& p) {
@@ -73,7 +94,15 @@ struct Harness {
             });
     }
 
+    // A file in the folder, or under a subfolder of it
     std::filesystem::path Write(const char* name, const std::string& text) {
+        const auto path = folder / name;
+        std::filesystem::create_directories(path.parent_path());
+        std::ofstream(path, std::ios::binary) << text;
+        return path;
+    }
+
+    std::filesystem::path WriteOutside(const char* name, const std::string& text) {
         const auto path = dir.path / name;
         std::ofstream(path, std::ios::binary) << text;
         return path;
@@ -84,39 +113,90 @@ struct Harness {
         return Write(name, std::string(pdf.begin(), pdf.end()));
     }
 
-    bool WaitForState(std::int64_t id, const char* state, int seconds = 10) {
+    bool WaitUntil(const std::function<bool()>& condition, int seconds = 10) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
         while (std::chrono::steady_clock::now() < deadline) {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                for (const auto& d : documents) {
-                    if (d.id == id && d.state == state) return true;
-                }
-            }
+            if (condition()) return true;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         return false;
     }
+
+    // The document the file holds, once the scan has taken it
+    std::int64_t IdOf(const char* path, int seconds = 10) {
+        std::int64_t id = 0;
+        WaitUntil(
+            [&] {
+                for (const auto& d : ingest.List().documents) {
+                    if (d.path == path) {
+                        id = d.id;
+                        return true;
+                    }
+                }
+                return false;
+            },
+            seconds);
+        return id;
+    }
+
+    bool WaitForState(std::int64_t id, const char* state, int seconds = 10) {
+        return WaitUntil(
+            [&] {
+                std::lock_guard<std::mutex> lock(mutex);
+                return std::ranges::any_of(documents, [&](const DocumentInfo& d) {
+                    return d.id == id && d.state == state;
+                });
+            },
+            seconds);
+    }
 };
+
+// Attaches a listener and waits for any document to turn ready
+bool WaitReady(DocumentIngest& ingest) {
+    std::mutex mutex;
+    bool ready = false;
+    ingest.SetListener([](const IngestProgress&) {},
+                       [&](const DocumentInfo& d) {
+                           std::lock_guard<std::mutex> lock(mutex);
+                           ready = ready || d.state == "ready";
+                       });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::lock_guard<std::mutex> lock(mutex);
+        if (ready) return true;
+    }
+    return false;
+}
 
 const char* const kGuideline =
     "Gout guideline\n\n1.1 Offer allopurinol after a first attack when urate stays high.\n\n"
     "1.2 Offer colchicine or an NSAID for an acute flare.\n\n"
     "1.3 Check urate six weeks after any dose change.\n";
 
-TEST(DocumentIngest, AddsATextDocumentAndTheRetrieverSearchesIt) {
+const char* const kPathway =
+    "PMR pathway\n\n1.1 Start prednisolone 15 mg daily and review the response at a week.\n\n"
+    "1.2 Taper by 2.5 mg every two to four weeks once symptoms settle.\n";
+
+TEST(DocumentIngest, AFileInTheFolderIsIndexedAndSearchedAndItsDeletionRemovesIt) {
     Harness h;
-    const auto accepted = h.ingest.Add({h.Write("Gout local guideline.md", kGuideline)});
-    ASSERT_EQ(accepted.documents.size(), 1u);
-    EXPECT_TRUE(accepted.skipped.empty());
-    const auto id = accepted.documents[0].id;
-    EXPECT_EQ(accepted.documents[0].state, "indexing");
-    EXPECT_EQ(accepted.documents[0].name, "Gout local guideline");
+    const auto file = h.Write("Gout local guideline.md", kGuideline);
+    const auto id = h.IdOf("Gout local guideline.md");
+    ASSERT_NE(id, 0);
     ASSERT_TRUE(h.WaitForState(id, "ready"));
 
-    const auto rows = h.ingest.List();
-    ASSERT_EQ(rows.size(), 1u);
-    EXPECT_GE(rows[0].chunks, 1);
+    const auto listing = h.ingest.List();
+    EXPECT_EQ(listing.folder, h.folder);
+    EXPECT_TRUE(listing.found);
+    EXPECT_EQ(listing.unsupported, 0);
+    ASSERT_EQ(listing.documents.size(), 1u);
+    const auto& row = listing.documents[0];
+    EXPECT_EQ(row.name, "Gout local guideline");
+    EXPECT_EQ(row.sha256.size(), 64u);
+    EXPECT_EQ(row.id, DocumentIndex::IdOf(row.sha256));
+    EXPECT_EQ(row.bytes, static_cast<std::int64_t>(std::filesystem::file_size(file)));
+    EXPECT_GE(row.chunks, 1);
+    EXPECT_TRUE(std::filesystem::exists(h.folder / kReadMe)) << "the folder explains itself";
     {
         std::lock_guard<std::mutex> lock(h.mutex);
         EXPECT_FALSE(h.progress.empty());
@@ -131,39 +211,148 @@ TEST(DocumentIngest, AddsATextDocumentAndTheRetrieverSearchesIt) {
     EXPECT_EQ(results.shown[0].corpus, "upload:" + std::to_string(id));
     EXPECT_EQ(results.shown[0].title, "Gout local guideline");
     EXPECT_EQ(results.shown[0].document, id);
-    EXPECT_EQ(results.shown[0].page, 0);
     EXPECT_NE(results.shown[0].text.find("colchicine"), std::string::npos);
     ASSERT_EQ(results.searched.size(), 1u);
     EXPECT_EQ(results.searched[0].id, "upload:" + std::to_string(id));
-    EXPECT_EQ(results.searched[0].source, "upload");
+    EXPECT_EQ(results.searched[0].sha256, row.sha256);
 
-    h.ingest.Remove(id);
+    Delete(file);
     ASSERT_TRUE(h.WaitForState(id, "removed"));
-    EXPECT_TRUE(h.ingest.List().empty());
-    const auto after =
-        h.retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery);
-    EXPECT_TRUE(after.shown.empty());
-    EXPECT_TRUE(after.searched.empty());
+    EXPECT_TRUE(h.ingest.List().documents.empty());
+    EXPECT_TRUE(h.retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery)
+                    .shown.empty());
 }
 
-TEST(DocumentIngest, SkipsWhatItCannotTakeAndRefusesPatientData) {
+TEST(DocumentIngest, AResultsChunkIdNamesTheChunkWithinItsDocument) {
     Harness h;
-    const auto guideline = h.Write("guideline.txt", kGuideline);
-    const auto accepted = h.ingest.Add({guideline, guideline, h.Write("scan.pdf", "%PDF"),
-                                        h.Write("letter.txt",
-                                                "Dear Dr Jones, this man's NHS number is 943 476 "
-                                                "5919 and his DOB: 1961.")});
-    ASSERT_EQ(accepted.documents.size(), 2u);
-    ASSERT_EQ(accepted.skipped.size(), 2u);
-    EXPECT_EQ(accepted.skipped[0].reason, "duplicate");
-    EXPECT_EQ(accepted.skipped[1].reason, "unsupported");
+    h.Write("gout.md", kGuideline);
+    h.Write("pmr.md", kPathway);
+    const auto gout = h.IdOf("gout.md");
+    const auto pmr = h.IdOf("pmr.md");
+    ASSERT_TRUE(h.WaitForState(gout, "ready"));
+    ASSERT_TRUE(h.WaitForState(pmr, "ready"));
 
-    const auto letter = accepted.documents[1].id;
+    const auto results =
+        h.retriever.Search("Taper prednisolone once symptoms settle.", 3, SearchMode::kQuery);
+    ASSERT_FALSE(results.shown.empty());
+    const auto& hit = results.shown[0];
+    ASSERT_EQ(hit.document, pmr);
+    const auto ord = std::stoll(hit.chunk_id.substr(hit.chunk_id.rfind('-') + 1));
+    DocumentIndex index(h.dir.path / "index" / kIndexFile);
+    EXPECT_EQ(index.ReadChunk(pmr, ord).text, hit.text);
+}
+
+TEST(DocumentIngest, ARenameKeepsTheDocumentAndAChangedFileIsANewOne) {
+    Harness h;
+    const auto file = h.Write("pmr.md", kPathway);
+    const auto id = h.IdOf("pmr.md");
+    ASSERT_TRUE(h.WaitForState(id, "ready"));
+    const auto sha = h.ingest.List().documents[0].sha256;
+
+    std::filesystem::rename(file, h.folder / "PMR pathway 2024.md");
+    ASSERT_TRUE(h.WaitUntil([&] {
+        const auto rows = h.ingest.List().documents;
+        return rows.size() == 1 && rows[0].path == "PMR pathway 2024.md" && rows[0].id == id;
+    }));
+    const auto renamed = h.ingest.List().documents[0];
+    EXPECT_EQ(renamed.name, "PMR pathway 2024");
+    EXPECT_EQ(renamed.state, "ready") << "a rename does not re-index";
+
+    h.Write("PMR pathway 2024.md", std::string(kPathway) + "\n1.3 Review bone protection.\n");
+    ASSERT_TRUE(h.WaitForState(id, "removed")) << "the old content is gone";
+    ASSERT_TRUE(h.WaitUntil([&] {
+        const auto rows = h.ingest.List().documents;
+        return rows.size() == 1 && rows[0].state == "ready" && rows[0].sha256 != sha;
+    })) << "the changed file is a new document";
+    EXPECT_NE(h.ingest.List().documents[0].id, id) << "so old citations never point into new text";
+}
+
+TEST(DocumentIngest, RemoveBinsTheFileAndRemoveAllEveryFile) {
+    Harness h;
+    const auto gout = h.Write("gout.md", kGuideline);
+    const auto pmr = h.Write("pmr.md", kPathway);
+    const auto gout_id = h.IdOf("gout.md");
+    const auto pmr_id = h.IdOf("pmr.md");
+    ASSERT_TRUE(h.WaitForState(gout_id, "ready"));
+    ASSERT_TRUE(h.WaitForState(pmr_id, "ready"));
+
+    h.ingest.Remove(gout_id);
+    EXPECT_EQ(h.binned, std::vector<std::filesystem::path>{gout});
+    EXPECT_FALSE(std::filesystem::exists(gout));
+    ASSERT_TRUE(h.WaitForState(gout_id, "removed"));
+    EXPECT_THROW(h.ingest.Remove(gout_id), store::StoreError);
+
+    EXPECT_EQ(h.ingest.RemoveAll(), 1u);
+    EXPECT_EQ(h.binned.size(), 2u);
+    EXPECT_FALSE(std::filesystem::exists(pmr));
+    ASSERT_TRUE(h.WaitForState(pmr_id, "removed"));
+    EXPECT_TRUE(h.ingest.List().documents.empty());
+    EXPECT_TRUE(std::filesystem::exists(h.folder / kReadMe));
+}
+
+TEST(DocumentIngest, ADeletedFolderIsMadeAgainEmptyAndAnUnreachableParentHoldsTheRows) {
+    Harness h;
+    h.Write("gout.md", kGuideline);
+    const auto id = h.IdOf("gout.md");
+    ASSERT_TRUE(h.WaitForState(id, "ready"));
+    std::filesystem::remove_all(h.folder);
+    ASSERT_TRUE(h.WaitForState(id, "removed"));
+    ASSERT_TRUE(h.WaitUntil([&] { return std::filesystem::exists(h.folder / kReadMe); }));
+    EXPECT_TRUE(h.ingest.List().found);
+
+    // A folder under a parent that went is out of reach, and nothing is acted on
+    fixture::TempDir dir{"ingest-unreachable"};
+    auto retriever = MakeRetriever(dir.path);
+    retriever.Prepare();
+    const auto parent = dir.path / "drive";
+    std::filesystem::create_directories(parent / "guidelines");
+    std::ofstream(parent / "guidelines" / "gout.md", std::ios::binary) << kGuideline;
+    DocumentIngest ingest(
+        retriever, parent / "guidelines", dir.path / "index", [] { return false; }, {},
+        HostLimits{}, Delete, kScan);
+    ASSERT_TRUE(WaitReady(ingest));
+    std::filesystem::remove_all(parent);
+    std::this_thread::sleep_for(kScan * 4);
+    const auto listing = ingest.List();
+    EXPECT_FALSE(listing.found);
+    EXPECT_EQ(listing.documents.size(), 1u) << "nothing removed while the folder is out of reach";
+}
+
+TEST(DocumentIngest, PatientDataIsRefusedAndOtherFilesAreCountedOrIgnored) {
+    Harness h;
+    h.Write("letter.txt",
+            "Dear Dr Jones, this man's NHS number is 943 476 5919 and his DOB: 1961.");
+    h.Write("notes.docx", "PK not a text file");
+    h.Write("scan.pdf", "%PDF");  // no host in this harness
+    h.Write("~$lock.txt", "an Office lock");
+    h.Write("gout.md", kGuideline);
+    const auto letter = h.IdOf("letter.txt");
     ASSERT_TRUE(h.WaitForState(letter, "failed"));
-    for (const auto& row : h.ingest.List()) {
+    ASSERT_TRUE(h.WaitForState(h.IdOf("gout.md"), "ready"));
+    const auto listing = h.ingest.List();
+    EXPECT_EQ(listing.unsupported, 2);
+    ASSERT_EQ(listing.documents.size(), 2u);
+    for (const auto& row : listing.documents) {
         if (row.id == letter) EXPECT_EQ(row.error, "patientData");
     }
+}
+
+TEST(DocumentIngest, AddCopiesIntoTheFolderAndSkipsWhatItCannotTake) {
+    Harness h;
+    const auto accepted =
+        h.ingest.Add({h.WriteOutside("Gout local guideline.md", kGuideline),
+                      h.WriteOutside("empty.txt", ""), h.WriteOutside("scan.pdf", "%PDF")});
+    ASSERT_EQ(accepted.documents.size(), 1u);
+    EXPECT_EQ(accepted.documents[0].path, "Gout local guideline.md");
+    EXPECT_EQ(accepted.documents[0].state, "indexing");
+    ASSERT_EQ(accepted.skipped.size(), 2u);
+    EXPECT_EQ(accepted.skipped[0].reason, "unreadable");
+    EXPECT_EQ(accepted.skipped[1].reason, "unsupported");
+    EXPECT_TRUE(std::filesystem::exists(h.folder / "Gout local guideline.md"));
     ASSERT_TRUE(h.WaitForState(accepted.documents[0].id, "ready"));
+    EXPECT_EQ(h.ingest.Add({h.dir.path / "Gout local guideline.md"}).documents.size(), 1u)
+        << "the same content again is the same document";
+    EXPECT_EQ(h.ingest.List().documents.size(), 1u);
 }
 
 TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
@@ -172,9 +361,9 @@ TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
         "Offer allopurinol after a first attack when urate stays high.",
         "Check urate six weeks after any dose change."};
     const auto path = h.WritePdf("gout.pdf", lines);
-    const auto id = h.ingest.Add({path}).documents[0].id;
+    const auto id = h.IdOf("gout.pdf");
     ASSERT_TRUE(h.WaitForState(id, "ready"));
-    const auto row = h.ingest.List()[0];
+    const auto row = h.ingest.List().documents[0];
     EXPECT_EQ(row.pages, 1);
     EXPECT_EQ(row.pages_without_text, 0);
     EXPECT_GE(row.chunks, 1);
@@ -187,43 +376,31 @@ TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
     EXPECT_EQ(results.shown[0].pages, 1);
     EXPECT_TRUE(results.shown[0].citation.starts_with("gout, page 1 (added "))
         << results.shown[0].citation;
-    EXPECT_NE(results.shown[0].text.find("allopurinol"), std::string::npos);
 
-    std::string reason;
-    auto store = UploadStore::Open(h.dir.path / "uploads", h.retriever.Identity(), reason);
-    ASSERT_TRUE(store) << reason;
-    const auto chunks = store->ReadChunks(id);
-    ASSERT_FALSE(chunks.empty());
-    EXPECT_EQ(chunks[0].page, 0);
-    EXPECT_NE(chunks[0].boxes.find("\"page\":0"), std::string::npos);
-
-    // The page view: a bitmap under scratch with the chunk's boxes, and a copy to open
+    // The page view draws a bitmap under scratch with the chunk boxes. Open gets her file
     const auto drawn = h.ingest.Render(id, 0, 0);
     EXPECT_EQ(drawn.width, 1190);
     EXPECT_EQ(drawn.height, 1684);
     EXPECT_EQ(drawn.pages, 1);
-    EXPECT_EQ(drawn.boxes, chunks[0].boxes);
+    EXPECT_NE(drawn.boxes.find("\"page\":0"), std::string::npos);
     EXPECT_TRUE(std::filesystem::exists(drawn.path));
     EXPECT_EQ(drawn.path.parent_path().filename(), "scratch");
-    const auto copy = h.ingest.OpenCopy(id);
-    EXPECT_EQ(copy, h.ingest.OpenCopy(id));
-    EXPECT_EQ(std::filesystem::file_size(copy), fixture::TinyPdf(lines).size());
+    EXPECT_EQ(h.ingest.Path(id), path);
     EXPECT_THROW(h.ingest.Render(id, 3, 0), store::StoreError);
 }
 
 TEST(DocumentIngest, HostRefusalsBecomeTheRowsError) {
     Harness h(AMBIENT_FAKE_INGEST_HOST);
-    const auto accepted =
-        h.ingest.Add({h.Write("locked.pdf", "FAKE exit 3"), h.Write("broken.pdf", "FAKE crash"),
-                      h.Write("fine.pdf", "%PDF canned")});
-    ASSERT_EQ(accepted.documents.size(), 3u);
-    const auto locked = accepted.documents[0].id;
-    const auto broken = accepted.documents[1].id;
-    const auto fine = accepted.documents[2].id;
+    h.Write("locked.pdf", "FAKE exit 3");
+    h.Write("broken.pdf", "FAKE crash");
+    h.Write("fine.pdf", "%PDF canned");
+    const auto locked = h.IdOf("locked.pdf");
+    const auto broken = h.IdOf("broken.pdf");
+    const auto fine = h.IdOf("fine.pdf");
     ASSERT_TRUE(h.WaitForState(locked, "failed"));
     ASSERT_TRUE(h.WaitForState(broken, "failed"));
     ASSERT_TRUE(h.WaitForState(fine, "ready"));
-    for (const auto& row : h.ingest.List()) {
+    for (const auto& row : h.ingest.List().documents) {
         if (row.id == locked) EXPECT_EQ(row.error, "password");
         if (row.id == broken) EXPECT_EQ(row.error, "crashed");
         if (row.id == fine) {
@@ -239,72 +416,58 @@ TEST(DocumentIngest, HostRefusalsBecomeTheRowsError) {
         << results.shown[0].citation;
 }
 
-TEST(DocumentIngest, AReadyDocumentIsSearchedAgainAfterARestart) {
+TEST(DocumentIngest, AReadyDocumentIsListedAndSearchedAgainAfterARestart) {
     fixture::TempDir dir{"ingest-restart"};
-    std::filesystem::create_directories(dir.path / "corpora");
-    const auto path = dir.path / "guideline.md";
-    std::ofstream(path, std::ios::binary) << kGuideline;
+    const auto folder = dir.path / "guidelines";
+    std::filesystem::create_directories(folder);
+    std::ofstream(folder / "guideline.md", std::ios::binary) << kGuideline;
     {
-        Retriever retriever{[] { return std::make_unique<WordEmbedder>(); }, dir.path / "corpora",
-                            RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+        auto retriever = MakeRetriever(dir.path);
         retriever.Prepare();
-        DocumentIngest ingest(retriever, dir.path / "uploads", [] { return false; });
-        std::mutex mutex;
-        bool ready = false;
-        ingest.SetListener([](const IngestProgress&) {},
-                           [&](const DocumentInfo& d) {
-                               std::lock_guard<std::mutex> lock(mutex);
-                               ready = ready || d.state == "ready";
-                           });
-        const auto id = ingest.Add({path}).documents[0].id;
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        for (;;) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            std::lock_guard<std::mutex> lock(mutex);
-            if (ready || std::chrono::steady_clock::now() > deadline) break;
-        }
-        ASSERT_GT(id, 0);
+        DocumentIngest ingest(
+            retriever, folder, dir.path / "index", [] { return false; }, {}, HostLimits{}, Delete,
+            kScan);
+        ASSERT_TRUE(WaitReady(ingest));
     }
 
-    Retriever retriever{[] { return std::make_unique<WordEmbedder>(); }, dir.path / "corpora",
-                        RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+    auto retriever = MakeRetriever(dir.path);
     retriever.Prepare();
-    DocumentIngest ingest(retriever, dir.path / "uploads", [] { return false; });
-    EXPECT_TRUE(retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery)
-                    .shown.empty());
-    ASSERT_EQ(ingest.List().size(), 1u);
-    const auto results =
-        retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery);
-    ASSERT_FALSE(results.shown.empty());
+    DocumentIngest ingest(
+        retriever, folder, dir.path / "index", [] { return false; }, {}, HostLimits{}, Delete,
+        kScan);
+    ASSERT_EQ(ingest.List().documents.size(), 1u) << "listed before any scan or embedder";
+    EXPECT_EQ(ingest.List().documents[0].state, "ready");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    Results results;
+    while (std::chrono::steady_clock::now() < deadline) {
+        results = retriever.Search("Colchicine for an acute flare of gout.", 3, SearchMode::kQuery);
+        if (!results.shown.empty()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_FALSE(results.shown.empty()) << "published once the embedder was adopted";
     EXPECT_EQ(results.shown[0].source, "upload");
 }
 
-TEST(DocumentIngest, WithoutAHostAPdfIsSkipped) {
-    Harness h;
-    const auto accepted = h.ingest.Add({h.Write("scan.pdf", "%PDF")});
-    EXPECT_TRUE(accepted.documents.empty());
-    ASSERT_EQ(accepted.skipped.size(), 1u);
-    EXPECT_EQ(accepted.skipped[0].reason, "unsupported");
-}
-
-TEST(DocumentIngest, PausesWhileAConsultationRunsAndCancelRemovesTheDocument) {
+TEST(DocumentIngest, IndexingPausesWhileAConsultationRunsAndRemoveDuringItCancels) {
     Harness h;
     h.busy = true;
-    const auto id = h.ingest.Add({h.Write("guideline.md", kGuideline)}).documents[0].id;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    const auto file = h.Write("guideline.md", kGuideline);
+    // The file is found and its row appears, but embedding waits for the consultation
+    const auto id = h.IdOf("guideline.md");
+    ASSERT_NE(id, 0);
     bool paused = false;
-    while (!paused && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_TRUE(h.WaitUntil([&] {
         std::lock_guard<std::mutex> lock(h.mutex);
         for (const auto& p : h.progress) paused = paused || p.phase == "paused";
-    }
-    EXPECT_TRUE(paused);
-    EXPECT_EQ(h.ingest.List()[0].state, "indexing");
+        return paused;
+    }));
+    EXPECT_EQ(h.ingest.List().documents[0].state, "indexing");
 
-    h.ingest.Cancel();
+    h.ingest.Remove(id);
+    EXPECT_FALSE(std::filesystem::exists(file));
     h.busy = false;
     ASSERT_TRUE(h.WaitForState(id, "removed"));
-    EXPECT_TRUE(h.ingest.List().empty());
+    EXPECT_TRUE(h.ingest.List().documents.empty());
 }
 
 }  // namespace

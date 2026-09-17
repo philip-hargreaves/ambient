@@ -12,13 +12,11 @@ using nlohmann::json;
 // Bumped when a field changes meaning, so a reader refuses a newer record
 inline constexpr int kRecordVersion = 1;
 
-// One shape for a search on the wire and at rest: guidance/ready wraps it with
-// the session id, and a stored copy reads back whole, with the corpora it ran
-// over and the floor it was held to
+// One shape on the wire and at rest: guidance/ready adds the session id, a
+// stored copy reads back whole
 json ToJson(const Corpus& corpus);
 json ToJson(const Results& results);
 
-Corpus CorpusFromJson(const json& j);
 Results FromJson(const json& j);
 
 // A search kept with its session, tied to the note revision it ran on
@@ -30,7 +28,7 @@ struct Record {
 json ToJson(const Record& record);
 Record RecordFromJson(const json& j);
 
-// Text for the store, invalid UTF-8 replaced rather than refused, as on the wire
+// Text for the store, invalid UTF-8 replaced as on the wire
 std::string Dump(const Record& record);
 
 // A stored record this reader can trust: an object no newer than kRecordVersion

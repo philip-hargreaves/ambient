@@ -2,10 +2,15 @@
     "jsonrpc": "2.0",
     "id": 15,
     "result": {
+        "folder": "C:\\Users\\clinician\\Documents\\Ambient guidelines",
+        "found": true,
+        "unsupported": 2,
         "documents": [
             {
                 "id": 7302914125883421,
                 "name": "BSR gout guideline 2017",
+                "path": "BSR gout guideline 2017.md",
+                "sha256": "bc9860cdfed1879752e67ea846b7bbef6f59290b9f16988e7ff977769ac60b3c",
                 "mime": "text/markdown",
                 "state": "ready",
                 "error": null,
@@ -19,6 +24,8 @@
             {
                 "id": 2871034561297730,
                 "name": "PMR local pathway",
+                "path": "PMR local pathway.txt",
+                "sha256": "7e3f9e26abe9d7567618d8c8cf96083afd0a7e4bfe3a3b553aad3b2c26cbf2f6",
                 "mime": "text/plain",
                 "state": "indexing",
                 "error": null,
@@ -32,6 +39,8 @@
             {
                 "id": 9106572248130415,
                 "name": "Clinic letter",
+                "path": "Clinic letter.txt",
+                "sha256": "5135b53eff5763333bbc3e0e03acd94f020be0b3396d05f326f3e1388dc23a0f",
                 "mime": "text/plain",
                 "state": "failed",
                 "error": "patientData",

@@ -61,9 +61,10 @@ class Db {
     };
 
     // kSession: the clinical store's pragmas (WAL, synchronous FULL, foreign keys).
-    // kBuild: read-write, create, no pragmas; the caller sets the file's shape.
-    // kImmutableReadOnly: a finished file that nothing writes; no locking, no journal
-    enum class Mode { kSession, kBuild, kImmutableReadOnly };
+    // kIndex: a rebuildable cache: WAL, synchronous NORMAL, foreign keys, secure delete.
+    // kBuild: read-write, create, no pragmas. The caller sets the file's shape.
+    // kImmutableReadOnly: a finished file nothing writes, no locking, no journal
+    enum class Mode { kSession, kIndex, kBuild, kImmutableReadOnly };
 
     explicit Db(const std::filesystem::path& path, Mode mode = Mode::kSession);
     Db(Db&& other) noexcept;

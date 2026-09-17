@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 
 #include "core/guidance_query.hpp"
@@ -10,6 +12,15 @@
 
 namespace ambient::guidance {
 namespace {
+
+bool IsResearch(const std::filesystem::path& manifest) {
+    try {
+        std::ifstream in(manifest);
+        return nlohmann::json::parse(in).value("research", false);
+    } catch (const std::exception&) {
+        return false;
+    }
+}
 
 Corpus Describe(const CorpusInfo& info) {
     Corpus c;
@@ -19,6 +30,7 @@ Corpus Describe(const CorpusInfo& info) {
     c.attribution = info.attribution;
     c.label = info.label;
     c.source = info.source;
+    c.research = info.research;
     c.embedder = info.embedder_id;
     c.sha256 = info.sha256;
     c.chunks = static_cast<int>(info.chunk_count);
@@ -78,41 +90,56 @@ void Retriever::Load() {
     try {
         auto embedder = load_embedder_();
         if (!embedder) throw std::runtime_error("no guidance embedder");
-        std::vector<std::filesystem::path> dirs;
-        if (std::filesystem::is_directory(corpora_root_)) {
-            for (const auto& entry : std::filesystem::directory_iterator(corpora_root_)) {
-                if (entry.is_directory() && std::filesystem::exists(entry.path() / kManifestFile)) {
-                    dirs.push_back(entry.path());
-                }
-            }
-        }
-        std::sort(dirs.begin(), dirs.end());
-        std::vector<Loaded> loaded;
-        std::vector<Corpus> corpora;
-        for (const auto& dir : dirs) {
-            Loaded item;
-            std::string reason;
-            item.store = CorpusStore::Open(dir, embedder->Identity(), reason);
-            if (item.store) {
-                item.corpus = Describe(item.store->Info());
-            } else {
-                item.corpus.id = dir.filename().string();
-                item.corpus.unavailable = reason;
-            }
-            corpora.push_back(item.corpus);
-            loaded.push_back(std::move(item));
-        }
         embedder_ = std::move(embedder);
-        loaded_ = std::move(loaded);
-        std::lock_guard<std::mutex> lock(corpora_mutex_);
-        corpora_ = std::move(corpora);
-        readiness_ = {Readiness::Phase::kReady, ""};
+        LoadCorpora();
     } catch (const std::exception& e) {
         load_error_ = e.what();
         std::lock_guard<std::mutex> lock(corpora_mutex_);
         readiness_ = {Readiness::Phase::kUnavailable, load_error_};
         throw;
     }
+}
+
+// Scans the corpora folder against the research setting and swaps in the
+// loaded set. The embedder stays
+void Retriever::LoadCorpora() {
+    std::vector<std::filesystem::path> dirs;
+    if (std::filesystem::is_directory(corpora_root_)) {
+        for (const auto& entry : std::filesystem::directory_iterator(corpora_root_)) {
+            const auto manifest = entry.path() / kManifestFile;
+            if (!entry.is_directory() || !std::filesystem::exists(manifest)) continue;
+            // A research corpus is a demo, invisible unless a dev build asks for it
+            if (!options_.include_research && IsResearch(manifest)) continue;
+            dirs.push_back(entry.path());
+        }
+    }
+    std::sort(dirs.begin(), dirs.end());
+    std::vector<Loaded> loaded;
+    std::vector<Corpus> corpora;
+    for (const auto& dir : dirs) {
+        Loaded item;
+        std::string reason;
+        item.store = CorpusStore::Open(dir, embedder_->Identity(), reason);
+        if (item.store) {
+            item.corpus = Describe(item.store->Info());
+        } else {
+            item.corpus.id = dir.filename().string();
+            item.corpus.unavailable = reason;
+        }
+        corpora.push_back(item.corpus);
+        loaded.push_back(std::move(item));
+    }
+    loaded_ = std::move(loaded);
+    std::lock_guard<std::mutex> lock(corpora_mutex_);
+    corpora_ = std::move(corpora);
+    readiness_ = {Readiness::Phase::kReady, ""};
+}
+
+void Retriever::SetResearch(bool include) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    if (options_.include_research == include) return;
+    options_.include_research = include;
+    if (embedder_) LoadCorpora();
 }
 
 Embedding Retriever::Embed(const std::string& text) {
@@ -140,9 +167,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     out.upload_floor = options_.upload_floor;
     const auto uploads = uploads_;
     std::vector<CorpusStore*> stores;
-    if (uploads) {
-        for (const auto& document : uploads->documents) out.searched.push_back(document);
-    }
+    if (uploads) out.searched = uploads->documents;
     for (auto& item : loaded_) {
         if (item.store) {
             stores.push_back(item.store.get());
@@ -214,7 +239,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             if (PopulationConflict(text, row.text, row.name)) continue;
             Result result;
             result.corpus = "upload:" + std::to_string(row.document);
-            result.chunk_id = result.corpus + "-" + std::to_string(at.ord);
+            result.chunk_id = result.corpus + "-" + std::to_string(row.ord);
             result.number = row.number;
             result.title = row.name;
             result.section = row.section;

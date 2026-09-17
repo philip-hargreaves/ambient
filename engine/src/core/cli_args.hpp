@@ -17,4 +17,15 @@ inline std::string TakeFlag(std::vector<std::string>& args, const std::string& n
     return {};
 }
 
+// Removes a bare "--name" from args and returns whether it was present
+inline bool TakeSwitch(std::vector<std::string>& args, const std::string& name) {
+    for (auto it = args.begin(); it != args.end(); ++it) {
+        if (*it == name) {
+            args.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace ambient

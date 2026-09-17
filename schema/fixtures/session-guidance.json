@@ -7,6 +7,7 @@
             "noteRevision": 1,
             "generatedAt": "2026-09-13T01:00:00Z",
             "stale": false,
+            "documentsChanged": false,
             "shown": [
                 {
                     "corpus": "fixture-nice",
@@ -36,6 +37,7 @@
                     "attribution": "none",
                     "label": "NICE",
                     "source": "nice",
+                    "research": false,
                     "embedder": "gte-large-int8",
                     "sha256": "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f",
                     "chunks": 40,

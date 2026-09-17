@@ -38,6 +38,7 @@ json ToJson(const Corpus& c) {
                 {"attribution", c.attribution},
                 {"label", c.label},
                 {"source", c.source},
+                {"research", c.research},
                 {"embedder", c.embedder},
                 {"sha256", c.sha256},
                 {"chunks", c.chunks},
@@ -77,6 +78,8 @@ json ToJson(const Results& results) {
                 {"uploadFloor", results.upload_floor}};
 }
 
+namespace {
+
 Corpus CorpusFromJson(const json& j) {
     Corpus c;
     c.id = Str(j, "id");
@@ -85,6 +88,7 @@ Corpus CorpusFromJson(const json& j) {
     c.attribution = Str(j, "attribution");
     c.label = Str(j, "label");
     c.source = Str(j, "source");
+    c.research = j.value("research", false);
     c.embedder = Str(j, "embedder");
     c.sha256 = Str(j, "sha256");
     c.chunks = Int(j, "chunks");
@@ -92,6 +96,8 @@ Corpus CorpusFromJson(const json& j) {
     c.unavailable = Str(j, "unavailable");
     return c;
 }
+
+}  // namespace
 
 Results FromJson(const json& j) {
     Results out;
@@ -149,8 +155,6 @@ std::string Dump(const Record& record) {
     return ToJson(record).dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
-// A version this build knows, and the two fields the section's state is read
-// from: anything less reads back as no record rather than as an empty one
 bool CanRead(const json& j) {
     if (!j.is_object()) return false;
     const auto version = j.find("version");

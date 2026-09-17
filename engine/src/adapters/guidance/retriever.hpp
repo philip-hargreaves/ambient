@@ -19,13 +19,15 @@ struct RetrieverOptions {
     double upload_floor = kDefaultFloor;
     int note_weight = 1;
     int union_size = kUnionSize;
+    bool include_research = false;  // dev only
 };
 
-// Every ready added document, decrypted, as one matrix and its rows. Built by
-// the ingest and swapped in whole, so a search never touches the store
+// Every ready added document as one matrix and its rows. Built by the ingest
+// and swapped in whole, so a search never touches the store
 struct UploadSnapshot {
     struct Row {
         std::int64_t document = 0;
+        std::int64_t ord = 0;  // the chunk's ordinal within its document
         int page = 0;
         int pages = 0;  // the document's page count, 0 for text
         std::string name;
@@ -45,8 +47,8 @@ using EmbedderLoader = std::function<std::unique_ptr<IEmbedder>()>;
 
 // The shipped retriever: one embedder, every corpus under corpora_root that
 // passes the load guards, exact scan, rank vote across the sub-queries, cosine
-// floor, population guard. A result's score is its best cosine; the order is
-// the vote. Prepare and Search run one at a time. Corpora and Status may be
+// floor, population guard. A result's score is its best cosine and the order
+// is the vote. Prepare and Search run one at a time. Corpora and Status may be
 // read from any thread. A load failure is kept and rethrown, never retried,
 // since the model store does not change while the engine runs
 class Retriever : public IGuidanceRetriever {
@@ -64,12 +66,16 @@ class Retriever : public IGuidanceRetriever {
     EmbedderIdentity Identity();
     void PublishUploads(std::shared_ptr<const UploadSnapshot> uploads);
 
+    // Dev only: reload the corpora with or without the ones marked research
+    void SetResearch(bool include) override;
+
    private:
     struct Loaded {
         Corpus corpus;
         std::unique_ptr<CorpusStore> store;  // null when unavailable
     };
     void Load();
+    void LoadCorpora();
 
     EmbedderLoader load_embedder_;
     std::filesystem::path corpora_root_;

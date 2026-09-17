@@ -141,27 +141,27 @@ target_link_libraries(ambient_translate
 # The corpus schema is a SQL file, embedded like the session schema
 set(ambient_guidance_schema_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/adapters/guidance/schema)
 file(READ ${ambient_guidance_schema_dir}/corpus.sql AMBIENT_CORPUS_SCHEMA_SQL)
-file(READ ${ambient_guidance_schema_dir}/uploads.sql AMBIENT_UPLOAD_SCHEMA_SQL)
+file(READ ${ambient_guidance_schema_dir}/index.sql AMBIENT_INDEX_SCHEMA_SQL)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${ambient_guidance_schema_dir}/corpus.sql ${ambient_guidance_schema_dir}/uploads.sql)
+    ${ambient_guidance_schema_dir}/corpus.sql ${ambient_guidance_schema_dir}/index.sql)
 configure_file(src/adapters/guidance/schema.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/adapters/guidance/schema.hpp @ONLY)
 
 add_library(ambient_guidance STATIC
     src/adapters/guidance/chunker.cpp
     src/adapters/guidance/corpus_builder.cpp
+    src/adapters/guidance/document_index.cpp
     src/adapters/guidance/document_ingest.cpp
     src/adapters/guidance/ingest_host.cpp
     src/adapters/guidance/corpus_store.cpp
     src/adapters/guidance/embedder.cpp
     src/adapters/guidance/guidance_lane.cpp
     src/adapters/guidance/indexer.cpp
-    src/adapters/guidance/retriever.cpp
-    src/adapters/guidance/upload_store.cpp)
+    src/adapters/guidance/retriever.cpp)
 target_include_directories(ambient_guidance PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(ambient_guidance
     PUBLIC ambient_core ambient_models nlohmann_json::nlohmann_json
-    PRIVATE ambient_storage ambient_warnings openvino::genai)
+    PRIVATE ambient_storage ambient_warnings openvino::genai bcrypt ole32 shell32)
 
 add_library(ambient_vad STATIC
     src/adapters/vad/silero_vad.cpp)
@@ -226,7 +226,7 @@ target_link_libraries(ambient_audio
 add_executable(ambient_engine src/main.cpp)
 target_link_libraries(ambient_engine PRIVATE
     ambient_ipc ambient_audio ambient_diarisation ambient_guidance ambient_note ambient_storage
-    ambient_transcription ambient_translate ambient_vad ambient_warnings)
+    ambient_transcription ambient_translate ambient_vad ambient_warnings ole32 shell32)
 ambient_deploy_openvino(ov_engine_runtime)
 add_dependencies(ambient_engine ov_engine_runtime)
 

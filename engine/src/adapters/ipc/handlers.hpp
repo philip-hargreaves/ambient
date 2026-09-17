@@ -87,18 +87,19 @@ json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
 json GuidanceModelJson(const ambient::guidance::Readiness& readiness);
 // The lane request behind every search: results go out as guidance/ready, a
 // failure as guidance/failed, both naming the session (null for free text).
-// With a session the record is stored before the notification, which also says
-// whether the note moved during the search. A session erased meanwhile ends
-// the search quietly, any other store error rides on the ready payload rather
-// than withholding the results
+// With a session the record is stored first and the payload says whether the
+// note moved. A session erased meanwhile ends the search quietly, any other
+// store error rides on the payload
 ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
                                                        const std::string& session,
                                                        ambient::store::Document note, int limit,
                                                        Notify notify);
 // session/guidance: the stored record, null when the note was never searched
 // or the record cannot be read, stale when the note has been written since
-std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
-                                                const json& params);
+// documentsChanged: the added documents the record searched are not the ones ready now
+std::variant<json, Error> HandleSessionGuidance(
+    ambient::store::ISessionStore& sessions, const json& params,
+    ambient::guidance::IDocumentIngest* ingest = nullptr);
 // guidance/search: the stored note of session id, or free text, through the
 // lane. The reply is immediate; the results arrive as a notification
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
@@ -110,16 +111,18 @@ json DocumentJson(const ambient::guidance::DocumentInfo& document);
 json ProgressJson(const ambient::guidance::IngestProgress& progress);
 // The ready set changes when a document finishes or a finished one goes
 bool ChangesReadySet(const ambient::guidance::DocumentInfo& document);
-// guidance/documents/add: every path accepted gets a row at once and the rest
-// are skipped with a reason. guidance/documents/remove cancels an indexing id
+// guidance/documents: the folder and its documents. guidance/documents/add
+// copies files into the folder and answers with their rows, the rest skipped
+// with a reason. guidance/documents/remove sends a document's files to the
+// Recycle Bin
 std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest& ingest,
                                              const json& params);
 std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest);
 std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
                                                 const json& params);
 // guidance/page: one page of an added PDF drawn to a bitmap under the scratch
-// folder, with the cited chunk's boxes. guidance/documents/open: a decrypted
-// copy for the PDF viewer, removed when the engine ends
+// folder, with the cited chunk's boxes. guidance/documents/open: her file, for
+// the PDF viewer
 std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
                                               const json& params);
 std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,

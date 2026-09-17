@@ -47,12 +47,12 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         }
         Guard(Int(manifest, "format") == kCorpusFormat, "manifest format is not 1");
         CorpusInfo info;
-        info.dir = dir;
         info.id = Str(manifest, "id");
         info.name = Str(manifest, "name");
         info.licence = Str(manifest, "licence");
         info.attribution = Str(manifest, "attribution");
         info.label = manifest.value("label", std::string());
+        info.research = manifest.value("research", false);
         info.embedder_id = Str(manifest, "embedder_id");
         info.embedder_rev = Str(manifest, "embedder_rev");
         info.built_at = Str(manifest, "built_at");
@@ -70,8 +70,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
 
         // 3. a corpus file of this format, not left in WAL mode
         store::Db db(path, store::Db::Mode::kImmutableReadOnly);
-        Guard(db.QueryInt64("PRAGMA application_id") ==
-                  static_cast<std::int64_t>(kCorpusApplicationId),
+        Guard(db.ApplicationId() == static_cast<std::int64_t>(kCorpusApplicationId),
               "not a corpus file");
         Guard(db.UserVersion() == kCorpusFormat, "corpus format is newer or older than this build");
         {

@@ -9,8 +9,8 @@ inline constexpr const char* kCorpusSchemaSql = R"sql(
 @AMBIENT_CORPUS_SCHEMA_SQL@
 )sql";
 
-inline constexpr const char* kUploadSchemaSql = R"sql(
-@AMBIENT_UPLOAD_SCHEMA_SQL@
+inline constexpr const char* kIndexSchemaSql = R"sql(
+@AMBIENT_INDEX_SCHEMA_SQL@
 )sql";
 
 }  // namespace ambient::guidance

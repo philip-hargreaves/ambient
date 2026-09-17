@@ -4,6 +4,7 @@
 #include <memory>
 #include <openvino/core/version.hpp>
 #include <optional>
+#include <set>
 #include <stdexcept>
 
 #include "adapters/demo/sample_year.hpp"
@@ -872,8 +873,27 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
     return json::object();
 }
 
+namespace {
+
+// The added documents the record searched against the ones ready now
+bool DocumentsChangedSince(const ambient::guidance::Record& record,
+                           ambient::guidance::IDocumentIngest& ingest) {
+    std::set<std::string> searched;
+    for (const auto& c : record.results.searched) {
+        if (c.id.starts_with("upload:")) searched.insert(c.id);
+    }
+    std::set<std::string> ready;
+    for (const auto& d : ingest.List().documents) {
+        if (d.state == "ready") ready.insert("upload:" + std::to_string(d.id));
+    }
+    return searched != ready;
+}
+
+}  // namespace
+
 std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
-                                                const json& params) {
+                                                const json& params,
+                                                ambient::guidance::IDocumentIngest* ingest) {
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     try {
@@ -898,6 +918,7 @@ std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& s
         guidance["generatedAt"] = NullWhenEmpty(stored.generated_at);
         guidance["stale"] =
             record->note_revision != sessions.ReadDocument(session, DocumentKind::kNote).revision;
+        guidance["documentsChanged"] = ingest != nullptr && DocumentsChangedSince(*record, *ingest);
         return json{{"guidance", guidance}};
     } catch (const std::exception& e) {
         return Error{kSessionError, "Session error", json(e.what())};
@@ -907,6 +928,8 @@ std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& s
 json DocumentJson(const ambient::guidance::DocumentInfo& document) {
     return json{{"id", document.id},
                 {"name", document.name},
+                {"path", document.path},
+                {"sha256", document.sha256},
                 {"mime", document.mime},
                 {"state", document.state},
                 {"error", NullWhenEmpty(document.error)},
@@ -931,23 +954,38 @@ bool ChangesReadySet(const ambient::guidance::DocumentInfo& document) {
 
 namespace {
 
+std::string Utf8(const std::filesystem::path& path) {
+    const auto u8 = path.u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
 Error DocumentsError(const std::exception& e) {
     return Error{kSessionError, "Document store error", json(e.what())};
+}
+
+// An unknown document is the caller's mistake, anything else the store's
+std::variant<json, Error> DocumentsRefused(const std::exception& e) {
+    if (const auto* store = dynamic_cast<const ambient::store::StoreError*>(&e);
+        store != nullptr && store->Code() == ambient::store::StoreCode::kNotFound) {
+        return Error{kInvalidParams, "Invalid params", json("unknown document")};
+    }
+    return DocumentsError(e);
+}
+
+json Param(const json& params, const char* key) {
+    return params.is_object() ? params.value(key, json()) : json();
 }
 
 }  // namespace
 
 std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest& ingest,
                                              const json& params) {
-    const json paths = params.is_object() ? params.value("paths", json()) : json();
-    if (!paths.is_array() || paths.empty()) {
-        return Error{kInvalidParams, "Invalid params", json("paths must be a list of strings")};
-    }
+    const json paths = Param(params, "paths");
+    const Error invalid{kInvalidParams, "Invalid params", json("paths must be a list of strings")};
+    if (!paths.is_array() || paths.empty()) return invalid;
     std::vector<std::filesystem::path> files;
     for (const auto& path : paths) {
-        if (!path.is_string()) {
-            return Error{kInvalidParams, "Invalid params", json("paths must be a list of strings")};
-        }
+        if (!path.is_string()) return invalid;
         const auto text = path.get<std::string>();
         files.emplace_back(std::u8string(text.begin(), text.end()));
     }
@@ -967,9 +1005,13 @@ std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest&
 
 std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest) {
     try {
+        const auto listing = ingest.List();
         json documents = json::array();
-        for (const auto& document : ingest.List()) documents.push_back(DocumentJson(document));
-        return json{{"documents", documents}};
+        for (const auto& document : listing.documents) documents.push_back(DocumentJson(document));
+        return json{{"folder", Utf8(listing.folder)},
+                    {"found", listing.found},
+                    {"unsupported", listing.unsupported},
+                    {"documents", documents}};
     } catch (const std::exception& e) {
         return DocumentsError(e);
     }
@@ -977,44 +1019,22 @@ std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest
 
 std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
                                                 const json& params) {
-    const json id = params.is_object() ? params.value("id", json()) : json();
+    const json id = Param(params, "id");
     if (!id.is_number_integer()) {
         return Error{kInvalidParams, "Invalid params", json("id must be an integer")};
     }
     try {
         ingest.Remove(id.get<std::int64_t>());
         return json::object();
-    } catch (const ambient::store::StoreError& e) {
-        if (e.Code() == ambient::store::StoreCode::kNotFound) {
-            return Error{kInvalidParams, "Invalid params", json("unknown document")};
-        }
-        return DocumentsError(e);
     } catch (const std::exception& e) {
-        return DocumentsError(e);
+        return DocumentsRefused(e);
     }
 }
-
-namespace {
-
-std::string Utf8(const std::filesystem::path& path) {
-    const auto u8 = path.u8string();
-    return std::string(u8.begin(), u8.end());
-}
-
-std::variant<json, Error> DocumentsRefused(const std::exception& e) {
-    if (const auto* store = dynamic_cast<const ambient::store::StoreError*>(&e);
-        store != nullptr && store->Code() == ambient::store::StoreCode::kNotFound) {
-        return Error{kInvalidParams, "Invalid params", json("unknown document")};
-    }
-    return DocumentsError(e);
-}
-
-}  // namespace
 
 std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
                                               const json& params) {
-    const json id = params.is_object() ? params.value("id", json()) : json();
-    const json page = params.is_object() ? params.value("page", json()) : json();
+    const json id = Param(params, "id");
+    const json page = Param(params, "page");
     const std::string chunk_id = params.is_object() ? params.value("chunkId", "") : "";
     // The chunk id is "upload:<document>-<ord>"
     const auto dash = chunk_id.rfind('-');
@@ -1037,12 +1057,12 @@ std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest
 
 std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
                                               const json& params) {
-    const json id = params.is_object() ? params.value("id", json()) : json();
+    const json id = Param(params, "id");
     if (!id.is_number_integer()) {
         return Error{kInvalidParams, "Invalid params", json("id must be an integer")};
     }
     try {
-        return json{{"path", Utf8(ingest.OpenCopy(id.get<std::int64_t>()))}};
+        return json{{"path", Utf8(ingest.Path(id.get<std::int64_t>()))}};
     } catch (const std::exception& e) {
         return DocumentsRefused(e);
     }
@@ -1061,15 +1081,23 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
     server.RegisterMethod("guidance/corpora", [&retriever](const json&) {
         return GuidanceCorporaJson(retriever.Status(), retriever.Corpora());
     });
-    server.RegisterMethod("session/guidance", [&sessions](const json& params) {
-        return HandleSessionGuidance(sessions, params);
+    // Dev only: the shell's research switch reloads the corpora without a restart
+    server.RegisterMethod(
+        "guidance/research",
+        [&server, &retriever](const json& params) -> std::variant<json, Error> {
+            const json include = Param(params, "include");
+            if (!include.is_boolean()) {
+                return Error{kInvalidParams, "Invalid params", json("include must be a boolean")};
+            }
+            retriever.SetResearch(include.get<bool>());
+            server.PushNotification("guidance/model", GuidanceModelJson(retriever.Status()));
+            return json::object();
+        });
+    server.RegisterMethod("session/guidance", [&sessions, &ingest](const json& params) {
+        return HandleSessionGuidance(sessions, params, &ingest);
     });
     server.RegisterMethod("guidance/documents/add", [&ingest](const json& params) {
         return HandleDocumentsAdd(ingest, params);
-    });
-    server.RegisterMethod("guidance/documents/cancel", [&ingest](const json&) {
-        ingest.Cancel();
-        return json::object();
     });
     server.RegisterMethod("guidance/documents",
                           [&ingest](const json&) { return HandleDocumentsList(ingest); });

@@ -14,6 +14,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#include <shlobj.h>
 #include <windows.h>
 
 #ifdef _DEBUG
@@ -233,6 +234,9 @@ int main(int argc, char* argv[]) {
         std::vector<std::string> args(argv + 1, argv + argc);
         const std::string asr_device = ambient::TakeFlag(args, "--asr-device");
         const std::string corpora_override = ambient::TakeFlag(args, "--corpora");
+        const std::string guidelines_override = ambient::TakeFlag(args, "--guidelines");
+        // Dev builds only: a demo corpus marked research is searched when this is set
+        const bool include_research = ambient::TakeSwitch(args, "--include-research");
         // AMBIENT_NOTE_PREFILL: whisper and the note host take turns on the GPU;
         // with whisper on the NPU there is nothing to share
         if (ambient::EnvFlag("AMBIENT_NOTE_PREFILL") && asr_device != "NPU") {
@@ -442,7 +446,8 @@ int main(int argc, char* argv[]) {
             [&model_store]() -> std::unique_ptr<ambient::guidance::IEmbedder> {
                 return ambient::guidance::Embedder::Load(model_store);
             },
-            corpora_root);
+            corpora_root,
+            ambient::guidance::RetrieverOptions{.include_research = include_research});
         ambient::guidance::GuidanceLane guidance_lane(
             guidance_retriever, [&server](const ambient::guidance::Readiness& readiness) {
                 server.PushNotification("guidance/model",
@@ -456,18 +461,26 @@ int main(int argc, char* argv[]) {
             std::move(factory), events, session_store, *transcriber, *vad, std::chrono::seconds(10),
             diariser.get(), 5 * ambient::audio::kSampleRate, note_writer.get(), &metrics);
 
-        ambient::ipc::RegisterMethods(server, controller, model_store, session_store, &metrics,
-                                      &ov_runtime, translator.get(), translate_lane.get(),
-                                      first_use, &anchors, note_lane, stray_note_host,
-                                      models_root.parent_path() / "demo" / "reflections");
-        // Added documents embed between note searches and wait while a
-        // consultation runs
+        // Added documents live in her guidelines folder, embed between note
+        // searches and wait while a consultation runs
+        std::filesystem::path guidelines = guidelines_override;
+        if (guidelines.empty()) {
+            PWSTR documents = nullptr;
+            if (SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &documents) ==
+                S_OK) {
+                guidelines = std::filesystem::path(documents) / "Ambient guidelines";
+            }
+            CoTaskMemFree(documents);
+            if (guidelines.empty()) {
+                throw std::runtime_error("no Documents folder and no --guidelines given");
+            }
+        }
         wchar_t engine_path[MAX_PATH]{};
         GetModuleFileNameW(nullptr, engine_path, MAX_PATH);
         const auto ingest_host =
             std::filesystem::path(engine_path).parent_path() / "ambient_ingest_host.exe";
         ambient::guidance::DocumentIngest ingest(
-            guidance_retriever, store_root / "uploads",
+            guidance_retriever, guidelines, store_root / "documents",
             [&controller] { return controller.Running(); },
             std::filesystem::exists(ingest_host) ? ingest_host : std::filesystem::path());
         ingest.SetListener(
@@ -480,6 +493,10 @@ int main(int argc, char* argv[]) {
                     server.PushNotification("guidance/documentsChanged", nlohmann::json::object());
                 }
             });
+        ambient::ipc::RegisterMethods(server, controller, model_store, session_store, &metrics,
+                                      &ov_runtime, translator.get(), translate_lane.get(),
+                                      first_use, &anchors, note_lane, stray_note_host,
+                                      models_root.parent_path() / "demo" / "reflections");
         ambient::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
                                               guidance_lane, ingest);
         server.ServeOneClient();

@@ -319,9 +319,19 @@ public class FixtureTest
         Assert.Equal(JsonValueKind.Null, documents[1].GetProperty("indexedAt").ValueKind);
         Assert.Equal("patientData", documents[2].GetProperty("error").GetString());
 
+        var listing = LoadFixture("guidance-documents.json").RootElement.GetProperty("result");
+        Assert.False(string.IsNullOrEmpty(listing.GetProperty("folder").GetString()));
+        Assert.True(listing.GetProperty("found").GetBoolean());
+        Assert.True(listing.GetProperty("unsupported").GetInt32() >= 0);
+        foreach (var document in documents.EnumerateArray())
+        {
+            Assert.False(string.IsNullOrEmpty(document.GetProperty("path").GetString()));
+            Assert.Equal(64, document.GetProperty("sha256").GetString()!.Length);
+        }
+
         var add = LoadFixture("guidance-documents-add.json").RootElement.GetProperty("result");
         Assert.Equal(1, add.GetProperty("documents").GetArrayLength());
-        Assert.Equal(["duplicate", "unsupported"], add.GetProperty("skipped").EnumerateArray()
+        Assert.Equal(["unsupported", "unreadable"], add.GetProperty("skipped").EnumerateArray()
             .Select(s => s.GetProperty("reason").GetString()));
     }
 
@@ -342,7 +352,7 @@ public class FixtureTest
         }
 
         var opened = LoadFixture("guidance-documents-open.json").RootElement.GetProperty("result");
-        Assert.EndsWith(".pdf", opened.GetProperty("path").GetString());
+        Assert.False(string.IsNullOrEmpty(opened.GetProperty("path").GetString()));
 
         var shown = LoadFixture("guidance-ready.json").RootElement.GetProperty("params")
             .GetProperty("shown");

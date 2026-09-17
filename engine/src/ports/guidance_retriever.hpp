@@ -14,8 +14,9 @@ struct Corpus {
     std::string name;
     std::string licence;
     std::string attribution;
-    std::string label;   // the chip's name for the publisher, "NICE", empty when the name serves
-    std::string source;  // the importer that built it, "upload" for an added document
+    std::string label;      // the chip's name for the publisher, "NICE", empty when the name serves
+    std::string source;     // the importer that built it, "upload" for an added document
+    bool research = false;  // a demo or evaluation corpus, never shipped, dev builds only
     std::string embedder;
     std::string sha256;
     int chunks = 0;
@@ -82,6 +83,9 @@ class IGuidanceRetriever {
     virtual std::vector<Corpus> Corpora() = 0;
 
     virtual Readiness Status() = 0;
+
+    // Dev only: include or exclude corpora marked research, live
+    virtual void SetResearch(bool /*include*/) {}
 
     virtual void AddDocument(const std::string& /*path*/) {
         throw std::logic_error("guidance documents are not supported yet");
