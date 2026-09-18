@@ -124,7 +124,7 @@ inline bool GradeAt(std::string_view s, std::size_t at, std::size_t& end) {
         if (end < s.size() && std::isupper(static_cast<unsigned char>(s[end]))) ++end;
         return true;
     }
-    for (const std::string_view key : {"SoA", "SOA", "SOR", "SoR"}) {
+    for (const std::string_view key : {"SoA", "SOA", "SOR", "SoR", "SOE", "SoE"}) {
         if (!s.substr(at).starts_with(key)) continue;
         auto i = at + key.size();
         if (i < s.size() && s[i] == ':') ++i;
@@ -176,6 +176,16 @@ inline std::string_view MarkOf(std::string_view text, Scheme scheme) {
             break;
     }
     return text.substr(0, length);
+}
+
+// A line that is only the wrapped tail of a grade token, "SoA 100%)." left when
+// "(GRADE 1B, SoA 100%)" breaks across a line in a narrow table column. No
+// recommendation opens with its own grade, so such a line rejoins the one above
+inline bool IsGradeTail(std::string_view text) {
+    std::size_t at = 0;
+    while (at < text.size() && (text[at] == ' ' || text[at] == '(')) ++at;
+    std::size_t end = 0;
+    return detail::GradeAt(text, at, end);
 }
 
 // "(GRADE 1C, SoA 98%)", "GRADE 2C", "SOR: 97% (range 88-100%)" or "[2017]" at

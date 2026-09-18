@@ -105,6 +105,20 @@ TEST(PageText, AJumpBackUpThePageAndANewPageBothClose) {
     EXPECT_EQ(paragraphs[2].page, 1);
 }
 
+TEST(PageText, AGradeTokenWrappedInANarrowColumnStaysOneParagraph) {
+    Page page;
+    page.lines = {Line("Education about treatment should be provided to promote", 0.10F, 0.11F),
+                  Line("self-management (GRADE 1B,", 0.12F, 0.13F, 0.1F, 0.35F),
+                  Line("SoA 100%).", 0.14F, 0.15F, 0.1F, 0.25F),
+                  Line("Support should be provided around transition of care.", 0.16F, 0.17F)};
+    const auto paragraphs = ParagraphsFromPages({page});
+    ASSERT_EQ(paragraphs.size(), 2u) << "the wrapped tail leaves no fragment paragraph";
+    EXPECT_EQ(paragraphs[0].text,
+              "Education about treatment should be provided to promote self-management "
+              "(GRADE 1B, SoA 100%).");
+    EXPECT_EQ(paragraphs[1].text, "Support should be provided around transition of care.");
+}
+
 TEST(PageText, EmptyLinesAndEmptyPagesLeaveNothing) {
     Page page;
     page.lines = {Line("", 0.1F, 0.12F)};

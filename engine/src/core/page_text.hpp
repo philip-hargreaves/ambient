@@ -147,7 +147,9 @@ inline std::vector<Paragraph> ParagraphsFromPages(const std::vector<Page>& pages
                                   !EndsWithToken(out.back().text);
             const bool runs_on =
                 !out.empty() && !detail::EndsSentence(out.back().text) && std::islower(first);
-            if (adjacent || runs_on) {
+            // A wrapped grade tail always rejoins the recommendation above it
+            const bool tail = !out.empty() && IsGradeTail(line.text);
+            if (adjacent || runs_on || tail) {
                 auto& para = out.back();
                 para.text += ' ';
                 para.text += line.text;
