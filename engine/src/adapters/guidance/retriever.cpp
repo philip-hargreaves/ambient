@@ -1,6 +1,7 @@
 #include "adapters/guidance/retriever.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -236,7 +237,11 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             if (shown >= limit) break;
             const auto& at = where.at(candidate.id);
             const auto& row = uploads->rows[at.ord];
-            if (PopulationConflict(text, row.text, row.name)) continue;
+            if (PopulationConflict(text, row.text, row.name)) {
+                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
+                             row.name.c_str());
+                continue;
+            }
             Result result;
             result.corpus = "upload:" + std::to_string(row.document);
             result.chunk_id = result.corpus + "-" + std::to_string(row.ord);
@@ -271,7 +276,11 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             auto* store = stores[at.corpus];
             auto chunk = store->TextAt(at.ord);
             const auto& cite = store->CiteAt(at.ord);
-            if (PopulationConflict(text, chunk.text, cite.title)) continue;
+            if (PopulationConflict(text, chunk.text, cite.title)) {
+                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
+                             cite.title.c_str());
+                continue;
+            }
             Result result;
             result.corpus = store->Info().id;
             result.chunk_id = cite.chunk_id;
