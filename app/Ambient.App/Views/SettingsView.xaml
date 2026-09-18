@@ -203,6 +203,10 @@
                                         Visibility="{x:Bind ViewModel.FolderMissing, Mode=OneWay}" />
                                     <TextBlock
                                         Style="{StaticResource SettingsDescription}"
+                                        Text="This folder is inside OneDrive, so these documents sync to the cloud."
+                                        Visibility="{x:Bind ViewModel.FolderInOneDrive, Mode=OneWay}" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsDescription}"
                                         Text="{x:Bind ViewModel.DocumentsCaption, Mode=OneWay}"
                                         Visibility="{x:Bind ViewModel.DocumentsCaptionVisible, Mode=OneWay}" />
                                 </StackPanel>

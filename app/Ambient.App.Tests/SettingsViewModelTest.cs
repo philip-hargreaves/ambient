@@ -648,21 +648,21 @@ public class SettingsViewModelTest
 
     private static object Document(long id, string name, string state, int chunks = 0,
         string? error = null, int pages = 0, int pagesWithoutText = 0, string? path = null) => new
-    {
-        id,
-        name,
-        path = path ?? name + ".txt",
-        sha256 = new string('0', 64),
-        mime = "text/plain",
-        state,
-        error,
-        addedAt = "2026-09-15T09:12:44Z",
-        indexedAt = state == "ready" ? "2026-09-15T09:13:02Z" : null,
-        bytes = 1000,
-        pages,
-        pagesWithoutText,
-        chunks,
-    };
+        {
+            id,
+            name,
+            path = path ?? name + ".txt",
+            sha256 = new string('0', 64),
+            mime = "text/plain",
+            state,
+            error,
+            addedAt = "2026-09-15T09:12:44Z",
+            indexedAt = state == "ready" ? "2026-09-15T09:13:02Z" : null,
+            bytes = 1000,
+            pages,
+            pagesWithoutText,
+            chunks,
+        };
 
     private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value);
 
@@ -801,6 +801,17 @@ public class SettingsViewModelTest
         Assert.Single(settings.Documents);
         Assert.Equal(@"C:\Users\clinician\Documents\Ambient guidelines", settings.GuidelinesFolder);
         Assert.False(settings.FolderMissing);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\p\OneDrive\Documents\Ambient guidelines", true)]
+    [InlineData(@"C:\Users\p\onedrive - ucl\Documents\Ambient guidelines", true)]
+    [InlineData(@"C:\Users\p\Documents\Ambient guidelines", false)]
+    [InlineData("", false)]
+    public void OneDriveFolderIsRecognised(string folder, bool expected)
+    {
+        var roots = new[] { @"C:\Users\p\OneDrive", @"C:\Users\p\OneDrive - UCL" };
+        Assert.Equal(expected, SettingsViewModel.InOneDrive(folder, roots));
     }
 
     [Fact]

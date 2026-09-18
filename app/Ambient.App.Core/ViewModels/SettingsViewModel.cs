@@ -462,7 +462,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             GuidanceCard.Field(corpus, "attribution"), false);
     }
 
-    // ---- added documents --------------------------------------------------
+    // Added documents
 
     /// <summary>The documents in the guidelines folder: the batch in progress, then by name.</summary>
     public ObservableCollection<DocumentRow> Documents { get; } = [];
@@ -474,6 +474,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>The folder and its parent were out of reach at the last scan.</summary>
     [ObservableProperty]
     public partial bool FolderMissing { get; private set; }
+
+    /// <summary>The folder sits inside OneDrive, so the documents sync to the cloud.</summary>
+    [ObservableProperty]
+    public partial bool FolderInOneDrive { get; private set; }
 
     /// <summary>What the last add skipped, or why nothing could be added.</summary>
     [ObservableProperty]
@@ -592,6 +596,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 .ConfigureAwait(true);
             GuidelinesFolder = GuidanceCard.Field(reply, "folder");
             FolderMissing = reply.TryGetProperty("found", out var found) && !found.GetBoolean();
+            FolderInOneDrive = InOneDrive(GuidelinesFolder, OneDriveRoots());
             var unsupported = reply.TryGetProperty("unsupported", out var u) ? u.GetInt32() : 0;
             Documents.Clear();
             foreach (var document in reply.GetProperty("documents").EnumerateArray())
@@ -673,6 +678,19 @@ public sealed partial class SettingsViewModel : ObservableObject
             Documents.FirstOrDefault(r => r.Id == value)?.ApplyProgress(progress);
         }
     }
+
+    private static readonly string[] OneDriveVariables =
+        ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"];
+
+    private static IEnumerable<string> OneDriveRoots() =>
+        OneDriveVariables.Select(Environment.GetEnvironmentVariable)
+            .Where(root => !string.IsNullOrEmpty(root))
+            .Select(root => root!);
+
+    // A folder under a OneDrive root syncs to the cloud, which the caption states
+    public static bool InOneDrive(string folder, IEnumerable<string> roots) =>
+        folder.Length > 0
+        && roots.Any(root => folder.StartsWith(root, StringComparison.OrdinalIgnoreCase));
 
     private void RefreshBatch()
     {
