@@ -99,7 +99,7 @@ Db::Db(const std::filesystem::path& path, Mode mode) {
             Exec(mode == Mode::kSession ? "PRAGMA synchronous=FULL" : "PRAGMA synchronous=NORMAL");
             Exec("PRAGMA foreign_keys=ON");
             // Freed cells are zeroed (whole freed pages leave the file at the vacuum) and the
-            // log is truncated instead of kept at its high-water mark
+            // journal log is truncated to stay small
             Exec("PRAGMA secure_delete=FAST");
             Exec("PRAGMA journal_size_limit=4194304");
         } else if (mode == Mode::kImmutableReadOnly) {

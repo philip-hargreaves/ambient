@@ -63,25 +63,25 @@ public class GuidanceViewModelTest
 
     private static object DocumentResult(int page = 1, int pages = 5, string number = "1.2",
         long document = 6368831970660585267L) => new
-    {
-        corpus = $"upload:{document}",
-        chunkId = $"upload:{document}-4",
-        code = "",
-        number,
-        title = "BSR PMR guidelines 2009",
-        section = "",
-        text = "Start prednisolone 15 mg daily.",
-        url = "",
-        lastUpdated = "2026-09-15T09:12:44Z",
-        updateTag = "",
-        source = "upload",
-        citation = "BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)",
-        score = 0.9,
-        trigger = "",
-        document,
-        page,
-        pages,
-    };
+        {
+            corpus = $"upload:{document}",
+            chunkId = $"upload:{document}-4",
+            code = "",
+            number,
+            title = "BSR PMR guidelines 2009",
+            section = "",
+            text = "Start prednisolone 15 mg daily.",
+            url = "",
+            lastUpdated = "2026-09-15T09:12:44Z",
+            updateTag = "",
+            source = "upload",
+            citation = "BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)",
+            score = 0.9,
+            trigger = "",
+            document,
+            page,
+            pages,
+        };
 
     private static IEnumerable<string> Shown(GuidanceViewModel guidance) =>
         guidance.Cards.SelectMany(c => c.Recommendations).Select(r => r.ChunkId);
@@ -268,7 +268,10 @@ public class GuidanceViewModelTest
         var (session, engine) = await AfterNoteAsync();
         engine.PageReply = new
         {
-            path = @"C:\scratch\page.bmp", width = 1000, height = 1400, pages = 5,
+            path = @"C:\scratch\page.bmp",
+            width = 1000,
+            height = 1400,
+            pages = 5,
             boxes = new[] { new { page = 1, left = 0.1, top = 0.2, right = 0.6, bottom = 0.3 } },
         };
         session.Guidance.ApplyReady(Ready("s1", [DocumentResult()], corpora: [DocumentCorpus]));

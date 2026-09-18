@@ -408,7 +408,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         Readiness = GuidanceReadiness.Unavailable;
     }
 
-    /// <summary>Searches in flight when the engine went never finish. The cards stay.</summary>
+    /// <summary>A search running when the engine drops never returns, so the cards stay.</summary>
     public void ConnectionLost()
     {
         if (Searching)
