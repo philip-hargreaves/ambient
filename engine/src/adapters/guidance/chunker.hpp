@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "core/recommendation_marks.hpp"
+
 namespace ambient::guidance {
 
 // One retrievable unit: a recommendation from a structured guideline, or a
@@ -34,10 +36,6 @@ bool IncludeDocument(const nlohmann::json& manifest_entry, const std::string& co
 // One chunk per recommendation of a structured guideline document. Ids already
 // in seen are skipped: some guidelines render a chapter twice
 std::vector<Chunk> ChunksFromDocument(const nlohmann::json& doc, std::set<std::string>& seen);
-
-// "Recommendation 12", "recommendation 3a", "1.2", "1.2.3 Offer": a paragraph
-// that opens a numbered recommendation
-bool StartsRecommendation(const std::string& paragraph);
 
 // Plain or markdown text: paragraphs split on blank lines and collapsed to one
 // line; runs close at a recommendation heading, at kTargetWords, or before

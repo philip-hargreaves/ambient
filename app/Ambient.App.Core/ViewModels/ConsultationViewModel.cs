@@ -17,6 +17,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(180);
 
     private readonly IEngineClient _engine;
+    private readonly IUiDispatcher _dispatcher;
+    private int _documentsGeneration;
     private readonly Metrics.PerformanceCollector? _metrics;
     private readonly AppPreferences? _preferences;
 
@@ -73,6 +75,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public GuidanceViewModel Guidance { get; }
 
+    /// <summary>The page of an added document beside the note, when a card asks.</summary>
+    public PageViewModel PageView { get; } = new();
+
     public StatusBarViewModel Status { get; }
 
     public ConsultationViewModel(
@@ -82,6 +87,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         AppPreferences? preferences = null, GuidanceViewModel? guidance = null)
     {
         _engine = engine;
+        _dispatcher = dispatcher;
         _metrics = metrics;
         _preferences = preferences;
         _readinessPollInterval = readinessPollInterval ?? TimeSpan.FromSeconds(2);
@@ -99,6 +105,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.SavePatientRequested = SavePatientAsync;
         Guidance.SearchNoteRequested = SearchGuidanceAsync;
         Guidance.SearchQueryRequested = SearchGuidanceAsync;
+        Guidance.ShowInDocumentRequested = PageView.ShowAsync;
+        Guidance.OpenDocumentRequested = PageView.OpenAsync;
+        PageView.Request = (method, parameters) =>
+            _engine.RequestAsync(method, parameters, RequestTimeout);
+        PageView.Report = line => Status.Append(line);
         // Persisted options applied before the change callback is wired,
         // so restoring them is not itself a change
         if (preferences is not null)
@@ -181,6 +192,27 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     // Search again on the note as it is now: an unsaved edit is saved first,
     // and a consultation opened meanwhile is left alone
+    /// <summary>How long added documents must stop changing before the note is searched again.</summary>
+    public TimeSpan DocumentsSettle { get; set; } = TimeSpan.FromSeconds(3);
+
+    // A batch of documents finishing one after another searches once, when the last has
+    // landed: every change starts a new generation and only the latest one's timer acts
+    private void SearchAfterDocumentsSettle()
+    {
+        var generation = ++_documentsGeneration;
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(DocumentsSettle).ConfigureAwait(false);
+            _dispatcher.Post(() =>
+            {
+                if (generation == _documentsGeneration && Guidance.WantsSearchAfterDocuments)
+                {
+                    _ = SearchGuidanceAsync();
+                }
+            });
+        });
+    }
+
     private async Task SearchGuidanceAsync()
     {
         var id = _finalisedSessionId;
@@ -524,6 +556,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         _regenerating = false;
         Note.Reset();
         Guidance.Reset();
+        PageView.Hide();
         Note.ReflectAvailable = true;  // stored, so it will still be there
         Note.HasReflection = hasReflection;
         await LoadFinalTranscriptAsync(id).ConfigureAwait(true);
@@ -553,11 +586,15 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         {
             var guidance = await RequestValueAsync("session/guidance", null, new { id })
                 .ConfigureAwait(true);
-            Guidance.LoadStored(
-                guidance is { ValueKind: JsonValueKind.Object } g
+            var stored = guidance is { ValueKind: JsonValueKind.Object } g
                 && g.TryGetProperty("guidance", out var record)
                     ? record
-                    : null);
+                    : (JsonElement?)null;
+            // Documents added since this note was searched: refresh once the view has settled
+            if (Guidance.LoadStored(stored))
+            {
+                SearchAfterDocumentsSettle();
+            }
         }
 
         Phase = FinalisePhase.Streaming;  // the panes show, no centre spinner
@@ -588,6 +625,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         await RequestAsync("session/close").ConfigureAwait(true);
         Note.Reset();
         Guidance.Reset();
+        PageView.Hide();
         Transcript.Clear();
         Phase = FinalisePhase.None;
         _regenerating = false;
@@ -752,6 +790,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             State = SessionState.Idle;
             Note.Reset();
             Guidance.Reset();
+            PageView.Hide();
             Status.SetDecodeActive(false);
             Status.Append("Stop failed - session kept");
             return;
@@ -1013,6 +1052,10 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             case "guidance/failed" when parameters.ValueKind == JsonValueKind.Object:
                 ApplyGuidance(parameters, ready: false);
                 break;
+            case "guidance/documentsChanged":
+                Guidance.DocumentsChanged();
+                SearchAfterDocumentsSettle();
+                break;
             case "audio.level" when parameters.ValueKind == JsonValueKind.Object:
                 Status.SetMicLevel(
                     parameters.GetProperty("level").GetDouble(),
@@ -1030,6 +1073,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 ActiveReplay = null;
                 Note.Reset();
                 Guidance.Reset();
+                PageView.Hide();
                 Status.SetMicVisible(false);
                 Status.SetDecodeActive(false);
                 Status.Append(parameters.ValueKind == JsonValueKind.Object

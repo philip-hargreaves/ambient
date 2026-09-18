@@ -1,0 +1,33 @@
+{
+    "jsonrpc": "2.0",
+    "id": 16,
+    "result": {
+        "documents": [
+            {
+                "id": 2871034561297730,
+                "name": "PMR local pathway",
+                "path": "PMR local pathway.txt",
+                "sha256": "7e3f9e26abe9d7567618d8c8cf96083afd0a7e4bfe3a3b553aad3b2c26cbf2f6",
+                "mime": "text/plain",
+                "state": "indexing",
+                "error": null,
+                "addedAt": "2026-09-15T09:14:10Z",
+                "indexedAt": null,
+                "bytes": 9120,
+                "pages": 0,
+                "pagesWithoutText": 0,
+                "chunks": 0
+            }
+        ],
+        "skipped": [
+            {
+                "path": "C:\\Guidelines\\scan.pdf",
+                "reason": "unsupported"
+            },
+            {
+                "path": "C:\\Guidelines\\empty.txt",
+                "reason": "unreadable"
+            }
+        ]
+    }
+}

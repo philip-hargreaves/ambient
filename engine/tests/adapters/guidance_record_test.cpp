@@ -54,6 +54,20 @@ Results Sample() {
     sparse.score = 0.861;
     sparse.trigger = "Bloods requested.";
     out.shown.push_back(sparse);
+
+    Result added;  // a passage from an added document, cited by page
+    added.corpus = "upload:4870415453308932637";
+    added.chunk_id = "upload:4870415453308932637-19";
+    added.number = "1.1.3";
+    added.title = "NICE gout 2022";
+    added.text = "Assess the possibility of septic arthritis.";
+    added.source = "upload";
+    added.citation = "NICE gout 2022, page 6, 1.1.3 (added 17 Sep 2026)";
+    added.score = 0.871;
+    added.document = 4870415453308932637;
+    added.page = 5;
+    added.pages = 36;
+    out.shown.push_back(added);
     return out;
 }
 
@@ -104,6 +118,14 @@ TEST(GuidanceRecord, RefusesWhatItCannotRead) {
     EXPECT_FALSE(CanRead(json{{"version", 1}, {"shown", json::array()}}));
     EXPECT_TRUE(CanRead(empty)) << "a record before version was written";
     EXPECT_EQ(RecordFromJson(empty).note_revision, 0);
+}
+
+TEST(GuidanceRecord, KeepsEveryBitOfADocumentId) {
+    const Results back = FromJson(ToJson(Sample()));
+    ASSERT_EQ(back.shown.size(), 3u);
+    EXPECT_EQ(back.shown[2].document, 4870415453308932637);
+    EXPECT_EQ(back.shown[2].page, 5);
+    EXPECT_EQ(back.shown[2].pages, 36);
 }
 
 TEST(GuidanceRecord, CarriesTheSearchedCorpusAndFloor) {

@@ -7,6 +7,7 @@
             "noteRevision": 1,
             "generatedAt": "2026-09-13T01:00:00Z",
             "stale": false,
+            "documentsChanged": false,
             "shown": [
                 {
                     "corpus": "fixture-nice",
@@ -22,7 +23,10 @@
                     "source": "nice",
                     "citation": "FX100 1.1.1, Fictional inflammatory joint disease: assessment and management",
                     "score": 0.897,
-                    "trigger": "Examination shows synovitis of several MCP joints."
+                    "trigger": "Examination shows synovitis of several MCP joints.",
+                    "document": 0,
+                    "page": 0,
+                    "pages": 0
                 }
             ],
             "searched": [
@@ -31,7 +35,9 @@
                     "name": "Fixture guidance corpus (structured)",
                     "licence": "invented",
                     "attribution": "none",
+                    "label": "NICE",
                     "source": "nice",
+                    "research": false,
                     "embedder": "gte-large-int8",
                     "sha256": "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f",
                     "chunks": 40,
@@ -41,7 +47,8 @@
             ],
             "considered": 40,
             "floor": 0.85,
-            "abstained": false
+            "abstained": false,
+            "uploadFloor": 0.85
         }
     }
 }

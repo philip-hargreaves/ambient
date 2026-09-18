@@ -298,6 +298,89 @@ public class FixtureTest
     }
 
     [Fact]
+    public void GuidanceDocumentsFixturesCarryARowInEveryState()
+    {
+        var documents = LoadFixture("guidance-documents.json").RootElement
+            .GetProperty("result").GetProperty("documents");
+
+        Assert.Equal(["ready", "indexing", "failed"],
+            documents.EnumerateArray().Select(d => d.GetProperty("state").GetString()));
+        foreach (var document in documents.EnumerateArray())
+        {
+            Assert.True(document.GetProperty("id").GetInt64() > 0);
+            Assert.False(string.IsNullOrEmpty(document.GetProperty("name").GetString()));
+            Assert.True(
+                DateTimeOffset.TryParse(document.GetProperty("addedAt").GetString(), out _));
+            Assert.True(document.GetProperty("bytes").GetInt64() > 0);
+        }
+
+        Assert.True(documents[0].GetProperty("chunks").GetInt32() > 0);
+        Assert.Equal(JsonValueKind.Null, documents[0].GetProperty("error").ValueKind);
+        Assert.Equal(JsonValueKind.Null, documents[1].GetProperty("indexedAt").ValueKind);
+        Assert.Equal("patientData", documents[2].GetProperty("error").GetString());
+
+        var listing = LoadFixture("guidance-documents.json").RootElement.GetProperty("result");
+        Assert.False(string.IsNullOrEmpty(listing.GetProperty("folder").GetString()));
+        Assert.True(listing.GetProperty("found").GetBoolean());
+        Assert.True(listing.GetProperty("unsupported").GetInt32() >= 0);
+        foreach (var document in documents.EnumerateArray())
+        {
+            Assert.False(string.IsNullOrEmpty(document.GetProperty("path").GetString()));
+            Assert.Equal(64, document.GetProperty("sha256").GetString()!.Length);
+        }
+
+        var add = LoadFixture("guidance-documents-add.json").RootElement.GetProperty("result");
+        Assert.Equal(1, add.GetProperty("documents").GetArrayLength());
+        Assert.Equal(["unsupported", "unreadable"], add.GetProperty("skipped").EnumerateArray()
+            .Select(s => s.GetProperty("reason").GetString()));
+    }
+
+    [Fact]
+    public void GuidancePageAndOpenFixturesCarryAPathAndTheBoxes()
+    {
+        var page = LoadFixture("guidance-page.json").RootElement.GetProperty("result");
+        Assert.EndsWith(".bmp", page.GetProperty("path").GetString());
+        Assert.True(page.GetProperty("width").GetInt32() > 0);
+        Assert.True(page.GetProperty("height").GetInt32() > 0);
+        Assert.True(page.GetProperty("pages").GetInt32() > 0);
+        foreach (var box in page.GetProperty("boxes").EnumerateArray())
+        {
+            Assert.True(box.GetProperty("page").GetInt32() < page.GetProperty("pages").GetInt32());
+            Assert.True(box.GetProperty("left").GetDouble() < box.GetProperty("right").GetDouble());
+            Assert.True(box.GetProperty("top").GetDouble() < box.GetProperty("bottom").GetDouble());
+            Assert.True(box.GetProperty("bottom").GetDouble() <= 1);
+        }
+
+        var opened = LoadFixture("guidance-documents-open.json").RootElement.GetProperty("result");
+        Assert.False(string.IsNullOrEmpty(opened.GetProperty("path").GetString()));
+
+        var shown = LoadFixture("guidance-ready.json").RootElement.GetProperty("params")
+            .GetProperty("shown");
+        foreach (var result in shown.EnumerateArray())
+        {
+            Assert.Equal(JsonValueKind.Number, result.GetProperty("pages").ValueKind);
+        }
+    }
+
+    [Fact]
+    public void GuidanceDocumentNotificationsCarryTheirParams()
+    {
+        var document = LoadFixture("guidance-document.json").RootElement;
+        Assert.Equal("guidance/document", document.GetProperty("method").GetString());
+        Assert.False(document.TryGetProperty("id", out _), "a notification, not a request");
+        Assert.Equal("ready", document.GetProperty("params").GetProperty("state").GetString());
+
+        var progress = LoadFixture("guidance-progress.json").RootElement.GetProperty("params");
+        Assert.Equal("preparing", progress.GetProperty("phase").GetString());
+        Assert.True(
+            progress.GetProperty("done").GetInt32() <= progress.GetProperty("total").GetInt32());
+
+        var changed = LoadFixture("guidance-documentsChanged.json").RootElement;
+        Assert.Equal("guidance/documentsChanged", changed.GetProperty("method").GetString());
+        Assert.Empty(changed.GetProperty("params").EnumerateObject());
+    }
+
+    [Fact]
     public void SessionGuidanceFixtureCarriesTheStoredRecord()
     {
         var guidance = LoadFixture("session-guidance.json").RootElement

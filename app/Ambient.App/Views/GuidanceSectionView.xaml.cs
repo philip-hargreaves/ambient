@@ -91,11 +91,32 @@ public sealed partial class GuidanceSectionView : UserControl
         FoldGlyph.Glyph = open ? "" : "";
     }
 
+    /// <summary>A tooltip only when there is something to say.</summary>
+    public static object? Tip(string tip) => tip.Length == 0 ? null : tip;
+
     private async void OnOpen(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not GuidanceRecommendation found)
+        {
+            return;
+        }
+
+        if (found.FromDocument)
+        {
+            await ViewModel.OpenDocumentAsync(found);
+        }
+        else
+        {
+            await LinkHelper.OpenAsync(_status, found.Link);
+        }
+    }
+
+    private async void OnShowInDocument(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
-            await LinkHelper.OpenAsync(_status, found.Link);
+            PageView.Opener = sender as FrameworkElement;
+            await ViewModel.ShowInDocumentAsync(found);
         }
     }
 

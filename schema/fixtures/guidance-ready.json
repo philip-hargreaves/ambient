@@ -22,7 +22,10 @@
                 "source": "nice",
                 "citation": "FX100 1.1.1, Fictional inflammatory joint disease: assessment and management",
                 "score": 0.897,
-                "trigger": "Examination shows synovitis of several MCP joints."
+                "trigger": "Examination shows synovitis of several MCP joints.",
+                "document": 0,
+                "page": 0,
+                "pages": 0
             },
             {
                 "corpus": "fixture",
@@ -38,7 +41,10 @@
                 "source": "text",
                 "citation": "GOUT 1.1.1, Fictional gout guideline",
                 "score": 0.861,
-                "trigger": ""
+                "trigger": "",
+                "document": 0,
+                "page": 0,
+                "pages": 0
             }
         ],
         "searched": [
@@ -47,7 +53,9 @@
                 "name": "Fixture guidance corpus (structured)",
                 "licence": "invented",
                 "attribution": "none",
+                "label": "NICE",
                 "source": "nice",
+                "research": false,
                 "embedder": "gte-large-int8",
                 "sha256": "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f",
                 "chunks": 40,
@@ -59,7 +67,9 @@
                 "name": "Fixture guidance corpus",
                 "licence": "invented",
                 "attribution": "none",
+                "label": "",
                 "source": "text",
+                "research": false,
                 "embedder": "gte-large-int8",
                 "sha256": "1b7d2e9f0a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6",
                 "chunks": 5,
@@ -69,6 +79,7 @@
         ],
         "considered": 40,
         "floor": 0.85,
-        "abstained": false
+        "abstained": false,
+        "uploadFloor": 0.85
     }
 }

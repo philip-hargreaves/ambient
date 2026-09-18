@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Ambient.App.Core;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.ViewModels;
@@ -107,6 +108,23 @@ public class SettingsViewModelTest
         Assert.False(preferences.SeedDataEnabled);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "demo/clear");  // nothing left to clear
         Assert.Equal(0, engine.StoredSessions);
+    }
+
+    [Fact]
+    public async Task DeleteAllLeavesTheGuidelineDocumentsAlone()
+    {
+        var engine = new FakeEngineClient { StoredSessions = 2 };
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        var status = new StatusBarViewModel();
+        var settings = new SettingsViewModel(TempPreferences(), status: status, client: engine)
+        {
+            ConfirmDeleteAllConsultations = () => Task.FromResult(true),
+        };
+
+        await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
+        Assert.Single(engine.Requests, r => r.Method == "session/deleteAll");
+        Assert.Contains("2 consultations deleted", status.LatestActivity);
+        Assert.Single(settings.Documents);
     }
 
     [Fact]
@@ -544,6 +562,23 @@ public class SettingsViewModelTest
         Assert.False(corpus.Refused);
         Assert.Equal("", settings.GuidanceCaption);
         Assert.False(settings.GuidanceCaptionVisible);
+        Assert.False(corpus.Divided);
+    }
+
+    [Fact]
+    public void TheInstalledGuidanceCardIsHiddenWhenNothingIsInstalled()
+    {
+        var withNice = new FakeEngineClient { GuidanceState = "ready" };
+        withNice.GuidanceCorpora.Add(new { name = "NICE guidance", chunks = 22991 });
+        Assert.True(new SettingsViewModel(TempPreferences(), client: withNice)
+            .GuidanceInstalledVisible);
+
+        var empty = new FakeEngineClient { GuidanceState = "ready" };
+        empty.GuidanceCorpora.Clear();
+        var settings = new SettingsViewModel(TempPreferences(), client: empty);
+        Assert.Empty(settings.GuidanceCorpora);
+        Assert.Equal("", settings.GuidanceCaption);
+        Assert.False(settings.GuidanceInstalledVisible);
     }
 
     [Fact]
@@ -609,5 +644,185 @@ public class SettingsViewModelTest
         Assert.Equal("22,991 passages · 11 Sep 2026", corpus.Detail);
         Assert.Equal("Contains public sector information", corpus.Attribution);
         Assert.Equal("", settings.GuidanceCaption);
+    }
+
+    private static object Document(long id, string name, string state, int chunks = 0,
+        string? error = null, int pages = 0, int pagesWithoutText = 0, string? path = null) => new
+        {
+            id,
+            name,
+            path = path ?? name + ".txt",
+            sha256 = new string('0', 64),
+            mime = "text/plain",
+            state,
+            error,
+            addedAt = "2026-09-15T09:12:44Z",
+            indexedAt = state == "ready" ? "2026-09-15T09:13:02Z" : null,
+            bytes = 1000,
+            pages,
+            pagesWithoutText,
+            chunks,
+        };
+
+    private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value);
+
+    [Fact]
+    public void AddedDocumentsListWorkingRowsFirstThenByName()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        engine.GuidanceDocuments.Add(Document(2, "asthma", "ready", 12));
+        engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
+        engine.GuidanceDocuments.Add(Document(4, "Letter", "failed", error: "patientData"));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        Assert.Equal(["PMR", "asthma", "Gout", "Letter"], settings.Documents.Select(d => d.Name));
+        Assert.Equal("Waiting", settings.Documents[0].Detail);
+        Assert.True(settings.Documents[0].Waiting);
+        Assert.Equal("12 passages · added 15 Sep 2026", settings.Documents[1].Detail);
+        Assert.StartsWith("Not searched: this looks like a document about a patient.",
+            settings.Documents[3].Detail);
+        Assert.True(settings.Documents[3].Failed);
+        Assert.Equal("Reading 1 document", settings.BatchCaption);
+        Assert.True(settings.DocumentsPresent);
+        Assert.True(settings.AddDocumentsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AddingDocumentsSendsThePathsAndCountsWhatWasSkipped()
+    {
+        var engine = new FakeEngineClient();
+        engine.AddedDocuments.Add(Document(5, "PMR pathway", "indexing"));
+        engine.SkippedDocuments.Add(new { path = @"C:\g\scan.pdf", reason = "unsupported" });
+        engine.SkippedDocuments.Add(new { path = @"C:\g\empty.txt", reason = "unreadable" });
+        var settings = new SettingsViewModel(TempPreferences(), client: engine)
+        {
+            PickDocuments = () => Task.FromResult<IReadOnlyList<string>>(
+                [@"C:\g\PMR pathway.txt", @"C:\g\scan.pdf", @"C:\g\empty.txt"]),
+        };
+
+        await settings.AddDocumentsCommand.ExecuteAsync(null);
+
+        var request = Assert.Single(engine.Requests, r => r.Method == "guidance/documents/add");
+        Assert.Contains("PMR pathway.txt", request.Params);
+        var row = Assert.Single(settings.Documents);
+        Assert.Equal("PMR pathway", row.Name);
+        Assert.True(row.Working);
+        Assert.Equal("1 skipped, not PDF or text · 1 could not be read", settings.DocumentsCaption);
+    }
+
+    [Fact]
+    public void RowsSayWhyAPdfFailedAndHowLongAReadyOneIs()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(1, "Scan", "failed", error: "noText", pages: 40,
+            pagesWithoutText: 38));
+        engine.GuidanceDocuments.Add(Document(2, "Locked", "failed", error: "password"));
+        engine.GuidanceDocuments.Add(Document(3, "PMR", "ready", 310, pages: 41));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        Assert.Equal(["Locked", "PMR", "Scan"], settings.Documents.Select(d => d.Name));
+        Assert.Equal("Cannot be read: the PDF is password protected.", settings.Documents[0].Detail);
+        Assert.Equal("41 pages · 310 passages · added 15 Sep 2026", settings.Documents[1].Detail);
+        Assert.Equal(
+            "Cannot be searched: 38 of 40 pages are images with no text.",
+            settings.Documents[2].Detail);
+    }
+
+    [Fact]
+    public async Task RowsFollowTheEngineAndRemoveAlwaysConfirmsBecauseItBinsTheFile()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
+        var asked = 0;
+        var settings = new SettingsViewModel(TempPreferences(), client: engine)
+        {
+            ConfirmRemoveDocument = _ =>
+            {
+                asked++;
+                return Task.FromResult(true);
+            },
+        };
+        var row = Assert.Single(settings.Documents);
+
+        engine.RaiseNotification("guidance/progress",
+            Json(new { id = 3, phase = "paused", done = 0, total = 10 }));
+        Assert.Equal("Waiting for the consultation to finish", row.Detail);
+        engine.RaiseNotification("guidance/progress",
+            Json(new { id = 3, phase = "preparing", done = 3, total = 10 }));
+        Assert.Equal("Preparing 3 of 10 passages", row.Detail);
+        Assert.Equal(0.3, row.Progress, 3);
+        Assert.False(row.Waiting);
+
+        // Removing a document that is still being read asks first, since it bins the file
+        await settings.RemoveDocumentCommand.ExecuteAsync(row);
+        Assert.Equal(1, asked);
+        Assert.Contains(engine.Requests,
+            r => r.Method == "guidance/documents/remove" && r.Params == "{\"id\":3}");
+
+        engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "ready", 10)));
+        Assert.Equal("10 passages · added 15 Sep 2026", row.Detail);
+        Assert.False(row.Working);
+        Assert.Equal("", settings.BatchCaption);
+
+        await settings.RemoveDocumentCommand.ExecuteAsync(row);
+        Assert.Equal(2, asked);
+
+        engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "removed", 10)));
+        Assert.Empty(settings.Documents);
+        Assert.False(settings.DocumentsPresent);
+    }
+
+    [Fact]
+    public void DeveloperToolsStayClosedUntilOpenedAndThenStayOpen()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var settings = new SettingsViewModel(new AppPreferences(path));
+        Assert.False(settings.DeveloperToolsExpanded);
+
+        settings.ToggleDeveloperToolsCommand.Execute(null);
+        Assert.True(settings.DeveloperToolsExpanded);
+        Assert.False(settings.DeveloperToolsCollapsed);
+
+        var saved = AppPreferences.Load(path);
+        Assert.True(saved.DeveloperToolsExpanded);
+        Assert.True(new SettingsViewModel(saved).DeveloperToolsExpanded);
+    }
+
+    [Fact]
+    public void TheFolderIsListedAndAddableEvenBeforeTheGuidanceModelLoads()
+    {
+        var engine = new FakeEngineClient { GuidanceState = "loading" };
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        // Copying a file into the folder needs no embedder, so Add is always available
+        Assert.True(settings.AddDocumentsCommand.CanExecute(null));
+        Assert.Single(settings.Documents);
+        Assert.Equal(@"C:\Users\clinician\Documents\Ambient guidelines", settings.GuidelinesFolder);
+        Assert.False(settings.FolderMissing);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\p\OneDrive\Documents\Ambient guidelines", true)]
+    [InlineData(@"C:\Users\p\onedrive - ucl\Documents\Ambient guidelines", true)]
+    [InlineData(@"C:\Users\p\Documents\Ambient guidelines", false)]
+    [InlineData("", false)]
+    public void OneDriveFolderIsRecognised(string folder, bool expected)
+    {
+        var roots = new[] { @"C:\Users\p\OneDrive", @"C:\Users\p\OneDrive - UCL" };
+        Assert.Equal(expected, SettingsViewModel.InOneDrive(folder, roots));
+    }
+
+    [Fact]
+    public void AnUnreachableFolderIsFlaggedAndNothingIsRemoved()
+    {
+        var engine = new FakeEngineClient { GuidelinesFolderFound = false, UnsupportedFiles = 2 };
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+
+        Assert.True(settings.FolderMissing);
+        Assert.Single(settings.Documents);
+        Assert.Equal("2 other files are not searched, not PDF or text", settings.DocumentsCaption);
     }
 }

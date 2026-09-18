@@ -61,6 +61,7 @@ BuildSpec ReadBuildSpec(const std::filesystem::path& json) {
     out.corpus.name = spec.at("name").get<std::string>();
     out.corpus.licence = spec.at("licence").get<std::string>();
     out.corpus.attribution = spec.at("attribution").get<std::string>();
+    out.corpus.label = spec.value("label", std::string());
     out.corpus.source = spec.at("source").get<std::string>();
     const auto base = json.parent_path();
     if (out.corpus.source == "nice") {

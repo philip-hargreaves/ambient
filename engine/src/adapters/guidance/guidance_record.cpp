@@ -29,6 +29,13 @@ double Num(const json& j, const char* key) {
     return it->get<double>();
 }
 
+// A document id is 63 bits, past what a double keeps exactly
+std::int64_t Int64(const json& j, const char* key) {
+    const auto it = j.find(key);
+    if (it == j.end() || !it->is_number_integer()) return 0;
+    return it->get<std::int64_t>();
+}
+
 }  // namespace
 
 json ToJson(const Corpus& c) {
@@ -36,7 +43,9 @@ json ToJson(const Corpus& c) {
                 {"name", c.name},
                 {"licence", c.licence},
                 {"attribution", c.attribution},
+                {"label", c.label},
                 {"source", c.source},
+                {"research", c.research},
                 {"embedder", c.embedder},
                 {"sha256", c.sha256},
                 {"chunks", c.chunks},
@@ -60,14 +69,23 @@ json ToJson(const Results& results) {
                          {"source", r.source},
                          {"citation", r.citation},
                          {"score", std::round(r.score * 1000) / 1000},
-                         {"trigger", r.trigger}});
+                         {"trigger", r.trigger},
+                         {"document", r.document},
+                         {"page", r.page},
+                         {"pages", r.pages}});
     }
     json searched = json::array();
     for (const auto& c : results.searched) searched.push_back(ToJson(c));
-    return json{{"version", kRecordVersion}, {"shown", shown},
-                {"searched", searched},      {"considered", results.considered},
-                {"floor", results.floor},    {"abstained", results.abstained}};
+    return json{{"version", kRecordVersion},
+                {"shown", shown},
+                {"searched", searched},
+                {"considered", results.considered},
+                {"floor", results.floor},
+                {"abstained", results.abstained},
+                {"uploadFloor", results.upload_floor}};
 }
+
+namespace {
 
 Corpus CorpusFromJson(const json& j) {
     Corpus c;
@@ -75,7 +93,9 @@ Corpus CorpusFromJson(const json& j) {
     c.name = Str(j, "name");
     c.licence = Str(j, "licence");
     c.attribution = Str(j, "attribution");
+    c.label = Str(j, "label");
     c.source = Str(j, "source");
+    c.research = j.value("research", false);
     c.embedder = Str(j, "embedder");
     c.sha256 = Str(j, "sha256");
     c.chunks = Int(j, "chunks");
@@ -83,6 +103,8 @@ Corpus CorpusFromJson(const json& j) {
     c.unavailable = Str(j, "unavailable");
     return c;
 }
+
+}  // namespace
 
 Results FromJson(const json& j) {
     Results out;
@@ -103,6 +125,9 @@ Results FromJson(const json& j) {
             result.citation = Str(r, "citation");
             result.score = Num(r, "score");
             result.trigger = Str(r, "trigger");
+            result.document = Int64(r, "document");
+            result.page = Int(r, "page");
+            result.pages = Int(r, "pages");
             out.shown.push_back(std::move(result));
         }
     }
@@ -111,6 +136,7 @@ Results FromJson(const json& j) {
     }
     out.considered = Int(j, "considered");
     out.floor = Num(j, "floor");
+    out.upload_floor = Num(j, "uploadFloor");
     if (const auto it = j.find("abstained"); it != j.end() && it->is_boolean()) {
         out.abstained = it->get<bool>();
     }
@@ -136,8 +162,6 @@ std::string Dump(const Record& record) {
     return ToJson(record).dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
-// A version this build knows, and the two fields the section's state is read
-// from: anything less reads back as no record rather than as an empty one
 bool CanRead(const json& j) {
     if (!j.is_object()) return false;
     const auto version = j.find("version");

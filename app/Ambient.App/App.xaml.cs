@@ -41,8 +41,22 @@ public partial class App : Application
             stderrPath: Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "ambient", "engine.log"),
-            extraArguments: () => sp.GetRequiredService<AppPreferences>().NpuTranscription
-                ? "--asr-device NPU" : ""));
+            extraArguments: () =>
+            {
+                var prefs = sp.GetRequiredService<AppPreferences>();
+                var args = new List<string>();
+                if (prefs.NpuTranscription)
+                {
+                    args.Add("--asr-device NPU");
+                }
+#if DEBUG
+                if (prefs.IncludeResearchGuidance)
+                {
+                    args.Add("--include-research");
+                }
+#endif
+                return string.Join(" ", args);
+            }));
         // Identity-free path: unpackaged runs have no ApplicationData
         var localState = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ambient");
@@ -96,6 +110,7 @@ public partial class App : Application
         services.AddTransient<DemoTrayView>();
         services.AddTransient<TranscriptPaneView>();
         services.AddTransient<GuidanceSectionView>();
+        services.AddTransient<PageView>();
         services.AddTransient<NoteEditorView>();
         services.AddTransient<PatientEditorView>();
         services.AddTransient<NotePaneView>();

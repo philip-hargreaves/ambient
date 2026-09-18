@@ -14,6 +14,7 @@ public class GuidanceViewModelTest
         name = "Fixture guidance corpus",
         licence = "invented",
         attribution = "Fixture attribution",
+        label = "NICE",
         source = "text",
         embedder = "gte-large-int8",
         sha256 = "",
@@ -44,7 +45,43 @@ public class GuidanceViewModelTest
         };
 
     private static GuidanceRecommendation Found(object result) =>
-        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true);
+        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true, true);
+
+    private static readonly object DocumentCorpus = new
+    {
+        id = "upload:6368831970660585267",
+        name = "BSR PMR guidelines 2009",
+        licence = "",
+        attribution = "",
+        source = "upload",
+        embedder = "gte-large-int8",
+        sha256 = "",
+        chunks = 12,
+        builtAt = "2026-09-15T09:13:02Z",
+        unavailable = (string?)null,
+    };
+
+    private static object DocumentResult(int page = 1, int pages = 5, string number = "1.2",
+        long document = 6368831970660585267L) => new
+        {
+            corpus = $"upload:{document}",
+            chunkId = $"upload:{document}-4",
+            code = "",
+            number,
+            title = "BSR PMR guidelines 2009",
+            section = "",
+            text = "Start prednisolone 15 mg daily.",
+            url = "",
+            lastUpdated = "2026-09-15T09:12:44Z",
+            updateTag = "",
+            source = "upload",
+            citation = "BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)",
+            score = 0.9,
+            trigger = "",
+            document,
+            page,
+            pages,
+        };
 
     private static IEnumerable<string> Shown(GuidanceViewModel guidance) =>
         guidance.Cards.SelectMany(c => c.Recommendations).Select(r => r.ChunkId);
@@ -68,13 +105,15 @@ public class GuidanceViewModelTest
     private static JsonElement Failed(string? id, string detail) =>
         JsonSerializer.SerializeToElement(new { id, detail });
 
-    private static JsonElement Record(object[] shown, bool stale = false) =>
+    private static JsonElement Record(
+        object[] shown, bool stale = false, bool documentsChanged = false) =>
         JsonSerializer.SerializeToElement(new
         {
             version = 1,
             noteRevision = 1,
             generatedAt = "2026-09-13T01:00:00Z",
             stale,
+            documentsChanged,
             shown,
             searched = new[] { Corpus },
             considered = shown.Length,
@@ -192,6 +231,63 @@ public class GuidanceViewModelTest
         Assert.Equal(
             "nice-2026-08-25: corpus.db sha256 does not match the manifest",
             guidance.RefusedCorpora.Single());
+    }
+
+    [Fact]
+    public async Task AnAddedDocumentLeadsWithItsChipAndADividerBeforeTheGuidelines()
+    {
+        var (session, _) = await AfterNoteAsync();
+        session.Guidance.ApplyReady(Ready("s1", [Result("fx100-1_1_1"), DocumentResult()],
+            corpora: [Corpus, DocumentCorpus]));
+
+        var cards = session.Guidance.Cards;
+        Assert.Equal(2, cards.Count);
+        Assert.True(cards[0].FromDocument);
+        Assert.Equal("Added document", cards[0].Chip);
+        Assert.Equal("BSR PMR guidelines 2009", cards[0].Title);
+        Assert.Equal("5 pages · added 15 Sep 2026 · 1 recommendation", cards[0].Meta);
+        Assert.False(cards[0].DividerVisible);
+        Assert.Equal("From NICE", cards[1].Divider);
+        Assert.Equal("1 added document · 1 guideline", session.Guidance.Summary);
+
+        var found = cards[0].Recommendations.Single();
+        Assert.Equal(6368831970660585267L, found.Document);
+        Assert.Equal("Page 2", found.PageLabel);
+        Assert.Equal("1.2", found.Reference);
+        Assert.True(found.ShowVisible);
+        Assert.True(found.CanOpen);
+        Assert.Equal("Open BSR PMR guidelines 2009", found.OpenName);
+        Assert.Equal(
+            "BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)", found.CitationText);
+        Assert.False(cards[1].Recommendations.Single().ShowVisible);
+    }
+
+    [Fact]
+    public async Task ShowInDocumentOpensThePageViewOnThePassage()
+    {
+        var (session, engine) = await AfterNoteAsync();
+        engine.PageReply = new
+        {
+            path = @"C:\scratch\page.bmp",
+            width = 1000,
+            height = 1400,
+            pages = 5,
+            boxes = new[] { new { page = 1, left = 0.1, top = 0.2, right = 0.6, bottom = 0.3 } },
+        };
+        session.Guidance.ApplyReady(Ready("s1", [DocumentResult()], corpora: [DocumentCorpus]));
+        var found = session.Guidance.Cards.Single().Recommendations.Single();
+
+        await session.Guidance.ShowInDocumentAsync(found);
+
+        Assert.True(session.PageView.Visible);
+        Assert.Equal("Page 2 of 5", session.PageView.PageLabel);
+        Assert.Contains("\"id\":6368831970660585267", engine.Requests[^1].Params);
+        Assert.Single(session.PageView.Boxes);
+        Assert.Equal("1 added document · 1 recommendation", session.Guidance.Summary);
+
+        session.Guidance.Reset();
+        session.PageView.Hide();
+        Assert.False(session.PageView.Visible);
     }
 
     [Fact]
@@ -345,6 +441,90 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
+    public async Task ChangedDocumentsMarkAStoredResultStaleWithTheirOwnCaption()
+    {
+        var (session, engine, note) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
+
+        engine.RaiseNotification("guidance/documentsChanged",
+            JsonSerializer.SerializeToElement(new { }));
+
+        Assert.True(session.Guidance.Stale);
+        Assert.Equal(
+            "Added documents changed since this guidance was found.",
+            session.Guidance.StaleCaption);
+
+        note.ClinicalNoteText = "edited";
+        await session.SaveNoteAsync();
+
+        Assert.Equal(
+            "This guidance was found before your note edits.", session.Guidance.StaleCaption);
+    }
+
+    [Fact]
+    public async Task ABurstOfDocumentChangesSearchesTheNoteOnceAfterTheySettle()
+    {
+        var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
+        session.DocumentsSettle = TimeSpan.FromMilliseconds(80);
+        var before = engine.Requests.Count(r => r.Method == "guidance/search");
+
+        // Thirty documents finishing in quick succession
+        for (var i = 0; i < 30; i++)
+        {
+            engine.RaiseNotification("guidance/documentsChanged",
+                JsonSerializer.SerializeToElement(new { }));
+        }
+
+        Assert.True(session.Guidance.Stale);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (engine.Requests.Count(r => r.Method == "guidance/search") == before
+            && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        await Task.Delay(300);  // long enough for any second search to have fired
+        Assert.Equal(before + 1, engine.Requests.Count(r => r.Method == "guidance/search"));
+    }
+
+    [Fact]
+    public async Task AReopenedNoteOlderThanTheDocumentsIsStaleAndSearchesAgainByItself()
+    {
+        var (session, engine, _) = await ReopenedAsync(
+            Record([], documentsChanged: true));
+        session.DocumentsSettle = TimeSpan.FromMilliseconds(80);
+
+        Assert.True(session.Guidance.Stale);
+        Assert.Equal(
+            "Added documents changed since this guidance was found.",
+            session.Guidance.StaleCaption);
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (!engine.Requests.Any(r => r.Method == "guidance/search")
+            && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Contains(engine.Requests, r => r.Method == "guidance/search");
+    }
+
+    [Fact]
+    public async Task DocumentChangesLeaveATypedQueryAlone()
+    {
+        var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
+        session.DocumentsSettle = TimeSpan.FromMilliseconds(50);
+        session.Guidance.Query = "allopurinol";
+        await session.Guidance.SearchQueryCommand.ExecuteAsync(null);
+        var before = engine.Requests.Count(r => r.Method == "guidance/search");
+
+        engine.RaiseNotification("guidance/documentsChanged",
+            JsonSerializer.SerializeToElement(new { }));
+        await Task.Delay(300);
+
+        Assert.Equal(before, engine.Requests.Count(r => r.Method == "guidance/search"));
+    }
+
+    [Fact]
     public async Task SavingAnUnchangedNoteSendsNothingAndMarksNothing()
     {
         var (session, engine, _) = await ReopenedAsync(Record([Result("fx100-1_1_1")]));
@@ -468,7 +648,7 @@ public class GuidanceViewModelTest
         Assert.False(session.Guidance.QuerySearching);
         Assert.Empty(session.Guidance.Cards);
         Assert.Equal("", session.Guidance.Summary);
-        Assert.False(session.Guidance.LimitationVisible);
+        Assert.False(session.Guidance.CardsVisible);
         Assert.Equal(GuidanceSection.NotSearched, session.Guidance.Section);
         Assert.False(session.Guidance.CaptionVisible, "the query bar replaces the note caption");
 
@@ -609,7 +789,7 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public void EveryCorpusRefusedReadsAsNoCorpus()
+    public void NoInstalledCorpusStillSearchesSinceAddedDocumentsCan()
     {
         var engine = new FakeEngineClient(autoNotify: false);
         engine.GuidanceCorpora.Clear();
@@ -618,8 +798,9 @@ public class GuidanceViewModelTest
             engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
             new StatusBarViewModel());
 
-        Assert.Equal(GuidanceReadiness.NoCorpus, session.Guidance.Readiness);
-        Assert.True(session.Guidance.SettingsLinkVisible);
+        Assert.Equal(GuidanceReadiness.Ready, session.Guidance.Readiness);
+        Assert.False(session.Guidance.SettingsLinkVisible);
+        Assert.Equal(["nice: sha256 differs"], session.Guidance.RefusedCorpora);
     }
 
     [Fact]
@@ -705,7 +886,7 @@ public class GuidanceViewModelTest
         Assert.Single(session.Guidance.Cards);
         Assert.Equal(["fx100-1_1_2", "fx100-1_1_1", "fx100-1_1_3"], Shown(session.Guidance));
         Assert.Equal("1 guideline · 3 recommendations", session.Guidance.Summary);
-        Assert.True(session.Guidance.LimitationVisible);
+        Assert.True(session.Guidance.CardsVisible);
         Assert.Matches(@"^found in \d+\.\d s$", session.Guidance.FoundIn);
     }
 

@@ -10,7 +10,8 @@ public sealed class AppPreferences(string path)
         string? NoteStyle = null, string? NoteDetail = null,
         bool KeepConsultations = false, bool ShowPerformanceMetrics = false,
         string? MicId = null, string? Theme = null, string? NoteTier = null,
-        bool SeedDataEnabled = false);
+        bool SeedDataEnabled = false, bool DeveloperToolsExpanded = false,
+        bool IncludeResearchGuidance = false);
 
     /// <summary>The note model tiers the engine's store can resolve, in ladder order.</summary>
     public static readonly IReadOnlyList<string> NoteTiers = ["constrained", "default", "accuracy"];
@@ -32,6 +33,15 @@ public sealed class AppPreferences(string path)
 
     /// <summary>Off by default: the status-bar chips are for testing, not GPs.</summary>
     public bool ShowPerformanceMetrics { get; set; }
+
+    /// <summary>Whether the Developer tools group in Settings is open.</summary>
+    public bool DeveloperToolsExpanded { get; set; }
+
+    /// <summary>
+    /// Dev builds only: search corpora marked research (the local NICE demo). Passed to
+    /// the engine as --include-research on launch. Never shown or set in a release build.
+    /// </summary>
+    public bool IncludeResearchGuidance { get; set; }
 
     /// <summary>The chosen microphone's endpoint id; empty means the default.</summary>
     public string MicId { get; set; } = "";
@@ -61,6 +71,8 @@ public sealed class AppPreferences(string path)
             preferences.CollectPerformanceData = stored?.CollectPerformanceData ?? false;
             preferences.KeepConsultations = stored?.KeepConsultations ?? false;
             preferences.ShowPerformanceMetrics = stored?.ShowPerformanceMetrics ?? false;
+            preferences.DeveloperToolsExpanded = stored?.DeveloperToolsExpanded ?? false;
+            preferences.IncludeResearchGuidance = stored?.IncludeResearchGuidance ?? false;
             preferences.MicId = stored?.MicId ?? "";
             // Values the shell cannot render never leave this boundary
             preferences.Theme = stored?.Theme is "light" or "dark" ? stored.Theme : "system";
@@ -87,7 +99,8 @@ public sealed class AppPreferences(string path)
             File.WriteAllText(path, JsonSerializer.Serialize(new Stored(
                 DemoTrayEnabled, NpuTranscription, CollectPerformanceData,
                 NoteStyle, NoteDetail, KeepConsultations, ShowPerformanceMetrics, MicId,
-                Theme, NoteTier, SeedDataEnabled)));
+                Theme, NoteTier, SeedDataEnabled, DeveloperToolsExpanded,
+                IncludeResearchGuidance)));
         }
         catch (Exception)
         {

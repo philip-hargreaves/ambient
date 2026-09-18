@@ -1,0 +1,127 @@
+#pragma once
+
+#include <cctype>
+#include <cstddef>
+#include <string_view>
+#include <vector>
+
+#include "core/guidance_query.hpp"
+#include "core/page_text.hpp"
+
+namespace ambient::guidance {
+
+// The reference list: its heading sits in the second half of the paragraphs,
+// on its own or as the last line of one, and numbered citations follow. The
+// list runs to the next heading or prose paragraph and whatever follows it
+// stays, as appendices do in some guidelines. The word alone, as on a
+// pathway, drops nothing
+inline constexpr int kCitationLines = 6;
+inline constexpr int kCitationWindow = 40;
+inline constexpr int kListHeadingWords = 8;
+inline constexpr int kProseWords = 25;
+inline constexpr std::size_t kListLookahead = 3;
+
+namespace detail {
+
+// "References", "Reference list" or "Bibliography", with or without a section number
+inline bool IsReferencesHeading(std::string_view text) {
+    auto s = Trim(text);
+    std::size_t i = 0;
+    while (i < s.size() && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i] == '.')) ++i;
+    const auto lower = Lower(Trim(s.substr(i)));
+    return lower == "references" || lower == "reference list" || lower == "bibliography";
+}
+
+// "12 Kuo CF", "[12] Kuo" or "12. Kuo": a numbered entry
+inline bool IsCitationLine(std::string_view text) {
+    std::size_t i = text.starts_with('[') ? 1 : 0;
+    const auto start = i;
+    while (i < text.size() && i - start < 3 && std::isdigit(static_cast<unsigned char>(text[i]))) {
+        ++i;
+    }
+    if (i == start) return false;
+    if (i < text.size() && (text[i] == ']' || text[i] == '.')) ++i;
+    return i < text.size() && text[i] == ' ';
+}
+
+}  // namespace detail
+
+namespace detail {
+
+inline bool CitationsFollow(const std::vector<Paragraph>& paragraphs, std::size_t heading) {
+    int seen = 0;
+    int citations = 0;
+    for (std::size_t j = heading + 1; j < paragraphs.size() && seen < kCitationWindow; ++j) {
+        for (const auto& line : paragraphs[j].lines) {
+            if (seen++ >= kCitationWindow) break;
+            citations += IsCitationLine(line.text);
+        }
+    }
+    return citations >= kCitationLines;
+}
+
+inline bool HasYear(std::string_view text) {
+    for (std::size_t i = 0; i + 4 <= text.size(); ++i) {
+        if ((text.substr(i, 2) == "19" || text.substr(i, 2) == "20") &&
+            std::isdigit(static_cast<unsigned char>(text[i + 2])) &&
+            std::isdigit(static_cast<unsigned char>(text[i + 3])) &&
+            (i == 0 || !std::isdigit(static_cast<unsigned char>(text[i - 1]))) &&
+            (i + 4 == text.size() || !std::isdigit(static_cast<unsigned char>(text[i + 4])))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A numbered entry that names a year
+inline bool Cites(const Paragraph& paragraph) {
+    return IsCitationLine(paragraph.lines.front().text) && HasYear(paragraph.text);
+}
+
+// The list ends at prose without a year, or at a heading that no citation
+// follows within kListLookahead paragraphs. A numbered entry carries it on
+// even when a page break has parted it from its year, as do the fragments of
+// a split entry, a journal and year on their own line
+inline bool EndsList(const std::vector<Paragraph>& paragraphs, std::size_t i) {
+    const auto& text = paragraphs[i].text;
+    if (text.empty() || IsCitationLine(paragraphs[i].lines.front().text)) return false;
+    const auto words = WordCount(text);
+    if (words >= kProseWords) return !HasYear(text);
+    const bool heading = words <= kListHeadingWords && !EndsSentence(text) &&
+                         std::isupper(static_cast<unsigned char>(text[0])) && !HasYear(text);
+    if (!heading) return false;
+    for (std::size_t j = i + 1; j < paragraphs.size() && j <= i + kListLookahead; ++j) {
+        if (Cites(paragraphs[j])) return false;
+    }
+    return true;
+}
+
+// The paragraph without its last line
+inline void DropLastLine(Paragraph& paragraph) {
+    paragraph.lines.pop_back();
+    paragraph.text.clear();
+    for (const auto& line : paragraph.lines) {
+        if (!paragraph.text.empty()) paragraph.text += ' ';
+        paragraph.text += line.text;
+    }
+}
+
+}  // namespace detail
+
+inline void DropReferenceTail(std::vector<Paragraph>& paragraphs) {
+    for (std::size_t i = paragraphs.size() / 2; i < paragraphs.size(); ++i) {
+        auto& paragraph = paragraphs[i];
+        const bool whole = detail::IsReferencesHeading(paragraph.text);
+        const bool last_line = !whole && paragraph.lines.size() > 1 &&
+                               detail::IsReferencesHeading(paragraph.lines.back().text);
+        if ((!whole && !last_line) || !detail::CitationsFollow(paragraphs, i)) continue;
+        auto end = i + 1;
+        while (end < paragraphs.size() && !detail::EndsList(paragraphs, end)) ++end;
+        if (last_line) detail::DropLastLine(paragraph);
+        paragraphs.erase(paragraphs.begin() + static_cast<std::ptrdiff_t>(i + (last_line ? 1 : 0)),
+                         paragraphs.begin() + static_cast<std::ptrdiff_t>(end));
+        return;
+    }
+}
+
+}  // namespace ambient::guidance

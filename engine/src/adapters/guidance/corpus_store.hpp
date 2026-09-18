@@ -22,14 +22,15 @@ struct CorpusInfo {
     std::string name;
     std::string licence;
     std::string attribution;
+    std::string label;
     std::string source;
+    bool research = false;  // a demo or evaluation corpus, never shipped
     std::string embedder_id;
     std::string embedder_rev;
     std::string built_at;
     std::string sha256;  // of corpus.db, from the manifest, verified at open
     int dim = 0;
     std::int64_t chunk_count = 0;
-    std::filesystem::path dir;
 };
 
 // What every result needs without a read
@@ -48,10 +49,9 @@ struct ChunkText {
     std::string update_tag;
 };
 
-// A corpus directory opened read-only, its vectors resident as one matrix,
-// its text read on demand. Every claim the manifest makes is asserted against
-// the file and the staged embedder before a vector is trusted; a corpus that
-// fails a guard is unavailable with a reason, never a throw into the lane.
+// A corpus directory opened read-only, vectors resident as one matrix, text
+// read on demand. Every manifest claim is checked against the file and the
+// staged embedder. A failed guard leaves the corpus unavailable with a reason.
 // One thread owns an instance
 class CorpusStore {
    public:

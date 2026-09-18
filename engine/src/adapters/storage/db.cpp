@@ -69,6 +69,7 @@ Db::Db(const std::filesystem::path& path, Mode mode) {
     int flags = 0;
     switch (mode) {
         case Mode::kSession:
+        case Mode::kIndex:
         case Mode::kBuild:
             name = std::string(reinterpret_cast<const char*>(path.u8string().c_str()));
             flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
@@ -90,14 +91,15 @@ Db::Db(const std::filesystem::path& path, Mode mode) {
     // The destructor never runs if a pragma throws
     try {
         if (mode != Mode::kImmutableReadOnly) sqlite3_busy_timeout(db_, 5000);
-        if (mode == Mode::kSession) {
+        if (mode == Mode::kSession || mode == Mode::kIndex) {
             // page_size only takes effect if it runs before the first table is created
-            Exec("PRAGMA page_size=8192");
+            if (mode == Mode::kSession) Exec("PRAGMA page_size=8192");
             Exec("PRAGMA journal_mode=WAL");
-            Exec("PRAGMA synchronous=FULL");
+            // The index is derived data, so a lost transaction costs only a rescan
+            Exec(mode == Mode::kSession ? "PRAGMA synchronous=FULL" : "PRAGMA synchronous=NORMAL");
             Exec("PRAGMA foreign_keys=ON");
-            // Freed cells are zeroed (whole freed pages leave the file at the vacuum); the log is
-            // truncated rather than kept at its high-water mark
+            // Freed cells are zeroed (whole freed pages leave the file at the vacuum) and the
+            // journal log is truncated to stay small
             Exec("PRAGMA secure_delete=FAST");
             Exec("PRAGMA journal_size_limit=4194304");
         } else if (mode == Mode::kImmutableReadOnly) {

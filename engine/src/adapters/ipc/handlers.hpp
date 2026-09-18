@@ -10,6 +10,7 @@
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "core/session_controller.hpp"
+#include "ports/document_ingest.hpp"
 #include "ports/guidance_lane.hpp"
 #include "ports/note_lane.hpp"
 
@@ -86,26 +87,50 @@ json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
 json GuidanceModelJson(const ambient::guidance::Readiness& readiness);
 // The lane request behind every search: results go out as guidance/ready, a
 // failure as guidance/failed, both naming the session (null for free text).
-// With a session the record is stored before the notification, which also says
-// whether the note moved during the search. A session erased meanwhile ends
-// the search quietly, any other store error rides on the ready payload rather
-// than withholding the results
+// With a session the record is stored first and the payload says whether the
+// note moved. A session erased meanwhile ends the search quietly, any other
+// store error rides on the payload
 ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
                                                        const std::string& session,
                                                        ambient::store::Document note, int limit,
                                                        Notify notify);
 // session/guidance: the stored record, null when the note was never searched
 // or the record cannot be read, stale when the note has been written since
-std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
-                                                const json& params);
+// documentsChanged: the added documents the record searched are not the ones ready now
+std::variant<json, Error> HandleSessionGuidance(
+    ambient::store::ISessionStore& sessions, const json& params,
+    ambient::guidance::IDocumentIngest* ingest = nullptr);
 // guidance/search: the stored note of session id, or free text, through the
 // lane. The reply is immediate; the results arrive as a notification
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
                                                ambient::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify);
+// Added documents: the row guidance/documents lists and guidance/document
+// announces, and the progress notification
+json DocumentJson(const ambient::guidance::DocumentInfo& document);
+json ProgressJson(const ambient::guidance::IngestProgress& progress);
+// The ready set changes when a document finishes or a finished one goes
+bool ChangesReadySet(const ambient::guidance::DocumentInfo& document);
+// guidance/documents: the folder and its documents. guidance/documents/add
+// copies files into the folder and answers with their rows, the rest skipped
+// with a reason. guidance/documents/remove sends a document's files to the
+// Recycle Bin
+std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest& ingest,
+                                             const json& params);
+std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest);
+std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
+                                                const json& params);
+// guidance/page: one page of an added PDF drawn to a bitmap under the scratch
+// folder, with the cited chunk's boxes. guidance/documents/open: her file, for
+// the PDF viewer
+std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
+                                              const json& params);
+std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
+                                              const json& params);
 void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
                              ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::IGuidanceLane& lane);
+                             ambient::guidance::IGuidanceLane& lane,
+                             ambient::guidance::IDocumentIngest& ingest);
 
 // Every method the engine serves. first_use: model caches were cold at
 // launch, so the one-off compiles are running and readiness reports them.

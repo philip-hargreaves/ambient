@@ -108,7 +108,7 @@ inline void WriteMarkdown(const std::filesystem::path& fixture_dir,
 
 // Embeds the chunks and writes corpus.db and manifest.json into dir
 inline void Build(const std::filesystem::path& dir, const std::string& id, IEmbedder& embedder,
-                  const std::vector<Chunk>& chunks) {
+                  const std::vector<Chunk>& chunks, bool research = false) {
     const auto& identity = embedder.Identity();
     std::vector<float> vectors;
     for (const auto& chunk : chunks) {
@@ -121,6 +121,7 @@ inline void Build(const std::filesystem::path& dir, const std::string& id, IEmbe
     spec.licence = "invented";
     spec.attribution = "none";
     spec.source = "text";
+    spec.research = research;
     spec.embedder = identity;
     spec.built_at = "2026-09-11T00:00:00Z";
     spec.builder = "tests";

@@ -1,31 +1,14 @@
 #include "adapters/guidance/corpus_store.hpp"
 
-#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <stdexcept>
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-
+#include "adapters/guidance/loader_core.hpp"
 #include "adapters/models/model_store.hpp"
 
 namespace ambient::guidance {
 namespace {
-
-struct Refused : std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
-
-void Guard(bool ok, const std::string& why) {
-    if (!ok) throw Refused(why);
-}
 
 std::string Str(const nlohmann::json& j, const char* key) {
     const auto it = j.find(key);
@@ -40,12 +23,6 @@ std::int64_t Int(const nlohmann::json& j, const char* key) {
         throw Refused(std::string("manifest: ") + key + " missing");
     }
     return it->get<std::int64_t>();
-}
-
-std::uint64_t AvailablePhysicalMemory() {
-    MEMORYSTATUSEX status{};
-    status.dwLength = sizeof status;
-    return GlobalMemoryStatusEx(&status) ? status.ullAvailPhys : 0;
 }
 
 }  // namespace
@@ -70,11 +47,12 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         }
         Guard(Int(manifest, "format") == kCorpusFormat, "manifest format is not 1");
         CorpusInfo info;
-        info.dir = dir;
         info.id = Str(manifest, "id");
         info.name = Str(manifest, "name");
         info.licence = Str(manifest, "licence");
         info.attribution = Str(manifest, "attribution");
+        info.label = manifest.value("label", std::string());
+        info.research = manifest.value("research", false);
         info.embedder_id = Str(manifest, "embedder_id");
         info.embedder_rev = Str(manifest, "embedder_rev");
         info.built_at = Str(manifest, "built_at");
@@ -92,8 +70,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
 
         // 3. a corpus file of this format, not left in WAL mode
         store::Db db(path, store::Db::Mode::kImmutableReadOnly);
-        Guard(db.QueryInt64("PRAGMA application_id") ==
-                  static_cast<std::int64_t>(kCorpusApplicationId),
+        Guard(db.ApplicationId() == static_cast<std::int64_t>(kCorpusApplicationId),
               "not a corpus file");
         Guard(db.UserVersion() == kCorpusFormat, "corpus format is newer or older than this build");
         {
@@ -143,8 +120,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         // 6. memory, before allocating
         const auto dim = static_cast<std::size_t>(info.dim);
         const auto rows = static_cast<std::size_t>(info.chunk_count);
-        const auto needed = static_cast<std::uint64_t>(rows) * dim * sizeof(float) + rows * 256;
-        Guard(AvailablePhysicalMemory() > needed, "corpus too large for the available memory");
+        GuardMemory(rows, dim, "corpus");
 
         auto store = std::unique_ptr<CorpusStore>(new CorpusStore(std::move(db), info));
         store->matrix_.resize(rows * dim);
@@ -173,12 +149,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         Guard(next_ord == info.chunk_count, "shards do not cover every chunk");
 
         // 8. every vector is unit length
-        for (std::size_t r = 0; r < rows; ++r) {
-            double norm = 0;
-            const float* v = store->matrix_.data() + r * dim;
-            for (std::size_t d = 0; d < dim; ++d) norm += static_cast<double>(v[d]) * v[d];
-            Guard(std::fabs(norm - 1.0) <= 1e-3, "a vector is not unit length");
-        }
+        GuardUnitVectors(store->matrix_.data(), rows, dim);
 
         auto cites = store->db_.Prepare(
             "SELECT chunk_id, code, title, number, section FROM chunks ORDER BY ord");

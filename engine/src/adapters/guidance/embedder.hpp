@@ -18,6 +18,8 @@ struct EmbedderIdentity {
     int dim = 0;
     int max_tokens = 0;
     std::string query_prefix;
+
+    bool operator==(const EmbedderIdentity&) const = default;
 };
 
 struct Embedding {

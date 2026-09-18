@@ -1,0 +1,10 @@
+{
+    "jsonrpc": "2.0",
+    "method": "guidance/progress",
+    "params": {
+        "id": 2871034561297730,
+        "phase": "preparing",
+        "done": 120,
+        "total": 310
+    }
+}

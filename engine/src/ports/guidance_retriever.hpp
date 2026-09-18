@@ -14,7 +14,9 @@ struct Corpus {
     std::string name;
     std::string licence;
     std::string attribution;
-    std::string source;  // "nice", "text", "upload"
+    std::string label;      // the chip's name for the publisher, "NICE", empty when the name serves
+    std::string source;     // the importer that built it, "upload" for an added document
+    bool research = false;  // a demo or evaluation corpus, never shipped, dev builds only
     std::string embedder;
     std::string sha256;
     int chunks = 0;
@@ -33,11 +35,14 @@ struct Result {
     std::string text;
     std::string url;
     std::string last_updated;  // ISO 8601, from the guideline
-    std::string update_tag;    // NICE change marker on the recommendation
-    std::string source;        // the corpus source, "nice"/"text"/"upload"
+    std::string update_tag;    // the guideline's change marker, "2009, amended 2018"
+    std::string source;        // the corpus's source, "upload" for an added document
     std::string citation;      // code, number and title on one line, for the clipboard
     double score = 0;
     std::string trigger;  // the note sentence that found it, empty for the whole note or a query
+    std::int64_t document = 0;  // an added document's id, 0 for a corpus
+    int page = 0;               // 0-based page of an added PDF, 0 otherwise
+    int pages = 0;              // the added PDF's page count, 0 otherwise
 };
 
 struct Results {
@@ -45,6 +50,7 @@ struct Results {
     std::vector<Corpus> searched;  // corpora open to the search, for the record
     int considered = 0;            // candidates before the floor and the filters
     double floor = 0;              // cosine floor the candidates were held to
+    double upload_floor = 0;       // the same for the added documents
     bool abstained = false;        // nothing to show, by filter or by floor
 };
 
@@ -77,6 +83,9 @@ class IGuidanceRetriever {
     virtual std::vector<Corpus> Corpora() = 0;
 
     virtual Readiness Status() = 0;
+
+    // Dev only: include or exclude corpora marked research, live
+    virtual void SetResearch(bool /*include*/) {}
 
     virtual void AddDocument(const std::string& /*path*/) {
         throw std::logic_error("guidance documents are not supported yet");

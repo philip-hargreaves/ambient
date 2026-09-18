@@ -11,6 +11,9 @@ namespace Ambient.App.Core.ViewModels;
 /// <summary>One installed corpus, as Settings lists it.</summary>
 public sealed record CorpusRow(string Name, string Detail, string Attribution, bool Refused)
 {
+    /// <summary>A line above every row but the first.</summary>
+    public bool Divided { get; init; }
+
     public bool AttributionVisible => Attribution.Length > 0;
 
     public bool Loaded => !Refused;
@@ -56,6 +59,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         CollectPerformanceData = preferences?.CollectPerformanceData ?? false;
         KeepConsultations = preferences?.KeepConsultations ?? false;
         ShowPerformanceMetrics = preferences?.ShowPerformanceMetrics ?? false;
+        DeveloperToolsExpanded = preferences?.DeveloperToolsExpanded ?? false;
+        IncludeResearchGuidance = preferences?.IncludeResearchGuidance ?? false;
         Theme = preferences?.Theme ?? "system";
         _noteTier = preferences?.NoteTier ?? "default";
         _initialising = false;
@@ -69,6 +74,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 {
                     _ = LoadNoteModelsAsync();
                     _ = LoadGuidanceCorporaAsync();
+                    _ = LoadDocumentsAsync();
                     if (SeedDataEnabled)
                     {
                         _ = ApplySeedDataAsync(true);
@@ -84,13 +90,28 @@ public sealed partial class SettingsViewModel : ObservableObject
                 }
                 else if (method == "guidance/model")
                 {
-                    Post(() => _ = LoadGuidanceCorporaAsync());
+                    Post(() =>
+                    {
+                        _ = LoadGuidanceCorporaAsync();
+                        _ = LoadDocumentsAsync();
+                    });
+                }
+                else if (method == "guidance/document")
+                {
+                    var document = parameters.Clone();
+                    Post(() => Upsert(document));
+                }
+                else if (method == "guidance/progress")
+                {
+                    var progress = parameters.Clone();
+                    Post(() => ApplyProgress(progress));
                 }
             };
             if (client.Connected)
             {
                 _ = LoadNoteModelsAsync();
                 _ = LoadGuidanceCorporaAsync();
+                _ = LoadDocumentsAsync();
                 if (SeedDataEnabled)
                 {
                     _ = ApplySeedDataAsync(true);
@@ -363,10 +384,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Why nothing is listed, empty when corpora are shown.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(GuidanceCaptionVisible))]
+    [NotifyPropertyChangedFor(nameof(GuidanceCaptionVisible), nameof(GuidanceInstalledVisible))]
     public partial string GuidanceCaption { get; set; } = "";
 
     public bool GuidanceCaptionVisible => GuidanceCaption.Length > 0;
+
+    /// <summary>Hidden when nothing is installed, so no empty card shows.</summary>
+    public bool GuidanceInstalledVisible => GuidanceCorpora.Count > 0 || GuidanceCaption.Length > 0;
 
     private async Task LoadGuidanceCorporaAsync()
     {
@@ -396,7 +420,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             foreach (var corpus in list.EnumerateArray())
             {
-                GuidanceCorpora.Add(RowFrom(corpus));
+                GuidanceCorpora.Add(RowFrom(corpus) with { Divided = GuidanceCorpora.Count > 0 });
             }
         }
 
@@ -405,12 +429,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             "loading" => "Loading",
             "unavailable" => detail.Length > 0 ? $"Unavailable: {detail}" : "Unavailable",
-            _ when GuidanceCorpora.Count == 0 => "None installed",
             _ => "",
         };
+        OnPropertyChanged(nameof(GuidanceInstalledVisible));
     }
 
-    // A refused corpus keeps its place, so unused guidance is visible, not missing
+    // A refused corpus keeps its place, so unused guidance stays visible
     private static CorpusRow RowFrom(JsonElement corpus)
     {
         var refused = GuidanceCard.Field(corpus, "unavailable");
@@ -438,6 +462,294 @@ public sealed partial class SettingsViewModel : ObservableObject
             GuidanceCard.Field(corpus, "attribution"), false);
     }
 
+    // Added documents
+
+    /// <summary>The documents in the guidelines folder: the batch in progress, then by name.</summary>
+    public ObservableCollection<DocumentRow> Documents { get; } = [];
+
+    /// <summary>The guidelines folder the engine watches.</summary>
+    [ObservableProperty]
+    public partial string GuidelinesFolder { get; private set; } = "";
+
+    /// <summary>The folder and its parent were out of reach at the last scan.</summary>
+    [ObservableProperty]
+    public partial bool FolderMissing { get; private set; }
+
+    /// <summary>The folder sits inside OneDrive, so the documents sync to the cloud.</summary>
+    [ObservableProperty]
+    public partial bool FolderInOneDrive { get; private set; }
+
+    /// <summary>What the last add skipped, or why nothing could be added.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DocumentsCaptionVisible))]
+    public partial string DocumentsCaption { get; set; } = "";
+
+    public bool DocumentsCaptionVisible => DocumentsCaption.Length > 0;
+
+    /// <summary>How many documents are still being read, empty when none is.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BatchVisible))]
+    public partial string BatchCaption { get; private set; } = "";
+
+    public bool BatchVisible => BatchCaption.Length > 0;
+
+    public bool DocumentsPresent => Documents.Count > 0;
+
+    /// <summary>The view supplies the picker, the folder reveal and the dialogs.</summary>
+    public Func<Task<IReadOnlyList<string>>>? PickDocuments { get; set; }
+
+    public Action<string>? RevealFolder { get; set; }
+
+    public Func<string, Task<bool>>? ConfirmRemoveDocument { get; set; }
+
+    public Func<int, Task<bool>>? ConfirmRemoveAllDocuments { get; set; }
+
+    [RelayCommand]
+    private void OpenFolder()
+    {
+        if (GuidelinesFolder.Length > 0)
+        {
+            RevealFolder?.Invoke(GuidelinesFolder);
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddDocuments()
+    {
+        if (PickDocuments is null)
+        {
+            return;
+        }
+
+        var paths = await PickDocuments().ConfigureAwait(true);
+        if (paths.Count > 0)
+        {
+            await AddPathsAsync(paths).ConfigureAwait(true);
+        }
+    }
+
+    private async Task AddPathsAsync(IReadOnlyList<string> paths)
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            var reply = await _client
+                .RequestAsync("guidance/documents/add", new { paths }, RequestTimeout)
+                .ConfigureAwait(true);
+            if (reply.TryGetProperty("documents", out var documents))
+            {
+                foreach (var document in documents.EnumerateArray())
+                {
+                    Upsert(document);
+                }
+            }
+
+            DocumentsCaption = SkippedCaption(reply);
+        }
+        catch (Exception e)
+        {
+            DocumentsCaption = "The documents could not be added";
+            _status?.Log($"guidance/documents/add failed: {e.Message}");
+        }
+    }
+
+    // Skipped files become a count under the add row
+    private static string SkippedCaption(JsonElement reply)
+    {
+        if (!reply.TryGetProperty("skipped", out var skipped)
+            || skipped.ValueKind != JsonValueKind.Array || skipped.GetArrayLength() == 0)
+        {
+            return "";
+        }
+
+        var parts = new List<string>();
+        foreach (var group in skipped.EnumerateArray()
+            .GroupBy(s => GuidanceCard.Field(s, "reason")))
+        {
+            var n = group.Count();
+            parts.Add(group.Key switch
+            {
+                "unsupported" => $"{n} skipped, not PDF or text",
+                "noSpace" => $"{n} skipped, not enough free space",
+                _ => $"{n} could not be read",
+            });
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            var reply = await _client
+                .RequestAsync("guidance/documents", null, TimeSpan.FromSeconds(5))
+                .ConfigureAwait(true);
+            GuidelinesFolder = GuidanceCard.Field(reply, "folder");
+            FolderMissing = reply.TryGetProperty("found", out var found) && !found.GetBoolean();
+            FolderInOneDrive = InOneDrive(GuidelinesFolder, OneDriveRoots());
+            var unsupported = reply.TryGetProperty("unsupported", out var u) ? u.GetInt32() : 0;
+            Documents.Clear();
+            foreach (var document in reply.GetProperty("documents").EnumerateArray())
+            {
+                Upsert(document);
+            }
+
+            DocumentsCaption = unsupported == 0 ? ""
+                : unsupported == 1 ? "1 other file is not searched, not PDF or text"
+                : $"{unsupported} other files are not searched, not PDF or text";
+        }
+        catch (Exception)
+        {
+            Documents.Clear();
+        }
+
+        OnPropertyChanged(nameof(DocumentsPresent));
+        RefreshBatch();
+    }
+
+    // A row keeps its place while it works, then sorts by name below the batch
+    private void Upsert(JsonElement document)
+    {
+        var id = document.GetProperty("id").GetInt64();
+        var row = Documents.FirstOrDefault(r => r.Id == id);
+        if (GuidanceCard.Field(document, "state") == "removed")
+        {
+            if (row is not null)
+            {
+                Documents.Remove(row);
+            }
+        }
+        else if (row is null)
+        {
+            row = new DocumentRow(document, RemoveDocumentCommand);
+            Documents.Insert(Place(row), row);
+        }
+        else
+        {
+            var wasWorking = row.Working;
+            row.Apply(document);
+            if (wasWorking && !row.Working)
+            {
+                Documents.Remove(row);
+                Documents.Insert(Place(row), row);
+            }
+        }
+
+        OnPropertyChanged(nameof(DocumentsPresent));
+        RefreshBatch();
+    }
+
+    private int Place(DocumentRow row)
+    {
+        var i = 0;
+        while (i < Documents.Count && Documents[i].Working)
+        {
+            i++;
+        }
+
+        if (row.Working)
+        {
+            return i;
+        }
+
+        while (i < Documents.Count
+            && string.Compare(Documents[i].Name, row.Name, StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            i++;
+        }
+
+        return i;
+    }
+
+    private void ApplyProgress(JsonElement progress)
+    {
+        if (progress.TryGetProperty("id", out var id) && id.TryGetInt64(out var value))
+        {
+            Documents.FirstOrDefault(r => r.Id == value)?.ApplyProgress(progress);
+        }
+    }
+
+    private static readonly string[] OneDriveVariables =
+        ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"];
+
+    private static IEnumerable<string> OneDriveRoots() =>
+        OneDriveVariables.Select(Environment.GetEnvironmentVariable)
+            .Where(root => !string.IsNullOrEmpty(root))
+            .Select(root => root!);
+
+    // A folder under a OneDrive root syncs to the cloud, which the caption states
+    public static bool InOneDrive(string folder, IEnumerable<string> roots) =>
+        folder.Length > 0
+        && roots.Any(root => folder.StartsWith(root, StringComparison.OrdinalIgnoreCase));
+
+    private void RefreshBatch()
+    {
+        var working = Documents.Count(r => r.Working);
+        BatchCaption = working == 0 ? "" : $"Reading {GuidanceCard.Count(working, "document")}";
+    }
+
+    /// <summary>Remove sends the file to the Recycle Bin, so it always confirms.</summary>
+    [RelayCommand]
+    private async Task RemoveDocument(DocumentRow? row)
+    {
+        if (row is null || _client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        if (ConfirmRemoveDocument is not null
+            && !await ConfirmRemoveDocument(row.Name).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        try
+        {
+            await _client
+                .RequestAsync("guidance/documents/remove", new { id = row.Id }, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/documents/remove failed: {e.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task RemoveAllDocuments()
+    {
+        if (_client is null || !_client.Connected || Documents.Count == 0)
+        {
+            return;
+        }
+
+        if (ConfirmRemoveAllDocuments is not null
+            && !await ConfirmRemoveAllDocuments(Documents.Count).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        try
+        {
+            await _client.RequestAsync("guidance/documents/removeAll", null, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/documents/removeAll failed: {e.Message}");
+        }
+    }
+
     /// <summary>
     /// Off by default: a consultation is erased when it is left. On: the
     /// encrypted history. Applies to consultations from now on; audio is
@@ -447,9 +759,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial bool KeepConsultations { get; set; }
 
     /// <summary>
-    /// Turning the history ON starts accumulating patient records, so it is
-    /// confirmed, never just toggled; the view supplies the dialog. Off is
-    /// frictionless - reducing retention is never gated.
+    /// Turning the history on starts accumulating patient records, so the view confirms it
+    /// first. Turning it off is never gated.
     /// </summary>
     public Func<Task<bool>>? ConfirmKeepConsultations { get; set; }
 
@@ -634,9 +945,78 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>The Developer tools group is closed unless it was left open.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeveloperToolsCollapsed))]
+    public partial bool DeveloperToolsExpanded { get; set; }
+
+    public bool DeveloperToolsCollapsed => !DeveloperToolsExpanded;
+
+    [RelayCommand]
+    private void ToggleDeveloperTools() => DeveloperToolsExpanded = !DeveloperToolsExpanded;
+
+    partial void OnDeveloperToolsExpandedChanged(bool value)
+    {
+        if (!_initialising && _preferences is not null)
+        {
+            _preferences.DeveloperToolsExpanded = value;
+            _preferences.Save();
+        }
+    }
+
     /// <summary>Shows the status-bar model and memory chips. For testing.</summary>
     [ObservableProperty]
     public partial bool ShowPerformanceMetrics { get; set; }
+
+    /// <summary>
+    /// Dev builds only: include the local research corpus, the NICE demo. Hidden in a
+    /// release build.
+    /// </summary>
+    public bool ResearchToggleVisible { get; } =
+#if DEBUG
+        true;
+#else
+        false;
+#endif
+
+    [ObservableProperty]
+    public partial bool IncludeResearchGuidance { get; set; }
+
+    partial void OnIncludeResearchGuidanceChanged(bool value)
+    {
+        if (_initialising)
+        {
+            return;
+        }
+
+        if (_preferences is not null)
+        {
+            _preferences.IncludeResearchGuidance = value;
+            _preferences.Save();
+        }
+
+        _ = ApplyResearchAsync(value);
+    }
+
+    // The engine reloads its corpora live and announces the change, so the
+    // list follows without a restart
+    private async Task ApplyResearchAsync(bool include)
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            await _client.RequestAsync("guidance/research", new { include }, RequestTimeout)
+                .ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _status?.Log($"guidance/research failed: {e.Message}");
+        }
+    }
 
     partial void OnShowPerformanceMetricsChanged(bool value)
     {
@@ -671,7 +1051,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExportDescription))]
     public partial string ExportResult { get; private set; } = "";
+
+    /// <summary>The Export row's line: the last outcome once there is one.</summary>
+    public string ExportDescription =>
+        ExportResult.Length > 0 ? ExportResult : "Saves the report as an HTML file";
 
     /// <summary>Suggested name in, chosen path (or null) out; the view owns the picker.</summary>
     public Func<string, Task<string?>>? PickSavePath { get; set; }

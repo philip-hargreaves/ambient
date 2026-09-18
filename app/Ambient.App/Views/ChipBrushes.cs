@@ -4,29 +4,19 @@ using Microsoft.UI.Xaml.Media;
 namespace Ambient.App.Views;
 
 /// <summary>
-/// Chip colours by corpus kind: NICE in NHS blue, an upload in the on-device green.
+/// Chip colours by source: an added document in the on-device green, installed
+/// guidance in the accent blue whoever published it.
 /// </summary>
 public static class ChipBrushes
 {
-    public static Brush Text(string source) => Find(source switch
-    {
-        "nice" => "NiceChipBrush",
-        "upload" => "OnDeviceBrush",
-        _ => "TextFillColorSecondaryBrush",
-    });
+    public static Brush Text(string source) =>
+        Find(source == "upload" ? "OnDeviceBrush" : "ReferenceChipBrush");
 
-    public static Brush Fill(string source) => Find(source switch
-    {
-        "nice" => "NiceChipSoftBrush",
-        "upload" => "OnDeviceSoftBrush",
-        _ => "SubtleFillColorSecondaryBrush",
-    });
+    public static Brush Fill(string source) =>
+        Find(source == "upload" ? "OnDeviceSoftBrush" : "ReferenceChipSoftBrush");
 
-    public static Brush Stroke(string source) => Find(source switch
-    {
-        "nice" => "NiceChipBorderBrush",
-        _ => "CardStrokeColorDefaultBrush",
-    });
+    public static Brush Stroke(string source) =>
+        Find(source == "upload" ? "OnDeviceChipBorderBrush" : "ReferenceChipBorderBrush");
 
     private static Brush Find(string key) => (Brush)Application.Current.Resources[key];
 }

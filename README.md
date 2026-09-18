@@ -54,15 +54,18 @@ You need:
 
 Then, from a developer command prompt in the repo root:
 
-1. Fetch the OpenVINO toolchain the engine builds against:
+1. Fetch the OpenVINO toolchain the engine builds against and the PDF reader its ingest
+   host links:
 
    ```powershell
    powershell tools\get-openvino.ps1
+   powershell tools\get-pdfium.ps1
    ```
 
-   This downloads the pinned OpenVINO GenAI archive (about 1 GB), verifies its hash, and
-   installs it at `external\openvino` inside the repo. CMake is already pointed there;
-   nothing needs configuring. Run it once per clone - it is a no-op when already installed.
+   These download the pinned archives (OpenVINO GenAI about 1 GB, PDFium about 4 MB),
+   verify their hashes, and install them under `external\` inside the repo. CMake is
+   already pointed there; nothing needs configuring. Run them once per clone - each is a
+   no-op when already installed.
 
 2. Build the engine:
 

@@ -1,7 +1,11 @@
 #include "adapters/guidance/retriever.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 
 #include "core/guidance_query.hpp"
@@ -10,13 +14,24 @@
 namespace ambient::guidance {
 namespace {
 
+bool IsResearch(const std::filesystem::path& manifest) {
+    try {
+        std::ifstream in(manifest);
+        return nlohmann::json::parse(in).value("research", false);
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
 Corpus Describe(const CorpusInfo& info) {
     Corpus c;
     c.id = info.id;
     c.name = info.name;
     c.licence = info.licence;
     c.attribution = info.attribution;
+    c.label = info.label;
     c.source = info.source;
+    c.research = info.research;
     c.embedder = info.embedder_id;
     c.sha256 = info.sha256;
     c.chunks = static_cast<int>(info.chunk_count);
@@ -33,6 +48,28 @@ struct Located {
 
 std::string Key(const Located& l) {
     return std::to_string(l.corpus) + ":" + std::to_string(l.ord);
+}
+
+// "15 Sep 2026" from "2026-09-15T09:12:44Z", empty from anything shorter
+std::string ShortDate(const std::string& iso) {
+    static const char* const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    if (iso.size() < 10) return "";
+    const int month = std::atoi(iso.substr(5, 2).c_str());
+    const int day = std::atoi(iso.substr(8, 2).c_str());
+    if (month < 1 || month > 12 || day < 1) return "";
+    return std::to_string(day) + " " + kMonths[month - 1] + " " + iso.substr(0, 4);
+}
+
+// "BSR PMR guidelines 2009, page 3, 1.2 (added 15 Sep 2026)": the name, then
+// what the document gives, then when it was added
+std::string UploadCitation(const UploadSnapshot::Row& row) {
+    std::string out = row.name;
+    if (row.pages > 0) out += ", page " + std::to_string(row.page + 1);
+    if (!row.number.empty()) out += ", " + row.number;
+    const auto added = ShortDate(row.added_at);
+    if (!added.empty()) out += " (added " + added + ")";
+    return out;
 }
 
 }  // namespace
@@ -54,35 +91,8 @@ void Retriever::Load() {
     try {
         auto embedder = load_embedder_();
         if (!embedder) throw std::runtime_error("no guidance embedder");
-        std::vector<std::filesystem::path> dirs;
-        if (std::filesystem::is_directory(corpora_root_)) {
-            for (const auto& entry : std::filesystem::directory_iterator(corpora_root_)) {
-                if (entry.is_directory() && std::filesystem::exists(entry.path() / kManifestFile)) {
-                    dirs.push_back(entry.path());
-                }
-            }
-        }
-        std::sort(dirs.begin(), dirs.end());
-        std::vector<Loaded> loaded;
-        std::vector<Corpus> corpora;
-        for (const auto& dir : dirs) {
-            Loaded item;
-            std::string reason;
-            item.store = CorpusStore::Open(dir, embedder->Identity(), reason);
-            if (item.store) {
-                item.corpus = Describe(item.store->Info());
-            } else {
-                item.corpus.id = dir.filename().string();
-                item.corpus.unavailable = reason;
-            }
-            corpora.push_back(item.corpus);
-            loaded.push_back(std::move(item));
-        }
         embedder_ = std::move(embedder);
-        loaded_ = std::move(loaded);
-        std::lock_guard<std::mutex> lock(corpora_mutex_);
-        corpora_ = std::move(corpora);
-        readiness_ = {Readiness::Phase::kReady, ""};
+        LoadCorpora();
     } catch (const std::exception& e) {
         load_error_ = e.what();
         std::lock_guard<std::mutex> lock(corpora_mutex_);
@@ -91,12 +101,74 @@ void Retriever::Load() {
     }
 }
 
+// Scans the corpora folder against the research setting and swaps in the
+// loaded set. The embedder stays
+void Retriever::LoadCorpora() {
+    std::vector<std::filesystem::path> dirs;
+    if (std::filesystem::is_directory(corpora_root_)) {
+        for (const auto& entry : std::filesystem::directory_iterator(corpora_root_)) {
+            const auto manifest = entry.path() / kManifestFile;
+            if (!entry.is_directory() || !std::filesystem::exists(manifest)) continue;
+            // A research corpus is a demo, invisible unless a dev build asks for it
+            if (!options_.include_research && IsResearch(manifest)) continue;
+            dirs.push_back(entry.path());
+        }
+    }
+    std::sort(dirs.begin(), dirs.end());
+    std::vector<Loaded> loaded;
+    std::vector<Corpus> corpora;
+    for (const auto& dir : dirs) {
+        Loaded item;
+        std::string reason;
+        item.store = CorpusStore::Open(dir, embedder_->Identity(), reason);
+        if (item.store) {
+            item.corpus = Describe(item.store->Info());
+        } else {
+            item.corpus.id = dir.filename().string();
+            item.corpus.unavailable = reason;
+        }
+        corpora.push_back(item.corpus);
+        loaded.push_back(std::move(item));
+    }
+    loaded_ = std::move(loaded);
+    std::lock_guard<std::mutex> lock(corpora_mutex_);
+    corpora_ = std::move(corpora);
+    readiness_ = {Readiness::Phase::kReady, ""};
+}
+
+void Retriever::SetResearch(bool include) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    if (options_.include_research == include) return;
+    options_.include_research = include;
+    if (embedder_) LoadCorpora();
+}
+
+Embedding Retriever::Embed(const std::string& text) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    Load();
+    return embedder_->Embed(text);
+}
+
+EmbedderIdentity Retriever::Identity() {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    Load();
+    return embedder_->Identity();
+}
+
+void Retriever::PublishUploads(std::shared_ptr<const UploadSnapshot> uploads) {
+    std::lock_guard<std::mutex> lock(search_mutex_);
+    uploads_ = std::move(uploads);
+}
+
 Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
     Results out;
     out.floor = options_.floor;
+    out.upload_floor = options_.upload_floor;
+    const auto uploads = uploads_;
     std::vector<CorpusStore*> stores;
+    if (uploads) out.searched = uploads->documents;
     for (auto& item : loaded_) {
         if (item.store) {
             stores.push_back(item.store.get());
@@ -114,61 +186,121 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         out.abstained = true;
         return out;
     }
-    if (stores.empty()) return out;
+    const bool have_uploads = uploads && !uploads->rows.empty();
+    if (stores.empty() && !have_uploads) return out;
 
-    // Every corpus shares the embedder, so one sub-query's hits from all of them
-    // sort into one list before the vote
+    // Each sub-query is embedded once and scanned against both groups
+    std::vector<std::pair<std::string, Embedding>> embedded;
+    for (const auto& query : queries) embedded.emplace_back(query, embedder_->Embed(query));
+
+    struct Source {
+        const float* matrix;
+        std::size_t size;
+        int dim;
+    };
     const int k = options_.union_size;
-    std::map<std::string, Located> where;
-    std::vector<SubQueryHits> lists;
-    for (const auto& query : queries) {
-        const auto embedding = embedder_->Embed(query);
-        std::vector<Located> located;
-        for (std::size_t c = 0; c < stores.size(); ++c) {
-            const auto hits = Scan(stores[c]->Matrix(), stores[c]->Size(), stores[c]->Dim(),
-                                   embedding.vector.data(), k);
-            for (const auto& hit : hits) located.push_back({c, hit.ord, hit.cosine});
+    // One group's sources sort into one list per sub-query before the vote
+    const auto vote = [&](const std::vector<Source>& sources, double floor,
+                          std::map<std::string, Located>& where) {
+        std::vector<SubQueryHits> lists;
+        for (const auto& [query, embedding] : embedded) {
+            std::vector<Located> located;
+            for (std::size_t c = 0; c < sources.size(); ++c) {
+                const auto hits = Scan(sources[c].matrix, sources[c].size, sources[c].dim,
+                                       embedding.vector.data(), k);
+                for (const auto& hit : hits) located.push_back({c, hit.ord, hit.cosine});
+            }
+            std::stable_sort(
+                located.begin(), located.end(),
+                [](const Located& a, const Located& b) { return a.cosine > b.cosine; });
+            if (located.size() > static_cast<std::size_t>(k))
+                located.resize(static_cast<std::size_t>(k));
+            SubQueryHits list{query, query == whole, {}};
+            for (const auto& l : located) {
+                auto key = Key(l);
+                list.hits.push_back({key, l.cosine});
+                where.emplace(std::move(key), l);
+            }
+            lists.push_back(std::move(list));
         }
-        std::stable_sort(located.begin(), located.end(),
-                         [](const Located& a, const Located& b) { return a.cosine > b.cosine; });
-        if (located.size() > static_cast<std::size_t>(k))
-            located.resize(static_cast<std::size_t>(k));
-        SubQueryHits list{query, query == whole, {}};
-        for (const auto& l : located) {
-            auto key = Key(l);
-            list.hits.push_back({key, l.cosine});
-            where.emplace(std::move(key), l);
+        return ApplyFloor(RankVote(lists, options_.note_weight, k), floor);
+    };
+
+    // Added documents lead, as their own group with their own floor
+    if (have_uploads) {
+        std::map<std::string, Located> where;
+        const auto ordered = vote({{uploads->matrix.data(), uploads->rows.size(), uploads->dim}},
+                                  options_.upload_floor, where);
+        out.considered += ordered.considered;
+        int shown = 0;
+        for (const auto& candidate : ordered.kept) {
+            if (shown >= limit) break;
+            const auto& at = where.at(candidate.id);
+            const auto& row = uploads->rows[at.ord];
+            if (PopulationConflict(text, row.text, row.name)) {
+                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
+                             row.name.c_str());
+                continue;
+            }
+            Result result;
+            result.corpus = "upload:" + std::to_string(row.document);
+            result.chunk_id = result.corpus + "-" + std::to_string(row.ord);
+            result.number = row.number;
+            result.title = row.name;
+            result.section = row.section;
+            result.citation = UploadCitation(row);
+            result.text = row.text;
+            result.last_updated = row.added_at;
+            result.source = "upload";
+            result.score = candidate.cosine;
+            result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
+            result.document = row.document;
+            result.page = row.page;
+            result.pages = row.pages;
+            out.shown.push_back(std::move(result));
+            ++shown;
         }
-        lists.push_back(std::move(list));
     }
 
-    auto ordered = ApplyFloor(RankVote(lists, options_.note_weight, k), options_.floor);
-    out.considered = ordered.considered;
-    for (const auto& candidate : ordered.kept) {
-        if (static_cast<int>(out.shown.size()) >= limit) break;
-        const auto& at = where.at(candidate.id);
-        auto* store = stores[at.corpus];
-        auto chunk = store->TextAt(at.ord);
-        const auto& cite = store->CiteAt(at.ord);
-        if (PopulationConflict(text, chunk.text, cite.title)) continue;
-        Result result;
-        result.corpus = store->Info().id;
-        result.chunk_id = cite.chunk_id;
-        result.code = cite.code;
-        result.number = cite.number;
-        result.title = cite.title;
-        result.section = cite.section;
-        result.citation = Citation(cite.code, cite.number, cite.title);
-        result.text = std::move(chunk.text);
-        result.url = std::move(chunk.url);
-        result.last_updated = std::move(chunk.last_updated);
-        result.update_tag = std::move(chunk.update_tag);
-        result.source = store->Info().source;
-        result.score = candidate.cosine;
-        result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
-        out.shown.push_back(std::move(result));
+    if (!stores.empty()) {
+        std::vector<Source> sources;
+        for (auto* store : stores)
+            sources.push_back({store->Matrix(), store->Size(), store->Dim()});
+        std::map<std::string, Located> where;
+        const auto ordered = vote(sources, options_.floor, where);
+        out.considered += ordered.considered;
+        int shown = 0;
+        for (const auto& candidate : ordered.kept) {
+            if (shown >= limit) break;
+            const auto& at = where.at(candidate.id);
+            auto* store = stores[at.corpus];
+            auto chunk = store->TextAt(at.ord);
+            const auto& cite = store->CiteAt(at.ord);
+            if (PopulationConflict(text, chunk.text, cite.title)) {
+                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
+                             cite.title.c_str());
+                continue;
+            }
+            Result result;
+            result.corpus = store->Info().id;
+            result.chunk_id = cite.chunk_id;
+            result.code = cite.code;
+            result.number = cite.number;
+            result.title = cite.title;
+            result.section = cite.section;
+            result.citation = Citation(cite.code, cite.number, cite.title);
+            result.text = std::move(chunk.text);
+            result.url = std::move(chunk.url);
+            result.last_updated = std::move(chunk.last_updated);
+            result.update_tag = std::move(chunk.update_tag);
+            result.source = store->Info().source;
+            result.score = candidate.cosine;
+            result.trigger = candidate.trigger == whole ? "" : candidate.trigger;
+            out.shown.push_back(std::move(result));
+            ++shown;
+        }
     }
-    out.abstained = ordered.abstained || (limit > 0 && out.shown.empty());
+    out.abstained = out.shown.empty();
     return out;
 }
 

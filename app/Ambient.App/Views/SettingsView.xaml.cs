@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Storage.Pickers;
 using Ambient.App.Core;
 using Ambient.App.Core.ViewModels;
 using Ambient.Client;
@@ -15,19 +17,8 @@ public sealed partial class SettingsView : UserControl
         Voice = voice;
         InitializeComponent();
         // Forgetting the voiceprint cannot be undone, so it is asked once
-        voice.ConfirmForget = async () =>
-        {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = "Forget voice enrolment?",
-                Content = "It will be learned again from your next consultation.",
-                PrimaryButtonText = "Forget",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Close,
-            };
-            return await dialog.ShowAsync() == ContentDialogResult.Primary;
-        };
+        voice.ConfirmForget = () => ConfirmAsync("Forget voice enrolment?",
+            "It will be learned again from your next consultation.", "Forget");
         // One reading per dialog; the outcome says whether a print was kept
         voice.RunEnrolment = async () =>
         {
@@ -38,38 +29,52 @@ public sealed partial class SettingsView : UserControl
         };
         voice.NotifyCommands();
         Loaded += (_, _) => _ = voice.RefreshAsync();
-        // Turning the history on accumulates patient records: confirmed,
-        // never just toggled. Cancel is the safe default.
         viewModel.PickSavePath = suggested =>
             SavePickerHelper.PickAsync(suggested, "HTML report", ".html");
-        viewModel.ConfirmDeleteAllConsultations = async () =>
+        viewModel.ConfirmDeleteAllConsultations = () => ConfirmAsync(
+            "Delete all consultation data?",
+            "Every stored consultation on this device is erased: transcripts, notes, patient "
+            + "sheets and appraisal reflections. Your guideline documents are kept. This cannot "
+            + "be undone.", "Delete all");
+        viewModel.ConfirmKeepConsultations = () => ConfirmAsync("Save consultation data?",
+            "Transcripts, notes and patient sheets will be stored encrypted on this device."
+            + "\n\nContinue only if you have the necessary consent and approval.", "Turn on");
+        viewModel.PickDocuments = async () =>
         {
-            var dialog = new ContentDialog
+            var picker = new FileOpenPicker
             {
-                XamlRoot = XamlRoot,
-                Title = "Delete all consultation data?",
-                Content = "Every stored consultation on this device is erased: transcripts, notes, "
-                    + "patient sheets and appraisal reflections. This cannot be undone.",
-                PrimaryButtonText = "Delete all",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Close,
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
             };
-            return await dialog.ShowAsync() == ContentDialogResult.Primary;
+            picker.FileTypeFilter.Add(".pdf");
+            picker.FileTypeFilter.Add(".txt");
+            picker.FileTypeFilter.Add(".md");
+            if (!SavePickerHelper.BindToWindow(picker))
+            {
+                return [];
+            }
+
+            var files = await picker.PickMultipleFilesAsync();
+            return files.Select(f => f.Path).ToArray();
         };
-        viewModel.ConfirmKeepConsultations = async () =>
+        viewModel.RevealFolder = folder =>
         {
-            var dialog = new ContentDialog
+            try
             {
-                XamlRoot = XamlRoot,
-                Title = "Save consultation data?",
-                Content = "Transcripts, notes and patient sheets will be stored encrypted on "
-                    + "this device.\n\nContinue only if you have the necessary consent and approval.",
-                PrimaryButtonText = "Turn on",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Close,
-            };
-            return await dialog.ShowAsync() == ContentDialogResult.Primary;
+                Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+            }
+            catch
+            {
+                // The folder could not be opened. The Settings caption already says so
+            }
         };
+        viewModel.ConfirmRemoveDocument = name => ConfirmAsync($"Remove {name}?",
+            "The file is moved to the Recycle Bin and no longer searched. To keep the file, "
+            + "move it out of the folder instead. Guidance already saved with a consultation "
+            + "is unchanged.", "Remove");
+        viewModel.ConfirmRemoveAllDocuments = count => ConfirmAsync(
+            count == 1 ? "Remove the document?" : $"Remove all {count} documents?",
+            "Every file in the folder is moved to the Recycle Bin and no longer searched. "
+            + "Guidance already saved with consultations is unchanged.", "Remove all");
     }
 
     public SettingsViewModel ViewModel { get; }
@@ -77,4 +82,19 @@ public sealed partial class SettingsView : UserControl
     public ShellViewModel Shell { get; }
 
     public VoiceViewModel Voice { get; }
+
+    // Cancel is the safe default in every confirmation
+    private async Task<bool> ConfirmAsync(string title, string content, string primary)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = content,
+            PrimaryButtonText = primary,
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
 }
