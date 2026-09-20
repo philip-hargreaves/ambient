@@ -372,6 +372,10 @@ public sealed partial class StatusBarViewModel : ObservableObject
     [ObservableProperty]
     public partial bool MicVisible { get; private set; }
 
+    /// <summary>Demo mode is on, or a demo record is on screen; shown beside the app name.</summary>
+    [ObservableProperty]
+    public partial bool Demo { get; set; }
+
     public ObservableCollection<string> LogEntries { get; } = [];
 
     public void SetMicLevel(double level, bool clipped)

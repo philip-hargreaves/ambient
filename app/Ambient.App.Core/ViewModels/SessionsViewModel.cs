@@ -140,7 +140,7 @@ public sealed partial class SessionsViewModel : ObservableObject
         }
 
         DetailOpen = await _consultation.OpenStoredSessionAsync(
-                row.Id, row.Started, row.StartedAt, row.HasReflection)
+                row.Id, row.Started, row.StartedAt, row.HasReflection, row.Demo)
             .ConfigureAwait(true);
         if (DetailOpen)
         {

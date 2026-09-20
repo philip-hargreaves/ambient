@@ -11,12 +11,18 @@ public sealed class AppPreferences(string path)
         bool KeepConsultations = false, bool ShowPerformanceMetrics = false,
         string? MicId = null, string? Theme = null, string? NoteTier = null,
         bool SeedDataEnabled = false, bool DeveloperToolsExpanded = false,
-        bool IncludeResearchGuidance = false);
+        bool IncludeResearchGuidance = false, bool DemoMode = false, string? DemoTrack = null);
 
     /// <summary>The note model tiers the engine's store can resolve, in ladder order.</summary>
     public static readonly IReadOnlyList<string> NoteTiers = ["constrained", "default", "accuracy"];
 
     public bool DemoTrayEnabled { get; set; }
+
+    /// <summary>Demo mode: Record plays a saved run back. A developer control.</summary>
+    public bool DemoMode { get; set; }
+
+    /// <summary>The track whose saved run demo mode plays; empty means the first.</summary>
+    public string DemoTrack { get; set; } = "";
 
     /// <summary>Seed data in the store; off by default.</summary>
     public bool SeedDataEnabled { get; set; }
@@ -73,6 +79,8 @@ public sealed class AppPreferences(string path)
             preferences.ShowPerformanceMetrics = stored?.ShowPerformanceMetrics ?? false;
             preferences.DeveloperToolsExpanded = stored?.DeveloperToolsExpanded ?? false;
             preferences.IncludeResearchGuidance = stored?.IncludeResearchGuidance ?? false;
+            preferences.DemoMode = stored?.DemoMode ?? false;
+            preferences.DemoTrack = stored?.DemoTrack ?? "";
             preferences.MicId = stored?.MicId ?? "";
             // Values the shell cannot render never leave this boundary
             preferences.Theme = stored?.Theme is "light" or "dark" ? stored.Theme : "system";
@@ -100,7 +108,7 @@ public sealed class AppPreferences(string path)
                 DemoTrayEnabled, NpuTranscription, CollectPerformanceData,
                 NoteStyle, NoteDetail, KeepConsultations, ShowPerformanceMetrics, MicId,
                 Theme, NoteTier, SeedDataEnabled, DeveloperToolsExpanded,
-                IncludeResearchGuidance)));
+                IncludeResearchGuidance, DemoMode, DemoTrack)));
         }
         catch (Exception)
         {
