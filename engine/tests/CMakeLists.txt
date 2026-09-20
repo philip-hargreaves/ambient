@@ -36,6 +36,7 @@ add_executable(engine_tests
     core/role_naming_test.cpp
     core/seg_decode_test.cpp
     core/throughput_test.cpp
+    core/playback_test.cpp
     core/session_controller_test.cpp
     core/slice_refinement_test.cpp
     core/summary_scrub_test.cpp

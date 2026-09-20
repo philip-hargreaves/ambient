@@ -389,7 +389,8 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                      ambient::translate::ITranslator* translator,
                      ambient::translate::TranslateLane* translate_lane, bool first_use,
                      ambient::diar::AnchorStore* anchors, ambient::note::INoteLane* note_lane,
-                     bool stray_note_host, const std::filesystem::path& demo_dir) {
+                     bool stray_note_host, const std::filesystem::path& demo_dir,
+                     ambient::audio::Playback* playback) {
     server.RegisterMethod("engine/hello", HandleHello);
     server.RegisterMethod("engine/echo", HandleEcho);
     const auto note_tier = [note_lane] {
@@ -602,7 +603,23 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
             return json::object();
         });
     server.RegisterMethod(
-        "session/start", [&controller](const json& params) -> std::variant<json, Error> {
+        "session/start", [&controller, playback](const json& params) -> std::variant<json, Error> {
+            // A playback block replays a stored consultation as a demo;
+            // nothing is captured or generated
+            if (params.contains("playback")) {
+                const auto& p = params["playback"];
+                if (playback == nullptr || !p.contains("id") || !p["id"].is_string()) {
+                    return Error{kInvalidParams, "playback.id is required", {}};
+                }
+                if (controller.Running() || !playback->Start(p["id"].get<std::string>())) {
+                    return Error{kSessionError, "Session error",
+                                 json("a session is running, or nothing to play back")};
+                }
+                return json{{"sessionId", playback->Current()}};
+            }
+            if (playback != nullptr && playback->Active()) {
+                return Error{kSessionError, "Session error", json("a playback is running")};
+            }
             // An optional replay block plays a file through the same
             // pipeline; absent means microphone
             std::optional<ambient::audio::ReplaySpec> replay;
@@ -707,16 +724,24 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                 return Error{kSessionError, "Session error", json(e.what())};
             }
         });
-    server.RegisterMethod("session/pause", [&controller](const json& params) {
-        controller.SetPaused(params.value("paused", true));
+    server.RegisterMethod("session/pause", [&controller, playback](const json& params) {
+        if (playback != nullptr && playback->Listening()) {
+            playback->SetPaused(params.value("paused", true));
+        } else {
+            controller.SetPaused(params.value("paused", true));
+        }
         return json::object();
     });
     server.RegisterMethod("session/monitor", [&controller](const json& params) {
         controller.SetMonitor(params.value("on", true));
         return json::object();
     });
-    server.RegisterMethod("session/cancel", [&controller](const json&) {
-        controller.Cancel();
+    server.RegisterMethod("session/cancel", [&controller, playback](const json&) {
+        if (playback != nullptr && playback->Listening()) {
+            playback->Cancel();
+        } else {
+            controller.Cancel();
+        }
         return json::object();
     });
     // A past session under review: regenerate and translate act on it as
@@ -737,7 +762,11 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
     });
     // The note and patient lanes announce themselves when a writer is
     // wired; without one the stubs keep the contract for CI
-    server.RegisterMethod("session/stop", [&server, &controller](const json&) {
+    server.RegisterMethod("session/stop", [&server, &controller, playback](const json&) {
+        if (playback != nullptr && playback->Active()) {
+            playback->Stop();
+            return json{{"sessionId", playback->Current()}};
+        }
         controller.Stop();
         if (!controller.HasNoteWriter()) {
             server.QueueNotification("note/ready", json::object());
@@ -756,6 +785,23 @@ json GuidanceReadyJson(const std::string& session, const ambient::guidance::Reco
     body["stale"] = nullptr;
     return body;
 }
+
+}  // namespace
+
+std::optional<json> StoredGuidanceReady(ambient::store::ISessionStore& sessions,
+                                        const std::string& session) {
+    const auto stored = sessions.ReadDocument(session, ambient::store::DocumentKind::kGuidance);
+    if (stored.text.empty()) return std::nullopt;
+    const json parsed = json::parse(stored.text, nullptr, false);
+    if (!ambient::guidance::CanRead(parsed)) return std::nullopt;
+    try {
+        return GuidanceReadyJson(session, ambient::guidance::RecordFromJson(parsed));
+    } catch (const json::exception&) {
+        return std::nullopt;
+    }
+}
+
+namespace {
 
 const char* PhaseName(ambient::guidance::Readiness::Phase phase) {
     switch (phase) {

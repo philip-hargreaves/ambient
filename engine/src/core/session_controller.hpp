@@ -44,6 +44,9 @@ class ISessionEvents {
 
     virtual void OnLevel(const LevelReading& reading) = 0;
 
+    // Demo playback: the reading plus the position its clock has reached
+    virtual void OnPlaybackLevel(const LevelReading&, double /*seconds*/) {}
+
     virtual void OnTurn(const asr::Turn& turn) = 0;
 
     virtual void OnInterrupted(SourceEndReason reason, const std::string& detail) = 0;
