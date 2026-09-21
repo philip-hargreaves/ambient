@@ -61,8 +61,7 @@ std::string ShortDate(const std::string& iso) {
     return std::to_string(day) + " " + kMonths[month - 1] + " " + iso.substr(0, 4);
 }
 
-// "BSR PMR guidelines 2009, page 3, 1.2 (added 15 Sep 2026)": the name, then
-// what the document gives, then when it was added
+// "BSR PMR guidelines 2009, page 3, 1.2 (added 15 Sep 2026)"
 std::string UploadCitation(const UploadSnapshot::Row& row) {
     std::string out = row.name;
     if (row.pages > 0) out += ", page " + std::to_string(row.page + 1);
@@ -160,6 +159,18 @@ void Retriever::PublishUploads(std::shared_ptr<const UploadSnapshot> uploads) {
     uploads_ = std::move(uploads);
 }
 
+namespace {
+
+// A card that says what a shown card already says spends a slot for nothing
+bool Restates(const std::vector<Result>& shown, const std::string& text) {
+    for (const auto& result : shown) {
+        if (NearDuplicate(result.text, text)) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
 Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
@@ -198,10 +209,12 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         std::size_t size;
         int dim;
     };
-    const int k = options_.union_size;
-    // One group's sources sort into one list per sub-query before the vote
+    const int k = kUnionSize;
+    // One group's sources sort into one list per sub-query before the vote.
+    // A narrow group is strict: silent unless the whole note clears its own
+    // floor, and a sentence votes only at or above the group's floor
     const auto vote = [&](const std::vector<Source>& sources, double floor,
-                          std::map<std::string, Located>& where) {
+                          std::map<std::string, Located>& where, bool strict) {
         std::vector<SubQueryHits> lists;
         for (const auto& [query, embedding] : embedded) {
             std::vector<Located> located;
@@ -223,25 +236,35 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             }
             lists.push_back(std::move(list));
         }
-        return ApplyFloor(RankVote(lists, options_.note_weight, k), floor);
+        if (strict && !NoteClears(lists, options_.upload_note_floor)) {
+            Ordered silent;
+            silent.abstained = true;
+            return silent;
+        }
+        return ApplyFloor(RankVote(lists, k, strict ? floor : -1.0), floor);
+    };
+
+    // A hit the population guard rules out, or one that restates a shown card, spends no slot
+    const auto suppressed = [&](const std::string& body, const std::string& title) {
+        if (PopulationConflict(text, body, title)) {
+            std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n", title.c_str());
+            return true;
+        }
+        return Restates(out.shown, body);
     };
 
     // Added documents lead, as their own group with their own floor
     if (have_uploads) {
         std::map<std::string, Located> where;
         const auto ordered = vote({{uploads->matrix.data(), uploads->rows.size(), uploads->dim}},
-                                  options_.upload_floor, where);
+                                  options_.upload_floor, where, true);
         out.considered += ordered.considered;
         int shown = 0;
         for (const auto& candidate : ordered.kept) {
             if (shown >= limit) break;
             const auto& at = where.at(candidate.id);
             const auto& row = uploads->rows[at.ord];
-            if (PopulationConflict(text, row.text, row.name)) {
-                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
-                             row.name.c_str());
-                continue;
-            }
+            if (suppressed(row.text, row.name)) continue;
             Result result;
             result.corpus = "upload:" + std::to_string(row.document);
             result.chunk_id = result.corpus + "-" + std::to_string(row.ord);
@@ -267,7 +290,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         for (auto* store : stores)
             sources.push_back({store->Matrix(), store->Size(), store->Dim()});
         std::map<std::string, Located> where;
-        const auto ordered = vote(sources, options_.floor, where);
+        const auto ordered = vote(sources, options_.floor, where, false);
         out.considered += ordered.considered;
         int shown = 0;
         for (const auto& candidate : ordered.kept) {
@@ -276,11 +299,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             auto* store = stores[at.corpus];
             auto chunk = store->TextAt(at.ord);
             const auto& cite = store->CiteAt(at.ord);
-            if (PopulationConflict(text, chunk.text, cite.title)) {
-                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
-                             cite.title.c_str());
-                continue;
-            }
+            if (suppressed(chunk.text, cite.title)) continue;
             Result result;
             result.corpus = store->Info().id;
             result.chunk_id = cite.chunk_id;

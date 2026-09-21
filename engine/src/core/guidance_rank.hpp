@@ -4,6 +4,7 @@
 #include <cctype>
 #include <initializer_list>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,12 +14,12 @@
 namespace ambient::guidance {
 
 // Ordering and abstention over first-stage candidates. Each sub-query's
-// ranked hits vote by rank (reciprocal rank fusion); the whole-note query may
-// carry more votes than one sentence; a floor on the best cosine refuses
-// out-of-scope input; a population guard drops recommendations the note rules
-// out. No second stage: none measured better than this order
+// ranked hits vote by rank (reciprocal rank fusion), a floor on the best cosine
+// refuses out-of-scope input, and a population guard drops recommendations the
+// note rules out
 inline constexpr double kRrfK = 60.0;
 inline constexpr double kDefaultFloor = 0.85;
+inline constexpr double kNoteFloor = 0.84;  // the whole note against a narrow group
 inline constexpr int kUnionSize = 50;
 
 struct Hit {
@@ -46,16 +47,10 @@ struct Ordered {
     bool abstained = false;
 };
 
-// The seam a second stage would fill; the shipped configuration has none
-class IReranker {
-   public:
-    virtual ~IReranker() = default;
-    virtual std::vector<double> Score(const std::string& query,
-                                      const std::vector<std::string>& texts) = 0;
-};
-
-inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists, int note_weight = 1,
-                                       int limit = kUnionSize) {
+// A sentence's hit under vote_floor casts no vote: a sentence speaks only for passages it
+// resembles. The whole note always votes, since it carries the topic
+inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists,
+                                       int limit = kUnionSize, double vote_floor = -1.0) {
     struct Tally {
         double score = 0;
         double cosine = -1;
@@ -64,10 +59,10 @@ inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists, i
     };
     std::map<std::string, Tally> tally;
     for (const auto& list : lists) {
-        const int votes = list.whole_note ? std::max(1, note_weight) : 1;
         for (std::size_t rank = 0; rank < list.hits.size(); ++rank) {
+            if (!list.whole_note && list.hits[rank].cosine < vote_floor) break;
             auto& t = tally[list.hits[rank].id];
-            t.score += votes / (kRrfK + static_cast<double>(rank) + 1.0);
+            t.score += 1.0 / (kRrfK + static_cast<double>(rank) + 1.0);
             t.cosine = std::max(t.cosine, list.hits[rank].cosine);
             if (rank < t.best_rank) {
                 t.best_rank = rank;
@@ -85,7 +80,16 @@ inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists, i
     return out;
 }
 
-// Candidates whose best cosine is under the floor are dropped; when none
+// Whether the note as a whole resembles anything searched. One sentence can
+// resemble a passage of any document, so it cannot say the documents cover the note
+inline bool NoteClears(const std::vector<SubQueryHits>& lists, double floor) {
+    for (const auto& list : lists) {
+        if (list.whole_note) return !list.hits.empty() && list.hits.front().cosine >= floor;
+    }
+    return true;
+}
+
+// Candidates whose best cosine is under the floor are dropped. When none
 // remains the search abstains and the panel shows nothing
 inline Ordered ApplyFloor(std::vector<Candidate> ranked, double floor = kDefaultFloor) {
     Ordered out;
@@ -213,6 +217,33 @@ inline bool PopulationConflict(std::string_view note, std::string_view recommend
     if (male && !female && detail::ContainsAnyWord(r, {"woman", "women", "female", "females"}))
         return true;
     return false;
+}
+
+// Two passages saying the same thing, as a quality standard restates its
+// guideline: half the shorter one's content words appear in the other
+inline constexpr double kDuplicateOverlap = 0.5;
+
+inline bool NearDuplicate(std::string_view a, std::string_view b) {
+    const auto words = [](std::string_view s) {
+        std::set<std::string> out;
+        std::string word;
+        for (const char c : std::string(s) + " ") {
+            if (std::isalnum(static_cast<unsigned char>(c))) {
+                word.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            } else {
+                if (word.size() > 3) out.insert(word);
+                word.clear();
+            }
+        }
+        return out;
+    };
+    const auto wa = words(a);
+    const auto wb = words(b);
+    const auto smaller = std::min(wa.size(), wb.size());
+    if (smaller < 5) return false;
+    std::size_t shared = 0;
+    for (const auto& w : wa) shared += wb.count(w);
+    return static_cast<double>(shared) / static_cast<double>(smaller) >= kDuplicateOverlap;
 }
 
 // "NG100 1.1.1, Rheumatoid arthritis in adults: management"

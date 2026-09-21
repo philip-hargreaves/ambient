@@ -860,6 +860,7 @@ ambient::guidance::DocumentInfo FailedDocument() {
 struct FakeIngest : ambient::guidance::IDocumentIngest {
     std::vector<std::filesystem::path> added;
     std::vector<std::int64_t> removed;
+    std::vector<std::pair<int, std::int64_t>> rendered;
 
     ambient::guidance::Accepted Add(const std::vector<std::filesystem::path>& paths) override {
         added = paths;
@@ -904,8 +905,6 @@ struct FakeIngest : ambient::guidance::IDocumentIngest {
     }
     void SetListener(std::function<void(const ambient::guidance::IngestProgress&)>,
                      std::function<void(const ambient::guidance::DocumentInfo&)>) override {}
-
-    std::vector<std::pair<int, std::int64_t>> rendered;
 };
 
 TEST(Handlers, PageAndOpenMatchTheFixtures) {
@@ -925,6 +924,10 @@ TEST(Handlers, PageAndOpenMatchTheFixtures) {
         ingest, json{{"id", ReadyDocument().id}, {"page", -1}, {"chunkId", "upload:1-0"}})));
     EXPECT_TRUE(std::holds_alternative<Error>(
         HandleDocumentsPage(ingest, json{{"id", 1}, {"page", 0}, {"chunkId", "upload:1-0"}})));
+    const auto unnumbered = HandleDocumentsPage(
+        ingest, json{{"id", ReadyDocument().id}, {"page", 0}, {"chunkId", "upload:1-x"}});
+    ASSERT_TRUE(std::holds_alternative<Error>(unnumbered));
+    EXPECT_EQ(std::get<Error>(unnumbered).code, kInvalidParams);
     EXPECT_TRUE(std::holds_alternative<Error>(HandleDocumentsOpen(ingest, json{{"id", 1}})));
 }
 

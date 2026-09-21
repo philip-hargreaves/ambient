@@ -1,5 +1,8 @@
 #include "adapters/ipc/handlers.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
 #include <cstdio>
 #include <memory>
 #include <openvino/core/version.hpp>
@@ -786,23 +789,6 @@ json GuidanceReadyJson(const std::string& session, const ambient::guidance::Reco
     return body;
 }
 
-}  // namespace
-
-std::optional<json> StoredGuidanceReady(ambient::store::ISessionStore& sessions,
-                                        const std::string& session) {
-    const auto stored = sessions.ReadDocument(session, ambient::store::DocumentKind::kGuidance);
-    if (stored.text.empty()) return std::nullopt;
-    const json parsed = json::parse(stored.text, nullptr, false);
-    if (!ambient::guidance::CanRead(parsed)) return std::nullopt;
-    try {
-        return GuidanceReadyJson(session, ambient::guidance::RecordFromJson(parsed));
-    } catch (const json::exception&) {
-        return std::nullopt;
-    }
-}
-
-namespace {
-
 const char* PhaseName(ambient::guidance::Readiness::Phase phase) {
     switch (phase) {
         case ambient::guidance::Readiness::Phase::kLoading:
@@ -894,8 +880,8 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
             return Error{kInvalidParams, "Invalid params", json("text must be a string")};
         }
         note.text = params["text"].get<std::string>();
-        // Typed text searches whole. "note" runs it through the note pipeline
-        // instead, which the gates use and the app never sends
+        // Typed text is embedded whole. Mode "note" splits it into sub-queries
+        // the way a stored note is split
         if (params.contains("mode")) {
             if (params["mode"] != "query" && params["mode"] != "note") {
                 return Error{kInvalidParams, "Invalid params", json("mode must be query or note")};
@@ -921,7 +907,8 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
 
 namespace {
 
-// The added documents the record searched against the ones ready now
+// The searched list mixes corpora with added documents. Only the added ones,
+// which carry an "upload:" id, are compared
 bool DocumentsChangedSince(const ambient::guidance::Record& record,
                            ambient::guidance::IDocumentIngest& ingest) {
     std::set<std::string> searched;
@@ -1084,8 +1071,11 @@ std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest
     const std::string chunk_id = params.is_object() ? params.value("chunkId", "") : "";
     // The chunk id is "upload:<document>-<ord>"
     const auto dash = chunk_id.rfind('-');
-    if (!id.is_number_integer() || !page.is_number_integer() || page.get<int>() < 0 ||
-        dash == std::string::npos || dash + 1 >= chunk_id.size()) {
+    const bool numbered =
+        dash != std::string::npos && dash + 1 < chunk_id.size() &&
+        std::all_of(chunk_id.begin() + static_cast<std::ptrdiff_t>(dash) + 1, chunk_id.end(),
+                    [](unsigned char c) { return std::isdigit(c) != 0; });
+    if (!id.is_number_integer() || !page.is_number_integer() || page.get<int>() < 0 || !numbered) {
         return Error{kInvalidParams, "Invalid params", json("id, page and chunkId are required")};
     }
     try {

@@ -7,7 +7,7 @@ namespace Ambient.App.Core.ViewModels;
 /// <summary>One document in the guidelines folder, as Settings lists it.</summary>
 public sealed partial class DocumentRow : ObservableObject
 {
-    public DocumentRow(JsonElement document, IRelayCommand<DocumentRow>? remove = null)
+    public DocumentRow(JsonElement document, IRelayCommand<DocumentRow> remove)
     {
         Id = document.GetProperty("id").GetInt64();
         Name = GuidanceCard.Field(document, "name");
@@ -26,7 +26,7 @@ public sealed partial class DocumentRow : ObservableObject
     public bool Located => Where.Length > 0;
 
     /// <summary>Remove sends the file to the Recycle Bin.</summary>
-    public IRelayCommand<DocumentRow>? Remove { get; }
+    public IRelayCommand<DocumentRow> Remove { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Working), nameof(Failed), nameof(Plain), nameof(Waiting))]
@@ -52,7 +52,7 @@ public sealed partial class DocumentRow : ObservableObject
 
     public bool Waiting => Working && Phase.Length == 0;
 
-    /// <summary>guidance/document: the row as the engine now has it.</summary>
+    /// <summary>guidance/document: the row as the engine has it.</summary>
     public void Apply(JsonElement document)
     {
         State = GuidanceCard.Field(document, "state");
@@ -122,5 +122,5 @@ public sealed partial class DocumentRow : ObservableObject
     }
 
     private static int Int(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.TryGetInt32(out var n) ? n : 0;
+        (int)GuidanceRecommendation.Numeric(element, property);
 }

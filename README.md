@@ -49,7 +49,7 @@ as they were - and lands in review of a fresh demo copy, so regenerate, translat
 run for real. A **Demo** chip in the status bar shows while the mode is on; nothing in a playback
 is a measurement. Record the saved runs with `python tools/demo/record_masters.py` (every bundled
 track at 1x with the app's note settings, app closed). On a demo record the note header also
-offers **Example case**: a written case from `demo/cases.txt` (kept out of git) stands in as the
+offers **Example case**: a written case from `demo/cases.txt` stands in as the
 note, the guidance search runs on it, and the patient sheet can be rewritten from it.
 
 The zip already contains the model weights.

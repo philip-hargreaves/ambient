@@ -1,6 +1,7 @@
 // An ingest host that reads no PDF: the bytes on stdin choose what it does.
 // "FAKE exit 3" exits 3, "FAKE crash" dies, "FAKE sleep" stalls, "FAKE garbage"
-// writes text that is no JSON, "FAKE huge" writes past any cap, "FAKE echo"
+// writes text that is no JSON, "FAKE partial" a page without its lines,
+// "FAKE huge" writes past any cap, "FAKE echo"
 // reports how many bytes arrived, anything else gets two canned pages
 #include <fcntl.h>
 #include <io.h>
@@ -44,6 +45,10 @@ int main(int argc, char* argv[]) {
     if (head.rfind("FAKE sleep", 0) == 0) Sleep(30'000);
     if (head.rfind("FAKE garbage", 0) == 0) {
         std::fputs("not json at all", stdout);
+        return 0;
+    }
+    if (head.rfind("FAKE partial", 0) == 0) {
+        std::fputs(R"({"pages":[{"width":100,"height":100}]})", stdout);
         return 0;
     }
     if (head.rfind("FAKE huge", 0) == 0) {

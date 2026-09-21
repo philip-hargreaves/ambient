@@ -50,7 +50,8 @@
                     Visibility="{x:Bind ViewModel.CanWriteAnyway, Mode=OneWay}" />
                 <!-- Demo records only: a written case stands in as the note -->
                 <ComboBox
-                    MinWidth="150"
+                    MinWidth="140"
+                    MaxWidth="180"
                     AutomationProperties.Name="Example case"
                     ItemsSource="{x:Bind ViewModel.ExampleCaseTitles, Mode=OneWay}"
                     PlaceholderText="Example case"

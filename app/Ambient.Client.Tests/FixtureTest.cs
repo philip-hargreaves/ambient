@@ -313,15 +313,20 @@ public class FixtureTest
     [Fact]
     public void GuidanceDocumentsFixturesCarryARowInEveryState()
     {
-        var documents = LoadFixture("guidance-documents.json").RootElement
-            .GetProperty("result").GetProperty("documents");
+        var listing = LoadFixture("guidance-documents.json").RootElement.GetProperty("result");
+        var documents = listing.GetProperty("documents");
 
+        Assert.False(string.IsNullOrEmpty(listing.GetProperty("folder").GetString()));
+        Assert.True(listing.GetProperty("found").GetBoolean());
+        Assert.True(listing.GetProperty("unsupported").GetInt32() >= 0);
         Assert.Equal(["ready", "indexing", "failed"],
             documents.EnumerateArray().Select(d => d.GetProperty("state").GetString()));
         foreach (var document in documents.EnumerateArray())
         {
             Assert.True(document.GetProperty("id").GetInt64() > 0);
             Assert.False(string.IsNullOrEmpty(document.GetProperty("name").GetString()));
+            Assert.False(string.IsNullOrEmpty(document.GetProperty("path").GetString()));
+            Assert.Equal(64, document.GetProperty("sha256").GetString()!.Length);
             Assert.True(
                 DateTimeOffset.TryParse(document.GetProperty("addedAt").GetString(), out _));
             Assert.True(document.GetProperty("bytes").GetInt64() > 0);
@@ -331,16 +336,6 @@ public class FixtureTest
         Assert.Equal(JsonValueKind.Null, documents[0].GetProperty("error").ValueKind);
         Assert.Equal(JsonValueKind.Null, documents[1].GetProperty("indexedAt").ValueKind);
         Assert.Equal("patientData", documents[2].GetProperty("error").GetString());
-
-        var listing = LoadFixture("guidance-documents.json").RootElement.GetProperty("result");
-        Assert.False(string.IsNullOrEmpty(listing.GetProperty("folder").GetString()));
-        Assert.True(listing.GetProperty("found").GetBoolean());
-        Assert.True(listing.GetProperty("unsupported").GetInt32() >= 0);
-        foreach (var document in documents.EnumerateArray())
-        {
-            Assert.False(string.IsNullOrEmpty(document.GetProperty("path").GetString()));
-            Assert.Equal(64, document.GetProperty("sha256").GetString()!.Length);
-        }
 
         var add = LoadFixture("guidance-documents-add.json").RootElement.GetProperty("result");
         Assert.Equal(1, add.GetProperty("documents").GetArrayLength());

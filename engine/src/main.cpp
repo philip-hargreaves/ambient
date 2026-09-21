@@ -447,7 +447,7 @@ int main(int argc, char* argv[]) {
         } catch (const std::exception& e) {
             std::fprintf(stderr, "ambient-engine: no translation (%s)\n", e.what());
         }
-        // Guidance retrieval runs on the CPU in its own lane; the embedder loads
+        // Guidance retrieval runs on the CPU in its own lane. The embedder loads
         // in the background so the first note's search is warm
         ambient::guidance::Retriever guidance_retriever(
             [&model_store]() -> std::unique_ptr<ambient::guidance::IEmbedder> {
@@ -500,15 +500,20 @@ int main(int argc, char* argv[]) {
                     server.PushNotification("guidance/documentsChanged", nlohmann::json::object());
                 }
             });
-        // Demo playback ends in a review of the copy, with its stored guidance shown
+        // Demo playback ends in a review of the copy, its note searched like any other
         ambient::audio::Playback playback(
             events, session_store,
             {.finalised = [&controller](const std::string& id) { controller.Open(id); },
              .guidance =
-                 [&server, &session_store](const std::string& id) {
-                     if (const auto body = ambient::ipc::StoredGuidanceReady(session_store, id)) {
-                         server.PushNotification("guidance/ready", *body);
-                     }
+                 [&server, &session_store, &guidance_lane](const std::string& id) {
+                     auto note =
+                         session_store.ReadDocument(id, ambient::store::DocumentKind::kNote);
+                     if (note.text.empty()) return;
+                     guidance_lane.Run(ambient::ipc::GuidanceSearchRequest(
+                         session_store, id, std::move(note), ambient::ipc::kGuidanceLimit,
+                         [&server](const std::string& method, nlohmann::json body) {
+                             server.PushNotification(method, std::move(body));
+                         }));
                  }});
         ambient::ipc::RegisterMethods(
             server, controller, model_store, session_store, &metrics, &ov_runtime, translator.get(),

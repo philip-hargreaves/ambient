@@ -177,5 +177,68 @@ TEST(DocumentUnits, AGradedRowWithoutMarksHoldsUntilItsToken) {
     EXPECT_TRUE(units[1].text.ends_with("(GRADE 2C, SoA 90%)."));
 }
 
+TEST(DocumentUnits, FragmentsFrontMatterAndCaptionsAreDropped) {
+    // A caption with its flowchart labels, a keyword line, a short sentence, and
+    // numbered recommendations, one short without a full stop
+    const auto units = DropFragments(UnitsFromParagraphs(
+        {Para("Fig. 1 Approach to the evaluation of proximal pain and stiffness. ACJ: joint."),
+         Para("Predominant peripheral joint symptoms, X-rays RA, other inflammatory arthritis "
+              "Inflammatory Morning stiffness Joint swelling Peripheral hand/foot oedema"),
+         Para("Treatment:"),
+         Para("Key words: Guidelines, Polymyalgia rheumatica, Diagnosis, Treatment."),
+         Para("Monitoring:"), Para("Aim for a target serum urate level below 360 micromol/litre."),
+         Para("1.1 Offer allopurinol after a first attack when urate stays high."),
+         Para("1.2 Image the femur when thigh pain develops on bisphosphonate therapy"),
+         Para("1.3 Offer colchicine or an NSAID for an acute flare of gout.")}));
+
+    ASSERT_EQ(units.size(), 4u);
+    EXPECT_EQ(units[0].text, "Aim for a target serum urate level below 360 micromol/litre.");
+    EXPECT_EQ(units[1].number, "1.1");
+    EXPECT_EQ(units[2].number, "1.2");
+    EXPECT_EQ(units[3].number, "1.3");
+}
+
+TEST(DocumentUnits, AQuestionLabelsTheNextUnitAndANumberedHeadingIsDropped) {
+    const auto units = DropFragments(UnitsFromParagraphs(
+        {Para("1.1 Offer allopurinol after a first attack."),
+         Para("1.2 Offer colchicine for an acute flare."), Para("5.5 Diagnosis"),
+         Para("How should suspected GCA be treated?"), Para(kLong)}));
+    ASSERT_EQ(units.size(), 3u);
+    EXPECT_EQ(units[2].section, "How should suspected GCA be treated?");
+    EXPECT_EQ(units[2].text, kLong);
+}
+
+TEST(DocumentUnits, TailsTablesLegendsAndAddressesAreDropped) {
+    const auto units = DropFragments(UnitsFromParagraphs(
+        {Para("(range 87-100%)."),
+         Para("If the patient had rituximab are they enrolled? 59 (81.9) 90 Lipid profile 392 "
+              "(39.0) 80 Smoking status recorded 613 (61.8) 80 Pregnancy documented 232 (48.3) 80"),
+         Para("ADA: adalimumab; CZP: certolizumab pegol; ETN: etanercept; GOL: golimumab; IFL: "
+              "infliximab; SEC: secukinumab; UST: ustekinumab and the rest of the agents listed."),
+         Para("1 Department of Rheumatology, Leeds Teaching Hospitals NHS Trust, Leeds, UK, 2 "
+              "Institute of Life Course Sciences, University of Liverpool, Liverpool, UK, and "
+              "others."),
+         Para("Introduction ................................ 2 How to use this Handbook "
+              "............ 3 "
+              "Context and the national picture you should know ............................... 4"),
+         Para("Clare Pain12, Georgina Pantano13, John D. Pauling14, Nuala O'Donoghue15, Elisabetta "
+              "Renzoni16, Sarah Skeoch32, Dalila Tremarias33 and Chris Wincup34 for the group."),
+         Para("Published by Oxford University Press. This is an Open Access article distributed "
+              "under the terms of the Creative Commons Attribution License, which permits reuse "
+              "and distribution in any medium."),
+         Para("Monitoring: FBC 2 weekly for 6 weeks, then 3 monthly; if WCC < 3.5 you should "
+              "withhold and discuss with the rheumatology team on the same day without delay.")}));
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_TRUE(units[0].text.starts_with("Monitoring"));
+}
+
+TEST(DocumentUnits, AProofsLineNumbersLeaveTheText) {
+    auto units = DropFragments(UnitsFromParagraphs({Para(
+        "Assess the extent of organ involvement at each visit and target therapy to it, "
+        "within the multidisciplinary team, for every person. 8 9 10 11 12 13 14 15 16 17 18")}));
+    ASSERT_EQ(units.size(), 1u);
+    EXPECT_TRUE(units[0].text.ends_with("for every person."));
+}
+
 }  // namespace
 }  // namespace ambient::guidance

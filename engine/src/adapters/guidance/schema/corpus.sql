@@ -1,10 +1,10 @@
 -- Ambient guidance corpus. One file per corpus, built as corpus.db.tmp by the
 -- indexer and renamed into corpora/<id>/corpus.db beside manifest.json.
 -- Public or licensed reference text, never patient data, so nothing is sealed.
--- Immutable once built: rollback journal, opened read-only. page_size 65536;
--- application_id 0x414D4247 ("AMBG"); user_version 1 is the format.
+-- Immutable once built: rollback journal, opened read-only. page_size 65536.
+-- application_id 0x414D4247 ("AMBG"). user_version 1 is the format.
 
--- One row; the manifest repeats the load-bearing fields and adds the file hash
+-- One row. The manifest repeats the load-bearing fields and adds the file hash
 CREATE TABLE corpus_meta (
     id            INTEGER PRIMARY KEY CHECK (id = 1),
     corpus_id     TEXT    NOT NULL,                 -- "nice-2026-08-25", carries the fetch date
@@ -26,7 +26,7 @@ CREATE TABLE corpus_meta (
     builder       TEXT    NOT NULL                  -- indexer version
 );
 
--- One recommendation or paragraph run; ord is dense 0..chunk_count-1 and is
+-- One recommendation or paragraph run. ord is dense 0..chunk_count-1 and is
 -- the row of the in-memory matrix
 CREATE TABLE chunks (
     ord           INTEGER PRIMARY KEY,
@@ -42,7 +42,7 @@ CREATE TABLE chunks (
     text          TEXT    NOT NULL                  -- verbatim, displayed, never generated from
 );
 
--- Vectors in shards of consecutive ordinals, about 1 MB each; dim repeats so
+-- Vectors in shards of consecutive ordinals, about 1 MB each. dim repeats so
 -- the length check is local to the row
 CREATE TABLE guidance_vectors (
     shard         INTEGER PRIMARY KEY,

@@ -103,7 +103,7 @@ std::variant<json, Error> HandleSessionGuidance(
     ambient::store::ISessionStore& sessions, const json& params,
     ambient::guidance::IDocumentIngest* ingest = nullptr);
 // guidance/search: the stored note of session id, or free text, through the
-// lane. The reply is immediate; the results arrive as a notification
+// lane. The reply is immediate. The results arrive as a notification
 std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
                                                ambient::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify);
@@ -123,8 +123,8 @@ std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest
 std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
                                                 const json& params);
 // guidance/page: one page of an added PDF drawn to a bitmap under the scratch
-// folder, with the cited chunk's boxes. guidance/documents/open: her file, for
-// the PDF viewer
+// folder, with the cited chunk's boxes. guidance/documents/open: the file in
+// her folder, for the shell to hand to a viewer
 std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
                                               const json& params);
 std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
@@ -147,10 +147,5 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                      ambient::note::INoteLane* note_lane = nullptr, bool stray_note_host = false,
                      const std::filesystem::path& demo_dir = {},
                      ambient::audio::Playback* playback = nullptr);
-
-// The guidance/ready body for a session's stored search; nothing when the
-// session has none it can read
-std::optional<json> StoredGuidanceReady(ambient::store::ISessionStore& sessions,
-                                        const std::string& session);
 
 }  // namespace ambient::ipc

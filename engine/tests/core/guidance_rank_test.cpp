@@ -35,23 +35,31 @@ TEST(RankVote, KeepsTheBestCosineAndTheQueryThatRankedItHighest) {
     EXPECT_EQ(ranked[2].trigger, "the whole note");
 }
 
-TEST(RankVote, TheNoteWeightMultipliesEveryVoteOfTheWholeNoteList) {
-    // weight 3: y = 1/62 + 1/61 + 3/62, z = 1/63 + 3/61, x = 1/61 + 1/62; z passes x, y stays first
-    const auto ranked = RankVote(Lists(), 3);
-    ASSERT_EQ(ranked.size(), 3u);
-    EXPECT_EQ(ranked[0].id, "y");
-    EXPECT_EQ(ranked[1].id, "z");
-    EXPECT_EQ(ranked[2].id, "x");
-    EXPECT_NEAR(ranked[1].score, 1.0 / 63 + 3.0 / 61, 1e-12);
-    EXPECT_NEAR(ranked[0].score, 1.0 / 62 + 1.0 / 61 + 3.0 / 62, 1e-12);
-    EXPECT_EQ(RankVote(Lists(), 0)[2].id, "z") << "a weight under one counts as one";
-}
-
 TEST(RankVote, HonoursTheUnionSize) {
     std::vector<SubQueryHits> lists{{"q", false, {}}};
     for (int i = 0; i < 80; ++i) lists[0].hits.push_back({"c" + std::to_string(i), 0.9});
     EXPECT_EQ(RankVote(lists).size(), static_cast<std::size_t>(kUnionSize));
-    EXPECT_EQ(RankVote(lists, 1, 10).size(), 10u);
+    EXPECT_EQ(RankVote(lists, 10).size(), 10u);
+}
+
+TEST(RankVote, AHitUnderTheVoteFloorCastsNoVote) {
+    std::vector<SubQueryHits> lists{{"sentence", false, {{"a", 0.90}, {"b", 0.80}}},
+                                    {"note", true, {{"b", 0.88}, {"c", 0.70}}}};
+    const auto ranked = RankVote(lists, kUnionSize, 0.85);
+    ASSERT_EQ(ranked.size(), 3u);
+    EXPECT_EQ(ranked[0].id, "a");
+    EXPECT_EQ(ranked[1].id, "b");
+    EXPECT_DOUBLE_EQ(ranked[1].score, 1.0 / (kRrfK + 1.0)) << "only the note's vote counts";
+    EXPECT_EQ(ranked[2].id, "c") << "the whole note votes under the floor";
+}
+
+TEST(NoteClears, OnlyTheWholeNoteListDecides) {
+    std::vector<SubQueryHits> lists{{"sentence", false, {{"a", 0.95}}},
+                                    {"note", true, {{"b", 0.84}}}};
+    EXPECT_FALSE(NoteClears(lists, 0.85));
+    EXPECT_TRUE(NoteClears(lists, 0.84));
+    lists.pop_back();
+    EXPECT_TRUE(NoteClears(lists, 0.85)) << "no whole-note list leaves it to the floor";
 }
 
 TEST(ApplyFloor, DropsUnderTheFloorAndAbstainsWhenNothingRemains) {
@@ -112,15 +120,28 @@ TEST(Citation, CodeNumberTitle) {
     EXPECT_EQ(Citation("ng100", "", ""), "NG100");
 }
 
-struct NoRerank : IReranker {
-    std::vector<double> Score(const std::string&, const std::vector<std::string>& texts) override {
-        return std::vector<double>(texts.size(), 0.0);
-    }
-};
+TEST(NearDuplicate, AQualityStatementRestatingItsGuidelineIsADuplicate) {
+    const char* const statement =
+        "Statement 1 Adults with suspected persistent synovitis affecting more than 1 joint, or "
+        "the small joints of the hands and feet, are referred to rheumatology services within 3 "
+        "working days of presenting in primary care. [2013, updated 2020]";
+    const char* const measure =
+        "Adults with pain, swelling and stiffness of more than 1 joint, or the small joints of "
+        "the hands or feet, are referred within 3 working days of their GP appointment to a "
+        "specialist in rheumatology. Early referral means that they can be diagnosed and start "
+        "treatment sooner if they have rheumatoid arthritis.";
+    EXPECT_TRUE(NearDuplicate(statement, measure));
 
-TEST(IReranker, TheSeamCompilesAndCanBeANoOp) {
-    NoRerank none;
-    EXPECT_EQ(none.Score("q", {"a", "b"}).size(), 2u);
+    const char* const twelve =
+        "12. During bisphosphonate or denosumab therapy, advise patients to report any "
+        "unexplained thigh, groin or hip pain and if such symptoms develop, the femur should be "
+        "imaged (Strong recommendation).";
+    const char* const thirteen =
+        "13. If an atypical femoral fracture is identified, image the contralateral femur "
+        "(Strong recommendation).";
+    EXPECT_FALSE(NearDuplicate(twelve, thirteen)) << "neighbours are not duplicates";
+    EXPECT_FALSE(NearDuplicate("Key words: gout.", "Key words: gout, urate."))
+        << "too short to judge";
 }
 
 }  // namespace

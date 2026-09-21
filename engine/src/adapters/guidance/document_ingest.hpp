@@ -23,12 +23,12 @@ inline constexpr const char* kReadMe = "Instructions.txt";
 // Sends a file to the Recycle Bin. Throws when it cannot
 void RecycleFile(const std::filesystem::path& path);
 
-// Watches the guidelines folder: a scan every few seconds takes new and
-// changed files by content, drops documents whose files went, and queues
-// new ones for the ingest thread, which reads them through the host,
-// embeds a unit at a time between note searches and publishes every ready
-// document to the retriever as one snapshot. The index under root is a
-// cache of the folder and needs no embedder to list
+// Watches the guidelines folder. A scan every few seconds takes new and
+// changed files by content, drops documents whose files went, and queues the
+// rest for the ingest thread. That thread reads a document through the host,
+// embeds a unit at a time between note searches, and publishes every ready
+// document to the retriever as one snapshot. The index under root is a cache
+// of the folder and needs no embedder to list
 class DocumentIngest : public IDocumentIngest {
    public:
     using Discard = std::function<void(const std::filesystem::path&)>;
@@ -48,9 +48,6 @@ class DocumentIngest : public IDocumentIngest {
     void SetListener(std::function<void(const IngestProgress&)> progress,
                      std::function<void(const DocumentInfo&)> document) override;
 
-    // The folder against the index. Files named in `fresh` are taken at once
-    void Scan(const std::set<std::string>& fresh = {});
-
    private:
     struct Seen {
         std::int64_t size = 0;
@@ -61,6 +58,8 @@ class DocumentIngest : public IDocumentIngest {
         std::string path;
     };
 
+    // The folder against the index. Files named in `fresh` are taken at once
+    void Scan(const std::set<std::string>& fresh = {});
     void Work();
     void Index(const Queued& item);
     std::vector<Page> Extract(const std::vector<std::uint8_t>& bytes);
@@ -81,6 +80,7 @@ class DocumentIngest : public IDocumentIngest {
     Discard discard_;
     std::chrono::milliseconds scan_every_;
 
+    // store_mutex_ is taken before mutex_ or listener_mutex_, never after
     std::mutex store_mutex_;
     DocumentIndex index_;
     bool found_ = true;

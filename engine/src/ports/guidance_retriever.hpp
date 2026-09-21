@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdexcept>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -21,7 +21,7 @@ struct Corpus {
     std::string sha256;
     int chunks = 0;
     std::string built_at;     // ISO 8601
-    std::string unavailable;  // empty when loaded; otherwise why not
+    std::string unavailable;  // empty when loaded, otherwise why not
 };
 
 // One recommendation the panel shows
@@ -62,20 +62,19 @@ struct Readiness {
 };
 
 // A note is split into sentences, negated ones dropped, and searched sentence
-// by sentence with the whole note as one more query; a typed query is one
+// by sentence with the whole note as one more query. A typed query is one
 // query at any length. The floor and the population guard apply to both
 enum class SearchMode { kNote, kQuery };
 
 // Retrieval for the Guidelines feature: the note in, the recommendations to
 // show out, already filtered, ordered and thresholded. Retrieved text never
-// enters a generated document. Uploads arrive later; until then the two
-// document calls throw
+// enters a generated document
 class IGuidanceRetriever {
    public:
     virtual ~IGuidanceRetriever() = default;
 
-    // Starts any slow loading in the background so the first Search is warm;
-    // safe to call repeatedly
+    // Starts any slow loading in the background so the first Search is warm.
+    // Safe to call repeatedly
     virtual void Prepare() {}
 
     virtual Results Search(const std::string& text, int limit, SearchMode mode) = 0;
@@ -86,14 +85,6 @@ class IGuidanceRetriever {
 
     // Dev only: include or exclude corpora marked research, live
     virtual void SetResearch(bool /*include*/) {}
-
-    virtual void AddDocument(const std::string& /*path*/) {
-        throw std::logic_error("guidance documents are not supported yet");
-    }
-
-    virtual void RemoveDocument(const std::string& /*corpus_id*/) {
-        throw std::logic_error("guidance documents are not supported yet");
-    }
 };
 
 }  // namespace ambient::guidance

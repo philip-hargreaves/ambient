@@ -13,7 +13,7 @@
 namespace ambient::guidance {
 
 inline constexpr std::uint32_t kIndexApplicationId = 0x414D4249;  // "AMBI"
-inline constexpr int kIndexFormat = 1;
+inline constexpr int kIndexFormat = 3;
 inline constexpr const char* kIndexFile = "index.db";
 
 std::string Sha256Hex(std::span<const std::uint8_t> bytes);
@@ -78,6 +78,8 @@ class DocumentIndex {
     std::vector<IndexChunk> ReadChunks(std::int64_t id);
     IndexChunk ReadChunk(std::int64_t id, std::int64_t ord);
 
+    // The first 63 bits of the sha256, never 0, so the same bytes at any path
+    // are one document
     static std::int64_t IdOf(const std::string& sha256);
 
    private:

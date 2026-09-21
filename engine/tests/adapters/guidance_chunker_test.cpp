@@ -113,7 +113,7 @@ TEST(ChunksFromText, NeverExceedsTheMaximum) {
 }
 
 // The engine chunker over the real NICE research copy must reproduce the
-// harness's chunk file exactly. Opt in with the two paths; skipped elsewhere
+// harness's chunk file exactly. Opt in with the two paths, skipped elsewhere
 TEST(ChunksFromDocument, ReproducesTheHarnessChunkFileWhenTheCorpusIsPresent) {
     const auto dir = EnvValue("AMBIENT_NICE_DIR");
     const auto file = EnvValue("AMBIENT_NICE_CHUNKS");

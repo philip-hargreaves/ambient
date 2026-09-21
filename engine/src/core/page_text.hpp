@@ -48,6 +48,12 @@ inline Box Union(const Box& a, const Box& b) {
             std::max(a.bottom, b.bottom)};
 }
 
+// A line follows the one before within this many of the page's leading
+inline constexpr float kAdjacentPitch = 1.3F;
+// A line ending this far short of its column's edge closes a paragraph when a
+// capital follows
+inline constexpr float kShortLine = 0.1F;
+
 namespace detail {
 
 // Closing quotes, brackets and spaces stripped, then a full stop, question or
@@ -59,16 +65,6 @@ inline bool EndsSentence(std::string_view s) {
     }
     return !s.empty() && (s.back() == '.' || s.back() == '?' || s.back() == '!');
 }
-
-}  // namespace detail
-
-// A line follows the one before within this many of the page's leading
-inline constexpr float kAdjacentPitch = 1.3F;
-// A line ending this far short of its column's edge closes a paragraph when a
-// capital follows
-inline constexpr float kShortLine = 0.1F;
-
-namespace detail {
 
 // The page's leading: the median rise from one line's top to the next
 inline float Pitch(const Page& page) {
@@ -141,10 +137,10 @@ inline std::vector<Paragraph> ParagraphsFromPages(const std::vector<Page>& pages
             const float rise = line.box.top - last_top;
             const float limit = pitch > 0 ? kAdjacentPitch * pitch : 1.5F * height;
             const auto first = static_cast<unsigned char>(line.text.front());
-            const bool adjacent = static_cast<int>(p) == last_page && rise > -0.5F * height &&
-                                  rise <= limit && !(last_short && detail::OpensSentence(first)) &&
-                                  !detail::OpensMarked(line.text) &&
-                                  !EndsWithToken(out.back().text);
+            const bool adjacent =
+                !out.empty() && static_cast<int>(p) == last_page && rise > -0.5F * height &&
+                rise <= limit && !(last_short && detail::OpensSentence(first)) &&
+                !detail::OpensMarked(line.text) && !EndsWithToken(out.back().text);
             const bool runs_on =
                 !out.empty() && !detail::EndsSentence(out.back().text) && std::islower(first);
             // A wrapped grade tail always rejoins the recommendation above it

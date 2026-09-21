@@ -7,11 +7,12 @@ using Ambient.App.Core.ViewModels;
 
 namespace Ambient.App.Views;
 
-/// <summary>The Guidelines section under the clinical note; hosted by the note editor.</summary>
+/// <summary>The Guidelines section under the clinical note, hosted by the note editor.</summary>
 public sealed partial class GuidanceSectionView : UserControl
 {
     private readonly StatusBarViewModel _status;
     private readonly DispatcherQueueTimer _timingTimer;
+    private Storyboard? _fade;
 
     public GuidanceSectionView(
         GuidanceViewModel viewModel, ShellViewModel shell, StatusBarViewModel status)
@@ -28,6 +29,7 @@ public sealed partial class GuidanceSectionView : UserControl
         {
             if (e.PropertyName == nameof(GuidanceViewModel.FoundIn) && ViewModel.FoundIn.Length > 0)
             {
+                _fade?.Stop();
                 Timing.Opacity = 1;
                 _timingTimer.Start();
             }
@@ -67,9 +69,9 @@ public sealed partial class GuidanceSectionView : UserControl
         var fade = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(400) };
         Storyboard.SetTarget(fade, Timing);
         Storyboard.SetTargetProperty(fade, "Opacity");
-        var story = new Storyboard();
-        story.Children.Add(fade);
-        story.Begin();
+        _fade = new Storyboard();
+        _fade.Children.Add(fade);
+        _fade.Begin();
     }
 
     private void OnRowEntered(object sender, PointerRoutedEventArgs e)

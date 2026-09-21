@@ -60,7 +60,7 @@ def main():
             return np.argpartition(-(mat @ q), args.k)[:args.k]
         rows.append({"n": n, "dims": dims, "method": "numpy fp32 exact", "ms": round(median_time(exact_fp32) * 1e3, 2), "recall": 1.0})
 
-        # Per-vector scale; unit-vector components are near 1/sqrt(d)
+        # Per-vector scale, since unit-vector components sit near 1/sqrt(d)
         d_scale = np.abs(mat).max(axis=1, keepdims=True) / 127.0
         mat_i8 = np.round(mat / d_scale).astype(np.int8)
         mat_i32 = mat_i8.astype(np.int32)

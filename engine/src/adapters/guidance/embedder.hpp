@@ -28,7 +28,7 @@ struct Embedding {
     bool truncated = false;     // the text ran past max_tokens
 };
 
-// The seam the indexer and the retriever share; one text at a time
+// The seam the indexer and the retriever share. One text at a time
 class IEmbedder {
    public:
     virtual ~IEmbedder() = default;
@@ -40,11 +40,10 @@ inline constexpr int kEmbedMaxTokens = 512;
 
 // The staged embedding model on the CPU through the GenAI pipeline: mean
 // pooling, normalised, no instruction strings. Load verifies the files and
-// runs the startup guards; it throws naming the failure
+// runs the startup guards. It throws naming the failure
 class Embedder : public IEmbedder {
    public:
-    static std::unique_ptr<Embedder> Load(const models::ModelStore& store,
-                                          const std::string& tier = "default");
+    static std::unique_ptr<Embedder> Load(const models::ModelStore& store);
     ~Embedder() override;
 
     const EmbedderIdentity& Identity() const override;

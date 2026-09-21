@@ -89,7 +89,7 @@ TEST(EmbedderModel, StagedExportReproducesTheResearchEmbeddings) {
     }
 
     // Functional structure: same-speaker slices embed closer than cross-speaker.
-    // Means, not extremes - a mixed track leaks backchannel into some slices
+    // Compare means, since a mixed track leaks backchannel into some slices
     float same = 0.0f, cross = 0.0f;
     int same_n = 0, cross_n = 0;
     for (std::size_t a = 0; a < slices.size(); ++a) {

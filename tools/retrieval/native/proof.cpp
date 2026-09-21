@@ -1,4 +1,4 @@
-// Embeds or reranks through the GenAI C++ pipelines; prints JSON lines for the Python harness.
+// Embeds or reranks through the GenAI C++ pipelines. Prints JSON lines for the Python harness.
 //
 //   proof embed  <model_dir> <cls|mean|last> <max_length> <texts.txt> [query_instruction]
 //   proof rerank <model_dir> <max_length> <query> <texts.txt> [repeats]
@@ -59,7 +59,7 @@ int Embed(int argc, char* argv[]) {
     return 0;
 }
 
-// repeats > 1: successive texts become queries; last result printed
+// repeats > 1: successive texts become queries. Only the last result is printed
 int Rerank(int argc, char* argv[]) {
     if (argc < 6) throw std::runtime_error("usage: proof rerank <model_dir> <max_length> <query> <texts.txt> [repeats]");
     ov::genai::TextRerankPipeline::Config config;

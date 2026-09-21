@@ -11,7 +11,8 @@ public sealed class AppPreferences(string path)
         bool KeepConsultations = false, bool ShowPerformanceMetrics = false,
         string? MicId = null, string? Theme = null, string? NoteTier = null,
         bool SeedDataEnabled = false, bool DeveloperToolsExpanded = false,
-        bool IncludeResearchGuidance = false, bool DemoMode = false, string? DemoTrack = null);
+        bool IncludeResearchGuidance = false, bool DemoMode = false, string? DemoTrack = null,
+        bool DocumentsExpanded = false);
 
     /// <summary>The note model tiers the engine's store can resolve, in ladder order.</summary>
     public static readonly IReadOnlyList<string> NoteTiers = ["constrained", "default", "accuracy"];
@@ -42,6 +43,9 @@ public sealed class AppPreferences(string path)
 
     /// <summary>Whether the Developer tools group in Settings is open.</summary>
     public bool DeveloperToolsExpanded { get; set; }
+
+    /// <summary>Whether the guideline documents list in Settings is open.</summary>
+    public bool DocumentsExpanded { get; set; }
 
     /// <summary>
     /// Dev builds only: search corpora marked research (the local NICE demo). Passed to
@@ -81,6 +85,7 @@ public sealed class AppPreferences(string path)
             preferences.IncludeResearchGuidance = stored?.IncludeResearchGuidance ?? false;
             preferences.DemoMode = stored?.DemoMode ?? false;
             preferences.DemoTrack = stored?.DemoTrack ?? "";
+            preferences.DocumentsExpanded = stored?.DocumentsExpanded ?? false;
             preferences.MicId = stored?.MicId ?? "";
             // Values the shell cannot render never leave this boundary
             preferences.Theme = stored?.Theme is "light" or "dark" ? stored.Theme : "system";
@@ -108,7 +113,7 @@ public sealed class AppPreferences(string path)
                 DemoTrayEnabled, NpuTranscription, CollectPerformanceData,
                 NoteStyle, NoteDetail, KeepConsultations, ShowPerformanceMetrics, MicId,
                 Theme, NoteTier, SeedDataEnabled, DeveloperToolsExpanded,
-                IncludeResearchGuidance, DemoMode, DemoTrack)));
+                IncludeResearchGuidance, DemoMode, DemoTrack, DocumentsExpanded)));
         }
         catch (Exception)
         {

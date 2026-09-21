@@ -124,8 +124,8 @@ TEST(GuidanceEmbedder, IndexesTheFixtureCorpusAndFindsTheRightGuideline) {
 
 // The retriever over the staged model and the fixture corpus: each fixture
 // note surfaces its guideline first and one of its expected recommendations in
-// the top three, never a guideline it must not; the non-clinical text is
-// refused at the shipped floor. Ordering is asserted without the floor; what
+// the top three, never a guideline it must not. The non-clinical text is
+// refused at the shipped floor. Ordering is asserted without the floor. What
 // the floor does with each note is printed, since the fixture is invented text
 TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {
     const auto dir = std::filesystem::temp_directory_path() / "ambient-guidance-real";

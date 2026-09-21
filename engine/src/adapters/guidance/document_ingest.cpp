@@ -88,8 +88,9 @@ std::int64_t Ticks(std::filesystem::file_time_type time) {
     return time.time_since_epoch().count();
 }
 
-// A file another program is still writing refuses a read that shares no writer
-bool Settled(const std::filesystem::path& path) {
+// The open does not share writing, so a file another program is still writing
+// refuses it
+bool Unlocked(const std::filesystem::path& path) {
     const HANDLE handle =
         CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -210,30 +211,33 @@ bool DocumentIngest::Supported(const std::string& mime) const {
 
 Accepted DocumentIngest::Add(const std::vector<std::filesystem::path>& paths) {
     Accepted out;
+    const auto skip = [&out](const std::filesystem::path& path, const char* reason) {
+        out.skipped.push_back({Utf8(path), reason});
+    };
     std::set<std::string> fresh;
     std::error_code ec;
     std::filesystem::create_directories(folder_, ec);
     for (const auto& path : paths) {
         const auto bytes = std::filesystem::file_size(path, ec);
         if (ec || bytes == 0) {
-            out.skipped.push_back({Utf8(path), "unreadable"});
+            skip(path, "unreadable");
             continue;
         }
         if (!Supported(Mime(path))) {
-            out.skipped.push_back({Utf8(path), "unsupported"});
+            skip(path, "unsupported");
             continue;
         }
         const auto target = folder_ / path.filename();
         if (!std::filesystem::equivalent(path, target, ec)) {
             const auto space = std::filesystem::space(folder_, ec);
             if (!ec && space.available < bytes + kSpareBytes) {
-                out.skipped.push_back({Utf8(path), "noSpace"});
+                skip(path, "noSpace");
                 continue;
             }
             std::filesystem::copy_file(path, target,
                                        std::filesystem::copy_options::overwrite_existing, ec);
             if (ec) {
-                out.skipped.push_back({Utf8(path), "unreadable"});
+                skip(path, "unreadable");
                 continue;
             }
         }
@@ -407,20 +411,21 @@ void DocumentIngest::Scan(const std::set<std::string>& fresh) {
         // path before the old path is released and never re-indexes
         const auto now = std::filesystem::file_time_type::clock::now();
         for (const auto& [path, seen] : present) {
+            const auto same = [size = seen.size, modified = seen.modified](const auto& other) {
+                return other.size == size && other.modified == modified;
+            };
             const auto was = known.find(path);
-            if (was != known.end() && was->second.size == seen.size &&
-                was->second.modified == seen.modified) {
+            if (was != known.end() && same(was->second)) {
                 pending_.erase(path);
                 continue;
             }
             const auto written = std::filesystem::file_time_type(
                 std::filesystem::file_time_type::duration(seen.modified));
             const auto held = pending_.find(path);
-            const bool still = held != pending_.end() && held->second.size == seen.size &&
-                               held->second.modified == seen.modified;
+            const bool still = held != pending_.end() && same(held->second);
             const bool settled = fresh.contains(path) || still || now - written > scan_every_;
             const auto full = Absolute(path);
-            if (!settled || !Settled(full)) {
+            if (!settled || !Unlocked(full)) {
                 pending_[path] = seen;
                 continue;
             }
@@ -480,8 +485,8 @@ bool DocumentIngest::Cancelled() {
     return cancel_ || stop_;
 }
 
-// Idle scans the folder. A queued document waits for the embedder, which the
-// index adopts once, publishing what an earlier run left ready
+// Idle time scans the folder. A queued document waits for the embedder. The
+// index adopts it once, which publishes what an earlier run left ready
 void DocumentIngest::Work() {
     for (;;) {
         Queued item;
@@ -520,7 +525,7 @@ void DocumentIngest::Work() {
     }
 }
 
-// Her file is read in place, so a file that changed or went since the scan is
+// The file is read in place, so one that changed or went since the scan is
 // left to the next scan
 void DocumentIngest::Index(const Queued& item) {
     const auto id = item.id;
@@ -640,7 +645,7 @@ void DocumentIngest::Publish() {
                                     chunk.vector.end());
             snapshot->rows.push_back({doc.id, chunk.ord, chunk.page, doc.pages, doc.name,
                                       std::move(chunk.number), std::move(chunk.section),
-                                      std::move(chunk.text), std::move(chunk.boxes), doc.added_at});
+                                      std::move(chunk.text), doc.added_at});
         }
     }
     retriever_.PublishUploads(std::move(snapshot));

@@ -57,8 +57,8 @@ def metrics(ranked_ids: list[str], expected: set[str]) -> dict:
     first = next((i for i, h in enumerate(hits) if h), None)
     dcg = sum(h / math.log2(i + 2) for i, h in enumerate(hits[:10]))
     ideal = sum(1 / math.log2(i + 2) for i in range(min(len(expected), 10)))
-    # s@k: at least one labelled recommendation in the top k (success rate); rec@k: the share of
-    # the labels there (recall). r50 is the first stage's whole job: the label reached the union
+    # s@k: at least one labelled recommendation in the top k (success rate). rec@k: the share of
+    # the labels there (recall). r50 is the first stage's whole job, the label reaching the union
     return {"r5": int(any(hits[:5])), "r10": int(any(hits[:10])), "r50": int(any(hits[:50])),
             "rec10": sum(hits[:10]) / len(expected), "rec50": sum(hits[:50]) / len(expected),
             "p1": hits[0] if hits else 0,
@@ -66,7 +66,7 @@ def metrics(ranked_ids: list[str], expected: set[str]) -> dict:
 
 
 def make_reranker(entry: dict, precision: str, top_n: int, backend: str = "core"):
-    # core: explicit pairs on ov.Core; genai: GenAI pipeline, parity checks only
+    # core is explicit pairs on ov.Core. genai is the GenAI pipeline, for parity checks only
     if backend == "core" and entry["architecture"] != "Qwen3ForCausalLM":
         from rerank_core import CoreReranker
         return CoreReranker(candidate_dir(entry["id"], precision), entry["max_length"])
@@ -154,12 +154,12 @@ def first_stage(scores, subqueries: list[str], whole: str, args, bm25, hybrid: s
         for idx in order:
             s = float(scores[si][idx])
             cos_of[int(idx)] = max(s, cos_of.get(int(idx), -1e9))
-            # max: best cosine across sub-queries; zmax: z-score within the sub-query's own list
+            # max takes the best cosine across sub-queries. zmax scores it within its own list
             rule_score = (s - mu) / sd if args.union == "zmax" else s
             if rule_score > best.get(int(idx), (-1e9, ""))[0]:
                 best[int(idx)] = (rule_score, sub)
     if args.union == "rrf":
-        # rank vote across sub-queries; the whole-note query casts --note-weight votes
+        # Rank vote across sub-queries. The whole-note query casts --note-weight votes
         votes = [l for l, sub in zip(lists, subqueries)
                  for _ in range(args.note_weight if sub == whole and len(subqueries) > 1 else 1)]
         fused = rrf(votes)

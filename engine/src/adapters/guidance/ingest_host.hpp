@@ -33,7 +33,7 @@ class HostError : public std::runtime_error {
     std::string reason_;
 };
 
-// A rendered page: a 32-bit BMP and its size
+// A rendered page as a 32-bit top-down BMP
 struct Bitmap {
     int width = 0;
     int height = 0;

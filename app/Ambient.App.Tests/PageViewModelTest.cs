@@ -45,6 +45,19 @@ public class PageViewModelTest
     }
 
     [Fact]
+    public async Task ThePageViewClosesOnceItsPassageIsNoLongerACard()
+    {
+        var (view, _) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));
+        await view.ShowAsync(Found());
+
+        view.KeepOnlyFor([new GuidanceCard([Found()])]);
+        Assert.True(view.Visible);
+
+        view.KeepOnlyFor([]);
+        Assert.False(view.Visible);
+    }
+
+    [Fact]
     public async Task ShowingAPassageAsksForItsPageAndScalesTheBoxes()
     {
         var (view, engine) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));

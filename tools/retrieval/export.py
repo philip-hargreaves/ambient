@@ -28,7 +28,7 @@ def sha256(path: Path) -> str:
 
 
 def download(hf_id: str, extra: list[str]) -> tuple[Path, str]:
-    # Download in-process (IPv4 fix); local_dir needs no symlinks on exFAT
+    # In-process, so the IPv4 fix applies. local_dir needs no symlinks on exFAT
     from huggingface_hub import HfApi, snapshot_download
     local = CANDIDATES / ".src" / hf_id.replace("/", "--")
     snapshot_download(hf_id, local_dir=str(local),
@@ -37,7 +37,7 @@ def download(hf_id: str, extra: list[str]) -> tuple[Path, str]:
 
 
 def export_from_onnx(entry: dict, precision: str, snapshot: Path, out: Path) -> None:
-    # Architectures optimum cannot export yet (ModernBERT) ship an ONNX file; convert that instead
+    # Architectures optimum cannot export yet (ModernBERT) ship an ONNX file to convert instead
     import openvino as ov
     model = ov.Core().read_model(str(snapshot / entry["onnx"]))
     if precision == "int8":
@@ -65,7 +65,7 @@ def export_one(entry: dict, precision: str) -> Path:
         cmd = [str(optimum_cli), "export", "openvino", "--model", str(snapshot), "--task", entry["export_task"],
                "--weight-format", precision, str(out)]
         log(" ".join(cmd))
-        # Quantisation writes an fp32 copy to TEMP first; keep it off C:
+        # Quantisation writes an fp32 copy to TEMP first, which has to stay off C:
         tmp = CANDIDATES / ".tmp"
         tmp.mkdir(exist_ok=True)
         subprocess.run(cmd, check=True, env={**os.environ, "TEMP": str(tmp), "TMP": str(tmp)})
@@ -109,7 +109,7 @@ def main():
             try:
                 export_one(entry, precision)
             except subprocess.CalledProcessError as e:
-                # A failed export leaves a partial directory; remove it so a retry starts clean
+                # A failed export leaves a partial directory. Remove it so a retry starts clean
                 shutil.rmtree(candidate_dir(entry["id"], precision), ignore_errors=True)
                 failed.append(f"{entry['id']}-{precision}")
                 log(f"{entry['id']}-{precision}: export failed (exit {e.returncode})")
