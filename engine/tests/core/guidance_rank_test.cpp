@@ -54,6 +54,26 @@ TEST(RankVote, HonoursTheUnionSize) {
     EXPECT_EQ(RankVote(lists, 1, 10).size(), 10u);
 }
 
+TEST(RankVote, AHitUnderTheVoteFloorCastsNoVote) {
+    std::vector<SubQueryHits> lists{{"sentence", false, {{"a", 0.90}, {"b", 0.80}}},
+                                    {"note", true, {{"b", 0.88}, {"c", 0.70}}}};
+    const auto ranked = RankVote(lists, 1, kUnionSize, 0.85);
+    ASSERT_EQ(ranked.size(), 3u);
+    EXPECT_EQ(ranked[0].id, "a");
+    EXPECT_EQ(ranked[1].id, "b");
+    EXPECT_DOUBLE_EQ(ranked[1].score, 1.0 / (kRrfK + 1.0)) << "only the note's vote counts";
+    EXPECT_EQ(ranked[2].id, "c") << "the whole note votes under the floor";
+}
+
+TEST(NoteClears, OnlyTheWholeNoteListDecides) {
+    std::vector<SubQueryHits> lists{{"sentence", false, {{"a", 0.95}}},
+                                    {"note", true, {{"b", 0.84}}}};
+    EXPECT_FALSE(NoteClears(lists, 0.85));
+    EXPECT_TRUE(NoteClears(lists, 0.84));
+    lists.pop_back();
+    EXPECT_TRUE(NoteClears(lists, 0.85)) << "no whole-note list leaves it to the floor";
+}
+
 TEST(ApplyFloor, DropsUnderTheFloorAndAbstainsWhenNothingRemains) {
     const auto kept = ApplyFloor(RankVote(Lists()), 0.875);
     ASSERT_EQ(kept.kept.size(), 2u) << "z's best cosine is 0.87, under the floor";

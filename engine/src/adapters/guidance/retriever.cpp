@@ -212,8 +212,10 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     };
     const int k = options_.union_size;
     // One group's sources sort into one list per sub-query before the vote
+    // A narrow group is strict: silent unless the whole note clears its own floor, and a
+    // sentence votes only at or above the group's floor
     const auto vote = [&](const std::vector<Source>& sources, double floor,
-                          std::map<std::string, Located>& where) {
+                          std::map<std::string, Located>& where, bool strict) {
         std::vector<SubQueryHits> lists;
         for (const auto& [query, embedding] : embedded) {
             std::vector<Located> located;
@@ -235,14 +237,19 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             }
             lists.push_back(std::move(list));
         }
-        return ApplyFloor(RankVote(lists, options_.note_weight, k), floor);
+        if (strict && !NoteClears(lists, options_.upload_note_floor)) {
+            Ordered silent;
+            silent.abstained = true;
+            return silent;
+        }
+        return ApplyFloor(RankVote(lists, options_.note_weight, k, strict ? floor : -1.0), floor);
     };
 
     // Added documents lead, as their own group with their own floor
     if (have_uploads) {
         std::map<std::string, Located> where;
         const auto ordered = vote({{uploads->matrix.data(), uploads->rows.size(), uploads->dim}},
-                                  options_.upload_floor, where);
+                                  options_.upload_floor, where, true);
         out.considered += ordered.considered;
         int shown = 0;
         for (const auto& candidate : ordered.kept) {
@@ -280,7 +287,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         for (auto* store : stores)
             sources.push_back({store->Matrix(), store->Size(), store->Dim()});
         std::map<std::string, Located> where;
-        const auto ordered = vote(sources, options_.floor, where);
+        const auto ordered = vote(sources, options_.floor, where, false);
         out.considered += ordered.considered;
         int shown = 0;
         for (const auto& candidate : ordered.kept) {

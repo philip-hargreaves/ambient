@@ -55,7 +55,7 @@ constexpr auto kScan = std::chrono::milliseconds(100);
 Retriever MakeRetriever(const std::filesystem::path& dir) {
     std::filesystem::create_directories(dir / "corpora");
     return Retriever{[] { return std::make_unique<WordEmbedder>(); }, dir / "corpora",
-                     RetrieverOptions{.floor = 0.2, .upload_floor = 0.2}};
+                     RetrieverOptions{.floor = 0.2, .upload_floor = 0.2, .upload_note_floor = 0.2}};
 }
 
 void Delete(const std::filesystem::path& path) {

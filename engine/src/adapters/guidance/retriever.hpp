@@ -17,6 +17,7 @@ namespace ambient::guidance {
 struct RetrieverOptions {
     double floor = kDefaultFloor;
     double upload_floor = kDefaultFloor;
+    double upload_note_floor = kNoteFloor;
     int note_weight = 1;
     int union_size = kUnionSize;
     bool include_research = false;  // dev only

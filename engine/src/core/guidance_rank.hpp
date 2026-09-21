@@ -20,6 +20,7 @@ namespace ambient::guidance {
 // out. No second stage: none measured better than this order
 inline constexpr double kRrfK = 60.0;
 inline constexpr double kDefaultFloor = 0.85;
+inline constexpr double kNoteFloor = 0.84;  // the whole note against a narrow group
 inline constexpr int kUnionSize = 50;
 
 struct Hit {
@@ -55,8 +56,10 @@ class IReranker {
                                       const std::vector<std::string>& texts) = 0;
 };
 
+// A sentence's hit under vote_floor casts no vote: a sentence speaks only for passages it
+// resembles. The whole note always votes, since it carries the topic
 inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists, int note_weight = 1,
-                                       int limit = kUnionSize) {
+                                       int limit = kUnionSize, double vote_floor = -1.0) {
     struct Tally {
         double score = 0;
         double cosine = -1;
@@ -67,6 +70,7 @@ inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists, i
     for (const auto& list : lists) {
         const int votes = list.whole_note ? std::max(1, note_weight) : 1;
         for (std::size_t rank = 0; rank < list.hits.size(); ++rank) {
+            if (!list.whole_note && list.hits[rank].cosine < vote_floor) break;
             auto& t = tally[list.hits[rank].id];
             t.score += votes / (kRrfK + static_cast<double>(rank) + 1.0);
             t.cosine = std::max(t.cosine, list.hits[rank].cosine);
@@ -84,6 +88,15 @@ inline std::vector<Candidate> RankVote(const std::vector<SubQueryHits>& lists, i
     });
     if (static_cast<int>(out.size()) > limit) out.resize(static_cast<std::size_t>(limit));
     return out;
+}
+
+// Whether the note as a whole resembles anything searched. One sentence can
+// resemble a passage of any document, so it cannot say the documents cover the note
+inline bool NoteClears(const std::vector<SubQueryHits>& lists, double floor) {
+    for (const auto& list : lists) {
+        if (list.whole_note) return !list.hits.empty() && list.hits.front().cosine >= floor;
+    }
+    return true;
 }
 
 // Candidates whose best cosine is under the floor are dropped; when none
