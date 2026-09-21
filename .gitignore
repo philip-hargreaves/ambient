@@ -55,6 +55,7 @@ desktop.ini
 # source dirs may be named Demo)
 /demo/*
 !/demo/reflections/
+!/demo/cases.txt
 __pycache__/
 
 # Guidance retrieval data

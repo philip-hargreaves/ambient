@@ -42,6 +42,16 @@ public class ExampleCaseTest
     }
 
     [Fact]
+    public void TheShippedCasesLoad()
+    {
+        var cases = DemoCases.Load();
+
+        Assert.Equal(4, cases.Count);
+        Assert.All(cases, c => Assert.StartsWith("Case ", c.Title));
+        Assert.All(cases, c => Assert.True(c.Text.Split(' ').Length > 60, c.Title));
+    }
+
+    [Fact]
     public async Task ACaseStandsInAsTheNoteOfADemoRecordAndIsSearched()
     {
         var (session, engine, note) = Create();
