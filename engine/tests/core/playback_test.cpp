@@ -189,9 +189,8 @@ TEST(Playback, PlaysTheStoredConsultationBackAsADemoCopy) {
     EXPECT_EQ(note.detail, "concise");
     EXPECT_EQ(f.store->ReadDocument(copy, DocumentKind::kPatient).text,
               "You came in about your elbow.");
-    const auto guidance =
-        nlohmann::json::parse(f.store->ReadDocument(copy, DocumentKind::kGuidance).text);
-    EXPECT_EQ(guidance["noteRevision"], note.revision);
+    EXPECT_EQ(f.store->ReadDocument(copy, DocumentKind::kGuidance).text, "")
+        << "the source's search is not copied, the copy's note is searched afresh";
 }
 
 TEST(Playback, StopEarlyFinalisesFromWhereTheClockIs) {
@@ -262,7 +261,7 @@ TEST(Playback, RefusesWhatItCannotPlay) {
     playback.Cancel();
 }
 
-TEST(Playback, ASourceWithoutGuidanceAnnouncesNone) {
+TEST(Playback, ASourceNeverSearchedStillHasItsCopySearched) {
     Fixture f;
     Playback playback(f.events, *f.store, f.Hooks(), f.fast);
 
@@ -271,8 +270,7 @@ TEST(Playback, ASourceWithoutGuidanceAnnouncesNone) {
     playback.Stop();
     Fixture::Settle(playback);
 
-    EXPECT_TRUE(f.guidance.empty());
-    EXPECT_EQ(f.store->ReadDocument(playback.Current(), DocumentKind::kGuidance).text, "");
+    EXPECT_EQ(f.guidance, std::vector<std::string>{playback.Current()});
 }
 
 }  // namespace

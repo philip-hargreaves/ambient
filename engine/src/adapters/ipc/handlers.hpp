@@ -96,10 +96,6 @@ ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionS
                                                        const std::string& session,
                                                        ambient::store::Document note, int limit,
                                                        Notify notify);
-// The guidance/ready body for a session's stored search. Nothing when the
-// session has none it can read
-std::optional<json> StoredGuidanceReady(ambient::store::ISessionStore& sessions,
-                                        const std::string& session);
 // session/guidance: the stored record, null when the note was never searched
 // or the record cannot be read, stale when the note has been written since
 // documentsChanged: the added documents the record searched are not the ones ready now

@@ -10,7 +10,6 @@
 #include <format>
 #include <functional>
 #include <mutex>
-#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -36,13 +35,14 @@ struct PlaybackPacing {
 
 // Demo playback of a stored consultation through the session events: a
 // demo-flagged copy is recorded, the clock races through the audio, then the
-// copy's note, guidance and patient sheet stream as if written. Nothing is
-// transcribed or generated
+// copy's note and patient sheet stream as if written. The note is searched for
+// guidance as a written one is, so the cards are what the documents hold today.
+// Nothing is transcribed or generated
 class Playback {
    public:
     struct Hooks {
         std::function<void(const store::SessionId&)> finalised;  // the copy is the review target
-        std::function<void(const store::SessionId&)> guidance;  // announce the copy's stored search
+        std::function<void(const store::SessionId&)> guidance;   // search the copy's note
     };
 
     Playback(ISessionEvents& events, store::ISessionStore& store, Hooks hooks,
@@ -132,7 +132,6 @@ class Playback {
         double audio_seconds = 0;
         std::string note;
         std::string patient;
-        bool guidance = false;
     };
 
     static std::string Iso8601(std::chrono::sys_seconds at) {
@@ -170,17 +169,6 @@ class Playback {
             !patient.text.empty()) {
             copy.patient = patient.text;
             store_.SaveDocument(copy.id, DocumentKind::kPatient, patient);
-        }
-        if (auto guidance = store_.ReadDocument(source, DocumentKind::kGuidance);
-            !guidance.text.empty()) {
-            // The search belongs to the copy's note revision, not the source's
-            auto record = nlohmann::json::parse(guidance.text, nullptr, false);
-            if (record.is_object()) {
-                record["noteRevision"] = store_.ReadDocument(copy.id, DocumentKind::kNote).revision;
-                guidance.text = record.dump();
-            }
-            store_.SaveDocument(copy.id, DocumentKind::kGuidance, guidance);
-            copy.guidance = true;
         }
         return copy;
     }
@@ -239,10 +227,8 @@ class Playback {
         Stream(copy.note, [this](const std::string& text) { events_.OnNotePartial(text); });
         if (cancel_) return;
         events_.OnNoteReady(copy.note);
-        if (copy.guidance) {
-            std::this_thread::sleep_for(pacing_.guidance);
-            Call(hooks_.guidance, copy.id, "guidance");
-        }
+        std::this_thread::sleep_for(pacing_.guidance);
+        Call(hooks_.guidance, copy.id, "guidance");
         std::this_thread::sleep_for(pacing_.first_token);
         Stream(copy.patient, [this](const std::string& text) { events_.OnPatientPartial(text); });
         if (cancel_) return;

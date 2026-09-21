@@ -803,19 +803,6 @@ const char* PhaseName(ambient::guidance::Readiness::Phase phase) {
 
 }  // namespace
 
-std::optional<json> StoredGuidanceReady(ambient::store::ISessionStore& sessions,
-                                        const std::string& session) {
-    const auto stored = sessions.ReadDocument(session, ambient::store::DocumentKind::kGuidance);
-    if (stored.text.empty()) return std::nullopt;
-    const json parsed = json::parse(stored.text, nullptr, false);
-    if (!ambient::guidance::CanRead(parsed)) return std::nullopt;
-    try {
-        return GuidanceReadyJson(session, ambient::guidance::RecordFromJson(parsed));
-    } catch (const json::exception&) {
-        return std::nullopt;
-    }
-}
-
 json GuidanceModelJson(const ambient::guidance::Readiness& readiness) {
     return json{{"state", PhaseName(readiness.phase)}, {"detail", NullWhenEmpty(readiness.detail)}};
 }
