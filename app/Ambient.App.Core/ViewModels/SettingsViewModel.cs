@@ -687,21 +687,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshBatch();
     }
 
+    // Working rows first in arrival order, then unreadable ones, then the rest, each by name
     private int Place(DocumentRow row)
     {
+        static int Group(DocumentRow r) => r.Working ? 0 : r.Failed ? 1 : 2;
         var i = 0;
-        while (i < Documents.Count && Documents[i].Working)
-        {
-            i++;
-        }
-
-        if (row.Working)
-        {
-            return i;
-        }
-
         while (i < Documents.Count
-            && string.Compare(Documents[i].Name, row.Name, StringComparison.OrdinalIgnoreCase) < 0)
+            && (Group(Documents[i]) < Group(row)
+                || (Group(Documents[i]) == Group(row)
+                    && (row.Working || string.Compare(
+                        Documents[i].Name, row.Name, StringComparison.OrdinalIgnoreCase) < 0))))
         {
             i++;
         }

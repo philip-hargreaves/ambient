@@ -36,30 +36,36 @@
                         Glyph="&#xE70E;" />
                 </StackPanel>
             </Button>
-            <StackPanel
+            <!-- A grid, since a text block only trims inside a finite width -->
+            <Grid
                 Grid.Column="1"
                 VerticalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="6">
+                ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" MaxWidth="320" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
                 <TextBlock
                     Style="{StaticResource MicroText}"
                     Text="{x:Bind ViewModel.Summary, Mode=OneWay}"
-                    TextTrimming="CharacterEllipsis" />
+                    TextTrimming="CharacterEllipsis"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.Summary, Mode=OneWay}" />
                 <!-- The timing fades a few seconds after it lands -->
                 <StackPanel
                     x:Name="Timing"
+                    Grid.Column="1"
                     Orientation="Horizontal"
                     Spacing="6"
                     Visibility="{x:Bind ViewModel.FoundInVisible, Mode=OneWay}">
                     <TextBlock Style="{StaticResource MicroText}" Text="&#xB7;" />
                     <TextBlock Style="{StaticResource MicroText}" Text="{x:Bind ViewModel.FoundIn, Mode=OneWay}" />
                 </StackPanel>
-            </StackPanel>
+            </Grid>
             <!-- Enter or the glyph searches, Escape clears -->
             <AutoSuggestBox
                 x:Name="SearchRow"
                 Grid.Column="2"
-                MinWidth="240"
+                MinWidth="200"
                 AutomationProperties.Name="Search guidance"
                 IsEnabled="{x:Bind ViewModel.QueryBoxEnabled, Mode=OneWay}"
                 KeyDown="OnQueryKeyDown"

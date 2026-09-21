@@ -716,7 +716,7 @@ public class SettingsViewModelTest
     private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value);
 
     [Fact]
-    public void AddedDocumentsListWorkingRowsFirstThenByName()
+    public void AddedDocumentsListWorkingRowsFirstThenUnreadableThenByName()
     {
         var engine = new FakeEngineClient();
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
@@ -725,13 +725,13 @@ public class SettingsViewModelTest
         engine.GuidanceDocuments.Add(Document(4, "Letter", "failed", error: "patientData"));
         var settings = new SettingsViewModel(TempPreferences(), client: engine);
 
-        Assert.Equal(["PMR", "asthma", "Gout", "Letter"], settings.Documents.Select(d => d.Name));
+        Assert.Equal(["PMR", "Letter", "asthma", "Gout"], settings.Documents.Select(d => d.Name));
         Assert.Equal("Waiting", settings.Documents[0].Detail);
         Assert.True(settings.Documents[0].Waiting);
-        Assert.Equal("12 passages · added 15 Sep 2026", settings.Documents[1].Detail);
         Assert.StartsWith("Not searched: this looks like a document about a patient.",
-            settings.Documents[3].Detail);
-        Assert.True(settings.Documents[3].Failed);
+            settings.Documents[1].Detail);
+        Assert.True(settings.Documents[1].Failed);
+        Assert.Equal("12 passages · added 15 Sep 2026", settings.Documents[2].Detail);
         Assert.Equal("4 documents · reading 1, 1 could not be read", settings.DocumentsSummary);
         Assert.True(settings.DocumentsExpanded, "work or a failure opens the list");
         Assert.True(settings.DocumentsPresent);
@@ -771,12 +771,12 @@ public class SettingsViewModelTest
         engine.GuidanceDocuments.Add(Document(3, "PMR", "ready", 310, pages: 41));
         var settings = new SettingsViewModel(TempPreferences(), client: engine);
 
-        Assert.Equal(["Locked", "PMR", "Scan"], settings.Documents.Select(d => d.Name));
+        Assert.Equal(["Locked", "Scan", "PMR"], settings.Documents.Select(d => d.Name));
         Assert.Equal("Cannot be read: the PDF is password protected.", settings.Documents[0].Detail);
-        Assert.Equal("41 pages · 310 passages · added 15 Sep 2026", settings.Documents[1].Detail);
         Assert.Equal(
             "Cannot be searched: 38 of 40 pages are images with no text.",
-            settings.Documents[2].Detail);
+            settings.Documents[1].Detail);
+        Assert.Equal("41 pages · 310 passages · added 15 Sep 2026", settings.Documents[2].Detail);
     }
 
     [Fact]

@@ -104,6 +104,9 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
     public Func<string, Task>? SearchQueryRequested { get; set; }
 
+    /// <summary>The cards on screen were replaced.</summary>
+    public Action? CardsShown { get; set; }
+
     /// <summary>A card's Show in document and Open, answered by the page view.</summary>
     public Func<GuidanceRecommendation, Task>? ShowInDocumentRequested { get; set; }
 
@@ -231,6 +234,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(QueryShown))]
     private void ClearQuery()
     {
+        Query = "";
         _queryText = "";
         _queryResults = null;
         QuerySearching = false;
@@ -329,8 +333,13 @@ public sealed partial class GuidanceViewModel : ObservableObject
             return false;
         }
 
-        StaleCaption = DocumentsStaleCaption;
-        Stale = true;
+        // A note edit stays the stronger reason, as it does while the session is open
+        if (!Stale)
+        {
+            StaleCaption = DocumentsStaleCaption;
+            Stale = true;
+        }
+
         return true;
     }
 
@@ -339,10 +348,17 @@ public sealed partial class GuidanceViewModel : ObservableObject
     {
         ApplyRecord(result);
         NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
-        FoundIn = Elapsed(_noteClock);
+        ShowFoundIn(_noteClock);
     }
 
     public void ApplyFailed() => Section = GuidanceSection.Failed;
+
+    // Cleared first, so two searches of the same length still announce the second
+    private void ShowFoundIn(Stopwatch clock)
+    {
+        FoundIn = "";
+        FoundIn = Elapsed(clock);
+    }
 
     // A query reply after Clear or a new consultation belongs to nothing on screen
     public void ApplyQueryReady(JsonElement result)
@@ -355,7 +371,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _queryResults = ReadResults(result, false);
         QuerySearching = false;
         QueryFailed = false;
-        FoundIn = Elapsed(_queryClock);
+        ShowFoundIn(_queryClock);
         QueryChanged();
     }
 
@@ -474,6 +490,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
 
         OnPropertyChanged(nameof(CardsVisible));
         OnPropertyChanged(nameof(Summary));
+        CardsShown?.Invoke();
     }
 
     private static string Count(int n, string noun) => GuidanceCard.Count(n, noun);

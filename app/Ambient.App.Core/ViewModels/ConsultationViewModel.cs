@@ -158,6 +158,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Guidance.SearchQueryRequested = SearchGuidanceAsync;
         Guidance.ShowInDocumentRequested = PageView.ShowAsync;
         Guidance.OpenDocumentRequested = PageView.OpenAsync;
+        Guidance.CardsShown = () => PageView.KeepOnlyFor(Guidance.Cards);
         PageView.Request = (method, parameters) =>
             _engine.RequestAsync(method, parameters, RequestTimeout);
         PageView.Report = line => Status.Append(line);

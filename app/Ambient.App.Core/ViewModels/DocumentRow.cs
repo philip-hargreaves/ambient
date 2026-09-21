@@ -122,5 +122,5 @@ public sealed partial class DocumentRow : ObservableObject
     }
 
     private static int Int(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.TryGetInt32(out var n) ? n : 0;
+        (int)GuidanceRecommendation.Numeric(element, property);
 }

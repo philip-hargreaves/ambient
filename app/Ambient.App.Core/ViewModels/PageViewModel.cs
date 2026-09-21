@@ -124,6 +124,16 @@ public sealed partial class PageViewModel : ObservableObject
         }
     }
 
+    /// <summary>Closes the view when the passage it shows is no longer among the cards.</summary>
+    public void KeepOnlyFor(IEnumerable<GuidanceCard> cards)
+    {
+        if (Visible && _shown is not null
+            && !cards.Any(card => card.Recommendations.Any(r => r.ChunkId == _shown.ChunkId)))
+        {
+            Hide();
+        }
+    }
+
     public void Hide()
     {
         Visible = false;

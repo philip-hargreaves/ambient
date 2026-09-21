@@ -487,6 +487,39 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
+    public void EverySearchAnnouncesItsTimingEvenWhenTheTextRepeats()
+    {
+        var guidance = new GuidanceViewModel();
+        var announced = 0;
+        guidance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GuidanceViewModel.FoundIn) && guidance.FoundIn.Length > 0)
+            {
+                announced++;
+            }
+        };
+
+        guidance.SearchStarted();
+        guidance.ApplyReady(Ready("abc", [Result("fx100-1_1_2")]));
+        guidance.SearchStarted();
+        guidance.ApplyReady(Ready("abc", [Result("fx100-1_1_2")]));
+
+        Assert.Equal(2, announced);
+        Assert.Equal("found in 0.0 s", guidance.FoundIn);
+    }
+
+    [Fact]
+    public async Task AReopenedNoteEditedAndOlderThanTheDocumentsKeepsTheNoteCaption()
+    {
+        var (session, _, _) = await ReopenedAsync(
+            Record([Result("fx100-1_1_2")], stale: true, documentsChanged: true));
+
+        Assert.True(session.Guidance.Stale);
+        Assert.Equal(
+            "This guidance was found before your note edits.", session.Guidance.StaleCaption);
+    }
+
+    [Fact]
     public async Task AReopenedNoteOlderThanTheDocumentsIsStaleAndSearchesAgainByItself()
     {
         var (session, engine, _) = await ReopenedAsync(
@@ -631,6 +664,7 @@ public class GuidanceViewModelTest
 
         guidance.ClearQueryCommand.Execute(null);
         Assert.False(guidance.QueryShown);
+        Assert.Equal("", guidance.Query);
         Assert.Equal("", guidance.FoundIn);
         Assert.Equal(["fx100-1_1_2", "fx100-1_1_3"], Shown(guidance));
     }
