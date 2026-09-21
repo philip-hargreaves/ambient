@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Ambient.App.Core.ViewModels;
 using Ambient.App.Services;
 using Windows.Graphics;
 
@@ -7,8 +8,11 @@ namespace Ambient.App;
 
 public sealed partial class MainWindow : Window
 {
-    public MainWindow(NavigationService navigation)
+    public StatusBarViewModel Status { get; }
+
+    public MainWindow(NavigationService navigation, StatusBarViewModel status)
     {
+        Status = status;
         InitializeComponent();
 
         ExtendsContentIntoTitleBar = true;

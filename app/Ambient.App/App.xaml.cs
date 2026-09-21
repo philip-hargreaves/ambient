@@ -96,6 +96,8 @@ public partial class App : Application
         services.AddSingleton<GuidanceViewModel>();
         services.AddSingleton<StatusBarViewModel>();
         services.AddSingleton<MicViewModel>();
+        services.AddSingleton(sp => new Core.Demo.DemoMode(
+            sp.GetRequiredService<AppPreferences>(), Path.Combine(localState, "masters.json")));
         services.AddSingleton<ConsultationViewModel>();
         services.AddSingleton<SessionControlsViewModel>();
         services.AddSingleton<ShellViewModel>();

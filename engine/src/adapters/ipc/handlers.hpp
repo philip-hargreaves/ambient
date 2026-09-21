@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <variant>
 
 #include "adapters/audio/capture_devices.hpp"
@@ -9,6 +10,7 @@
 #include "adapters/ipc/messages.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
+#include "core/playback.hpp"
 #include "core/session_controller.hpp"
 #include "ports/document_ingest.hpp"
 #include "ports/guidance_lane.hpp"
@@ -143,6 +145,12 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                      ambient::translate::TranslateLane* translate_lane = nullptr,
                      bool first_use = false, ambient::diar::AnchorStore* anchors = nullptr,
                      ambient::note::INoteLane* note_lane = nullptr, bool stray_note_host = false,
-                     const std::filesystem::path& demo_dir = {});
+                     const std::filesystem::path& demo_dir = {},
+                     ambient::audio::Playback* playback = nullptr);
+
+// The guidance/ready body for a session's stored search; nothing when the
+// session has none it can read
+std::optional<json> StoredGuidanceReady(ambient::store::ISessionStore& sessions,
+                                        const std::string& session);
 
 }  // namespace ambient::ipc

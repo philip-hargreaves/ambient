@@ -49,6 +49,7 @@
 #include "core/cli_args.hpp"
 #include "core/env_flag.hpp"
 #include "core/metrics.hpp"
+#include "core/playback.hpp"
 #include "core/session_controller.hpp"
 #include "core/throughput.hpp"
 
@@ -62,6 +63,12 @@ class WireEvents : public ambient::audio::ISessionEvents {
     void OnLevel(const ambient::audio::LevelReading& reading) override {
         server_.PushNotification("audio.level",
                                  {{"level", reading.level}, {"clipped", reading.clipped}});
+    }
+
+    void OnPlaybackLevel(const ambient::audio::LevelReading& reading, double seconds) override {
+        server_.PushNotification(
+            "audio.level",
+            {{"level", reading.level}, {"clipped", reading.clipped}, {"seconds", seconds}});
     }
 
     void OnTurn(const ambient::asr::Turn& turn) override {
@@ -493,10 +500,20 @@ int main(int argc, char* argv[]) {
                     server.PushNotification("guidance/documentsChanged", nlohmann::json::object());
                 }
             });
-        ambient::ipc::RegisterMethods(server, controller, model_store, session_store, &metrics,
-                                      &ov_runtime, translator.get(), translate_lane.get(),
-                                      first_use, &anchors, note_lane, stray_note_host,
-                                      models_root.parent_path() / "demo" / "reflections");
+        // Demo playback ends in a review of the copy, with its stored guidance shown
+        ambient::audio::Playback playback(
+            events, session_store,
+            {.finalised = [&controller](const std::string& id) { controller.Open(id); },
+             .guidance =
+                 [&server, &session_store](const std::string& id) {
+                     if (const auto body = ambient::ipc::StoredGuidanceReady(session_store, id)) {
+                         server.PushNotification("guidance/ready", *body);
+                     }
+                 }});
+        ambient::ipc::RegisterMethods(
+            server, controller, model_store, session_store, &metrics, &ov_runtime, translator.get(),
+            translate_lane.get(), first_use, &anchors, note_lane, stray_note_host,
+            models_root.parent_path() / "demo" / "reflections", &playback);
         ambient::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
                                               guidance_lane, ingest);
         server.ServeOneClient();

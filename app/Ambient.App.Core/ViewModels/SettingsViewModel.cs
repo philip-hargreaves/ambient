@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Demo;
 using Ambient.App.Core.Metrics;
 using Ambient.Client;
 
@@ -29,6 +30,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly StatusBarViewModel? _status;
     private readonly IMachineInfoProvider? _machine;
     private readonly PerformanceCollector? _metrics;
+    private readonly DemoMode? _demo;
     private readonly IEngineClient? _client;
     private readonly IUiDispatcher? _dispatcher;
     private readonly string _exportDirectory;
@@ -38,9 +40,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         ISessionState? session = null, StatusBarViewModel? status = null,
         IMachineInfoProvider? machine = null, PerformanceCollector? metrics = null,
         string? exportDirectory = null, IEngineClient? client = null,
-        IUiDispatcher? dispatcher = null)
+        IUiDispatcher? dispatcher = null, DemoMode? demo = null)
     {
         _preferences = preferences;
+        _demo = demo;
         _engine = engine;
         _session = session;
         _status = status;
@@ -54,6 +57,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         // handlers (persist, confirm, engine restart) must not fire here
         _initialising = true;
         DemoTrayEnabled = preferences?.DemoTrayEnabled ?? false;
+        DemoModeEnabled = demo?.Enabled ?? false;
         SeedDataEnabled = preferences?.SeedDataEnabled ?? false;
         NpuTranscription = preferences?.NpuTranscription ?? false;
         CollectPerformanceData = preferences?.CollectPerformanceData ?? false;
@@ -848,6 +852,42 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             _preferences.DemoTrayEnabled = value;
             _preferences.Save();
+        }
+    }
+
+    /// <summary>Demo mode: Record plays a saved run back. A developer control.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DemoTrackOptions))]
+    [NotifyPropertyChangedFor(nameof(DemoTrackIndex))]
+    public partial bool DemoModeEnabled { get; set; }
+
+    partial void OnDemoModeEnabledChanged(bool value)
+    {
+        if (!_initialising && _demo is not null)
+        {
+            _demo.Enabled = value;
+        }
+    }
+
+    /// <summary>The tracks with a saved run, as the picker's items.</summary>
+    public IReadOnlyList<string> DemoTrackOptions => _demo?.Tracks ?? [];
+
+    public bool DemoTracksAvailable => DemoTrackOptions.Count > 0;
+
+    public string DemoModeCaption => DemoTracksAvailable
+        ? "Record plays the chosen saved run back in seconds; nothing is transcribed or written"
+        : "No saved runs yet: record them with tools/demo/record_masters.py";
+
+    /// <summary>The chosen track as the picker's selection; unknown falls back to the first.</summary>
+    public int DemoTrackIndex
+    {
+        get => Math.Max(0, DemoTrackOptions.ToList().IndexOf(_demo?.Track ?? ""));
+        set
+        {
+            if (_demo is not null && value >= 0 && value < DemoTrackOptions.Count)
+            {
+                _demo.Track = DemoTrackOptions[value];
+            }
         }
     }
 

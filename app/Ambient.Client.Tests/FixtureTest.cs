@@ -63,6 +63,19 @@ public class FixtureTest
     }
 
     [Fact]
+    public void PlaybackFixturesNameTheSessionAndCarryTheClock()
+    {
+        var start = LoadFixture("session-start-playback.json").RootElement;
+        Assert.Equal("session/start", start.GetProperty("method").GetString());
+        Assert.False(string.IsNullOrEmpty(
+            start.GetProperty("params").GetProperty("playback").GetProperty("id").GetString()));
+
+        var level = LoadFixture("audio-level-playback.json").RootElement;
+        Assert.Equal("audio.level", level.GetProperty("method").GetString());
+        Assert.Equal(271.4, level.GetProperty("params").GetProperty("seconds").GetDouble());
+    }
+
+    [Fact]
     public void SessionInterruptedFixtureCarriesReasonAndDetail()
     {
         var root = LoadFixture("session-interrupted.json").RootElement;

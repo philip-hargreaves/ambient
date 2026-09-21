@@ -233,6 +233,30 @@ public class SettingsViewModelTest
     }
 
     [Fact]
+    public void DemoModeRowFollowsTheSavedRuns()
+    {
+        var masters = Path.Combine(Path.GetTempPath(), $"ambient-masters-{Guid.NewGuid():N}.json");
+        File.WriteAllText(masters, """{"Elbow swelling":{"id":"s-elbow","audioSeconds":540},"Chest pain":{"id":"s-chest","audioSeconds":457}}""");
+        var preferences = TempPreferences();
+        var demo = new Ambient.App.Core.Demo.DemoMode(preferences, masters, []);
+        var settings = new SettingsViewModel(preferences, demo: demo);
+
+        Assert.True(settings.DemoTracksAvailable);
+        Assert.False(settings.DemoModeEnabled);
+        settings.DemoModeEnabled = true;
+        settings.DemoTrackIndex = 1;
+        Assert.True(demo.Enabled);
+        Assert.Equal("s-chest", demo.Master!.SessionId);
+        Assert.True(preferences.DemoMode);
+        Assert.Equal("Chest pain", preferences.DemoTrack);
+
+        var none = new SettingsViewModel(preferences, demo: new Ambient.App.Core.Demo.DemoMode(
+            preferences, Path.Combine(Path.GetTempPath(), "missing.json"), []));
+        Assert.False(none.DemoTracksAvailable);
+        Assert.Contains("record_masters", none.DemoModeCaption);
+    }
+
+    [Fact]
     public void PreferencesSeedTheToggles()
     {
         var preferences = TempPreferences();

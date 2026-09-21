@@ -48,6 +48,14 @@
                     Command="{x:Bind ViewModel.WriteAnywayCommand}"
                     Content="Write a note anyway"
                     Visibility="{x:Bind ViewModel.CanWriteAnyway, Mode=OneWay}" />
+                <!-- Demo records only: a written case stands in as the note -->
+                <ComboBox
+                    MinWidth="150"
+                    AutomationProperties.Name="Example case"
+                    ItemsSource="{x:Bind ViewModel.ExampleCaseTitles, Mode=OneWay}"
+                    PlaceholderText="Example case"
+                    SelectedIndex="{x:Bind ViewModel.ExampleCaseIndex, Mode=TwoWay}"
+                    Visibility="{x:Bind ViewModel.ExampleCasesVisible, Mode=OneWay}" />
                 <ComboBox
                     x:Name="StyleBox"
                     MinWidth="104"

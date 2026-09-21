@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Ambient.App.Core.Demo;
 using Ambient.App.Core.Hosting;
 using Ambient.Client;
 
@@ -40,6 +41,46 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     /// <summary>The active session's replay request; null for a microphone.</summary>
     [ObservableProperty]
     public partial ReplayRequest? ActiveReplay { get; private set; }
+
+    /// <summary>The saved run being played back; null unless a demo plays.</summary>
+    [ObservableProperty]
+    public partial DemoMaster? ActivePlayback { get; private set; }
+
+    // The badge shows for demo mode, and for a demo record until the next idle
+    private bool _demoRecord;
+
+    private void ShowDemo(bool record)
+    {
+        _demoRecord = record;
+        Status.Demo = record || _demo is { Enabled: true };
+        Note.ExampleCasesVisible = record && Note.ExampleCases.Count > 0;
+        if (!record)
+        {
+            Note.ExampleCaseIndex = -1;
+        }
+    }
+
+    // An example case stands in as the note of a demo record: the guidance
+    // search runs on it and the patient sheet can be rewritten from it
+    private async Task ApplyExampleCaseAsync(DemoCase example)
+    {
+        if (State != SessionState.Review || !_demoRecord)
+        {
+            return;
+        }
+
+        Note.ClinicalNoteText = example.Text;
+        Status.Append($"Example case: {example.Title}");
+        await SearchGuidanceAsync().ConfigureAwait(true);
+    }
+
+    partial void OnStateChanged(SessionState value)
+    {
+        if (value == SessionState.Idle)
+        {
+            ShowDemo(false);
+        }
+    }
 
     /// <summary>
     /// True once the sealed transcript has been fetched; the panes open on
@@ -84,17 +125,25 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         IEngineClient engine, IUiDispatcher dispatcher,
         TranscriptViewModel transcript, NoteViewModel note, StatusBarViewModel status,
         Metrics.PerformanceCollector? metrics = null, TimeSpan? readinessPollInterval = null,
-        AppPreferences? preferences = null, GuidanceViewModel? guidance = null)
+        AppPreferences? preferences = null, GuidanceViewModel? guidance = null,
+        DemoMode? demo = null)
     {
         _engine = engine;
         _dispatcher = dispatcher;
         _metrics = metrics;
         _preferences = preferences;
+        _demo = demo;
         _readinessPollInterval = readinessPollInterval ?? TimeSpan.FromSeconds(2);
         Transcript = transcript;
         Note = note;
         Guidance = guidance ?? new GuidanceViewModel();
         Status = status;
+        if (demo is not null)
+        {
+            demo.Changed += () => dispatcher.Post(() => ShowDemo(_demoRecord));
+            Status.Demo = demo.Enabled;
+        }
+
         EngineReady = engine.Connected;
         Note.TranslateRequested = TranslateAsync;
         Note.RegenerateRequested = RegenerateNoteAsync;
@@ -103,6 +152,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.ReflectRequested = ReflectAsync;
         Note.SaveNoteRequested = SaveNoteAsync;
         Note.SavePatientRequested = SavePatientAsync;
+        Note.ExampleCases = demo?.Cases ?? [];
+        Note.ExampleCaseRequested = example => _ = ApplyExampleCaseAsync(example);
         Guidance.SearchNoteRequested = SearchGuidanceAsync;
         Guidance.SearchQueryRequested = SearchGuidanceAsync;
         Guidance.ShowInDocumentRequested = PageView.ShowAsync;
@@ -385,6 +436,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     private string? _finalisedSessionId;
     private string _finalisedStartedAt = "";
+    private readonly DemoMode? _demo;
 
     /// <summary>The view opens the reflection sheet for (session id, started at).</summary>
     public Func<string, string, Task>? OpenReflection { get; set; }
@@ -537,7 +589,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     /// while recording. Unsaved edits to the previous review are saved first.
     /// </summary>
     public async Task<bool> OpenStoredSessionAsync(string id, string startedLabel = "",
-        string startedAt = "", bool hasReflection = false)
+        string startedAt = "", bool hasReflection = false, bool demo = false)
     {
         if (State is SessionState.Recording or SessionState.Finalising)
         {
@@ -550,6 +602,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return false;
         }
 
+        ShowDemo(demo);
         _finalisedSessionId = id;
         _finalisedStartedAt = startedAt;
         _recordingSessionId = null;
@@ -667,6 +720,16 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
+        // A demo has no audio to resume from
+        if (ActivePlayback is not null)
+        {
+            State = SessionState.Idle;
+            ActivePlayback = null;
+            Status.SetMicVisible(false);
+            Status.Append("Playback interrupted");
+            return;
+        }
+
         try
         {
             var replay = ActiveReplay;
@@ -709,6 +772,13 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
+        // Demo mode: the record button plays the chosen saved run back
+        if (replay is null && _demo is { Enabled: true } && _demo.Master is { } master)
+        {
+            await StartPlaybackAsync(master).ConfigureAwait(true);
+            return;
+        }
+
         // Keep consultations off: the engine erases the session once it is left
         var retain = _preferences?.KeepConsultations ?? true;
         var parameters = replay is null
@@ -720,13 +790,48 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 retain,
                 replay = new { path = replay.Path, speed = replay.Speed, monitor = replay.Monitor },
             };
+        if (!await BeginAsync(parameters, replay, null).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        Status.Append(replay is null ? "Recording" : "Replaying");
+        _metrics?.SessionStarted(
+            replay is null ? "mic" : "replay", replay?.Speed ?? 0,
+            replay is null ? null : Path.GetFileNameWithoutExtension(replay.Path));
+    }
+
+    /// <summary>
+    /// A stored consultation played back as a demo: the same states, sped up,
+    /// nothing generated. Never a performance measurement.
+    /// </summary>
+    public async Task StartPlaybackAsync(DemoMaster playback)
+    {
+        if (State != SessionState.Idle)
+        {
+            return;
+        }
+
+        var parameters = new { playback = new { id = playback.SessionId } };
+        if (!await BeginAsync(parameters, null, playback).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        ShowDemo(true);
+        Status.Append("Recording");
+    }
+
+    private async Task<bool> BeginAsync(
+        object parameters, ReplayRequest? replay, DemoMaster? playback)
+    {
         // Beyond the engine's 10 s no-audio deadline: a Bluetooth link wakes in
         // seconds and a timeout here would abandon a started session
         var response = await RequestValueAsync(
             "session/start", TimeSpan.FromSeconds(30), parameters).ConfigureAwait(true);
         if (response is null)
         {
-            return;
+            return false;
         }
 
         _recordingSessionId = response.Value.TryGetProperty("sessionId", out var id)
@@ -735,13 +840,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         AudioSeconds = 0;
         Phase = FinalisePhase.None;
         ActiveReplay = replay;
+        ActivePlayback = playback;
         State = SessionState.Recording;
         Status.ResetThroughput();
         Status.SetMicVisible(true);
-        Status.Append(replay is null ? "Recording" : "Replaying");
-        _metrics?.SessionStarted(
-            replay is null ? "mic" : "replay", replay?.Speed ?? 0,
-            replay is null ? null : Path.GetFileNameWithoutExtension(replay.Path));
+        return true;
     }
 
     public async Task SetPausedAsync(bool paused)
@@ -776,7 +879,13 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Phase = FinalisePhase.Sealing;
         Paused = false;
         ActiveReplay = null;
-        _metrics?.StopRequested();
+        // A playback's timings are staged, so the collector never sees them
+        if (ActivePlayback is null)
+        {
+            _metrics?.StopRequested();
+        }
+
+        ActivePlayback = null;
         Status.SetMicVisible(false);
         Status.SetDecodeActive(true);  // the tail decode keeps the RT figure up
         Note.Apply(NotePipelineEvent.NoteWritingStarted);
@@ -840,7 +949,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         finally
         {
             Status.SetDecodeActive(false);  // sealed: the tail decode is over
-            Phase = FinalisePhase.Note;
+            // A note that began streaming during the fetch keeps its panes
+            if (Phase < FinalisePhase.Note)
+            {
+                Phase = FinalisePhase.Note;
+            }
         }
     }
 
@@ -859,6 +972,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         State = SessionState.Idle;
         Paused = false;
         ActiveReplay = null;
+        ActivePlayback = null;
         Status.SetMicVisible(false);
         Status.Append("Cancelled");
     }
@@ -1060,9 +1174,17 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Status.SetMicLevel(
                     parameters.GetProperty("level").GetDouble(),
                     parameters.GetProperty("clipped").GetBoolean());
+                // A playback's readings carry the position its clock has reached
                 if (State == SessionState.Recording)
                 {
-                    AudioSeconds += 0.1;
+                    AudioSeconds = parameters.TryGetProperty("seconds", out var at)
+                        ? at.GetDouble()
+                        : AudioSeconds + 0.1;
+                    // A playback stops itself at the end of its clock
+                    if (ActivePlayback is { } playing && AudioSeconds >= playing.AudioSeconds - 0.05)
+                    {
+                        _ = StopRecordingAsync();
+                    }
                 }
 
                 break;
@@ -1071,6 +1193,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 State = SessionState.Idle;
                 Paused = false;
                 ActiveReplay = null;
+                ActivePlayback = null;
                 Note.Reset();
                 Guidance.Reset();
                 PageView.Hide();

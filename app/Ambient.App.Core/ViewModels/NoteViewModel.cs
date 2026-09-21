@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Ambient.App.Core.Demo;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -27,6 +28,29 @@ public sealed partial class NoteViewModel : ObservableObject
 
     partial void OnTranslationLanguageChanged(string value) =>
         OnPropertyChanged(nameof(TranslationCaption));
+
+    /// <summary>Example cases, offered on a demo record in place of the note.</summary>
+    public IReadOnlyList<DemoCase> ExampleCases { get; set; } = [];
+
+    public IReadOnlyList<string> ExampleCaseTitles => ExampleCases.Select(c => c.Title).ToList();
+
+    [ObservableProperty]
+    public partial bool ExampleCasesVisible { get; set; }
+
+    /// <summary>The picker's selection; -1 shows its placeholder. Choosing applies the case.</summary>
+    [ObservableProperty]
+    public partial int ExampleCaseIndex { get; set; } = -1;
+
+    partial void OnExampleCaseIndexChanged(int value)
+    {
+        if (value >= 0 && value < ExampleCases.Count)
+        {
+            ExampleCaseRequested?.Invoke(ExampleCases[value]);
+        }
+    }
+
+    /// <summary>Set by the consultation view model, which owns the engine.</summary>
+    public Action<DemoCase>? ExampleCaseRequested { get; set; }
 
     /// <summary>Note options as the engine names them: "prose" or "soap".</summary>
     [ObservableProperty]
@@ -282,6 +306,7 @@ public sealed partial class NoteViewModel : ObservableObject
         TranslationRunning = false;
         EditedStamp = "";  // the rewrite replaces the edit
         PatientStale = false;
+        ExampleCaseIndex = -1;
     }
 
     /// <summary>
@@ -457,5 +482,6 @@ public sealed partial class NoteViewModel : ObservableObject
         EditedStamp = "";
         RegenerateWarningOpen = false;
         PatientStale = false;
+        ExampleCaseIndex = -1;
     }
 }

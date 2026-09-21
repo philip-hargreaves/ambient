@@ -312,6 +312,24 @@
                                 IsOn="{x:Bind ViewModel.DemoTrayEnabled, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
+                            Description="{x:Bind ViewModel.DemoModeCaption}"
+                            Title="Demo mode">
+                            <ToggleSwitch
+                                MinWidth="0"
+                                AutomationProperties.Name="Demo mode"
+                                IsEnabled="{x:Bind ViewModel.DemoTracksAvailable}"
+                                IsOn="{x:Bind ViewModel.DemoModeEnabled, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
+                            Description="The consultation the record button plays back"
+                            Title="Demo consultation"
+                            Visibility="{x:Bind ViewModel.DemoModeEnabled, Mode=OneWay}">
+                            <ComboBox
+                                MinWidth="160"
+                                ItemsSource="{x:Bind ViewModel.DemoTrackOptions, Mode=OneWay}"
+                                SelectedIndex="{x:Bind ViewModel.DemoTrackIndex, Mode=TwoWay}" />
+                        </views:SettingsRow>
+                        <views:SettingsRow
                             Description="A year of consultations and reflections from PriMock57 recordings"
                             Title="Seed data">
                             <ToggleSwitch
