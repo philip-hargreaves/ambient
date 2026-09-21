@@ -123,5 +123,29 @@ TEST(IReranker, TheSeamCompilesAndCanBeANoOp) {
     EXPECT_EQ(none.Score("q", {"a", "b"}).size(), 2u);
 }
 
+TEST(NearDuplicate, AQualityStatementRestatingItsGuidelineIsADuplicate) {
+    const char* const statement =
+        "Statement 1 Adults with suspected persistent synovitis affecting more than 1 joint, or "
+        "the small joints of the hands and feet, are referred to rheumatology services within 3 "
+        "working days of presenting in primary care. [2013, updated 2020]";
+    const char* const measure =
+        "Adults with pain, swelling and stiffness of more than 1 joint, or the small joints of "
+        "the hands or feet, are referred within 3 working days of their GP appointment to a "
+        "specialist in rheumatology. Early referral means that they can be diagnosed and start "
+        "treatment sooner if they have rheumatoid arthritis.";
+    EXPECT_TRUE(NearDuplicate(statement, measure));
+
+    const char* const twelve =
+        "12. During bisphosphonate or denosumab therapy, advise patients to report any "
+        "unexplained thigh, groin or hip pain and if such symptoms develop, the femur should be "
+        "imaged (Strong recommendation).";
+    const char* const thirteen =
+        "13. If an atypical femoral fracture is identified, image the contralateral femur "
+        "(Strong recommendation).";
+    EXPECT_FALSE(NearDuplicate(twelve, thirteen)) << "neighbours are not duplicates";
+    EXPECT_FALSE(NearDuplicate("Key words: gout.", "Key words: gout, urate."))
+        << "too short to judge";
+}
+
 }  // namespace
 }  // namespace ambient::guidance

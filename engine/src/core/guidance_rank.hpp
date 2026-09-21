@@ -4,6 +4,7 @@
 #include <cctype>
 #include <initializer_list>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -216,6 +217,33 @@ inline bool PopulationConflict(std::string_view note, std::string_view recommend
 }
 
 // "NG100 1.1.1, Rheumatoid arthritis in adults: management"
+// Two passages saying the same thing, as a quality standard restates its
+// guideline: half the shorter one's content words appear in the other
+inline constexpr double kDuplicateOverlap = 0.5;
+
+inline bool NearDuplicate(std::string_view a, std::string_view b) {
+    const auto words = [](std::string_view s) {
+        std::set<std::string> out;
+        std::string word;
+        for (const char c : std::string(s) + " ") {
+            if (std::isalnum(static_cast<unsigned char>(c))) {
+                word.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+            } else {
+                if (word.size() > 3) out.insert(word);
+                word.clear();
+            }
+        }
+        return out;
+    };
+    const auto wa = words(a);
+    const auto wb = words(b);
+    const auto smaller = std::min(wa.size(), wb.size());
+    if (smaller < 5) return false;
+    std::size_t shared = 0;
+    for (const auto& w : wa) shared += wb.count(w);
+    return static_cast<double>(shared) / static_cast<double>(smaller) >= kDuplicateOverlap;
+}
+
 inline std::string Citation(std::string_view code, std::string_view number,
                             std::string_view title) {
     std::string out(code);

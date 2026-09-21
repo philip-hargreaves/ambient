@@ -160,6 +160,18 @@ void Retriever::PublishUploads(std::shared_ptr<const UploadSnapshot> uploads) {
     uploads_ = std::move(uploads);
 }
 
+namespace {
+
+// A card that says what a shown card already says spends a slot for nothing
+bool Restates(const std::vector<Result>& shown, const std::string& text) {
+    for (const auto& result : shown) {
+        if (NearDuplicate(result.text, text)) return true;
+    }
+    return false;
+}
+
+}  // namespace
+
 Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     std::lock_guard<std::mutex> lock(search_mutex_);
     Load();
@@ -242,6 +254,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
                              row.name.c_str());
                 continue;
             }
+            if (Restates(out.shown, row.text)) continue;
             Result result;
             result.corpus = "upload:" + std::to_string(row.document);
             result.chunk_id = result.corpus + "-" + std::to_string(row.ord);
@@ -281,6 +294,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
                              cite.title.c_str());
                 continue;
             }
+            if (Restates(out.shown, chunk.text)) continue;
             Result result;
             result.corpus = store->Info().id;
             result.chunk_id = cite.chunk_id;
