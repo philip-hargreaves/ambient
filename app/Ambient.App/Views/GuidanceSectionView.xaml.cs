@@ -7,7 +7,7 @@ using Ambient.App.Core.ViewModels;
 
 namespace Ambient.App.Views;
 
-/// <summary>The Guidelines section under the clinical note; hosted by the note editor.</summary>
+/// <summary>The Guidelines section under the clinical note, hosted by the note editor.</summary>
 public sealed partial class GuidanceSectionView : UserControl
 {
     private readonly StatusBarViewModel _status;

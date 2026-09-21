@@ -34,7 +34,7 @@ def nice_chunks():
             for rec in chapter["recommendations"]:
                 if rec.get("kind") != "recommendation":
                     continue
-                # Some guidelines render a chapter twice (NG12, NG126, NG259); one chunk per id
+                # Some guidelines render a chapter twice (NG12, NG126, NG259). One chunk per id
                 if rec["id"] in seen:
                     duplicates += 1
                     continue

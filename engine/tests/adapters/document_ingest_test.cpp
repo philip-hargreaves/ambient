@@ -151,7 +151,7 @@ struct Harness {
     }
 };
 
-// Attaches a listener and waits for any document to turn ready
+// Replaces the listener and waits for any document to turn ready
 bool WaitReady(DocumentIngest& ingest) {
     std::mutex mutex;
     bool ready = false;
@@ -346,7 +346,7 @@ TEST(DocumentIngest, AddCopiesIntoTheFolderAndSkipsWhatItCannotTake) {
     EXPECT_EQ(accepted.skipped[0].reason, "unreadable");
     EXPECT_EQ(accepted.skipped[1].reason, "unsupported");
     EXPECT_TRUE(std::filesystem::exists(h.folder / "Gout local guideline.md"));
-    // Add copies then scans; a scan under load may take the file on the next pass
+    // Add copies then scans. A scan under load may take the file on the next pass
     const auto id = h.IdOf("Gout local guideline.md");
     ASSERT_NE(id, 0);
     ASSERT_TRUE(h.WaitForState(id, "ready"));

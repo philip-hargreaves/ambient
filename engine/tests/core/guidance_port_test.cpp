@@ -66,11 +66,5 @@ struct StubRetriever : IGuidanceRetriever {
     }
 };
 
-TEST(GuidancePort, DocumentCallsAreNotSupportedYet) {
-    StubRetriever stub;
-    EXPECT_THROW(stub.AddDocument("C:/somewhere/guideline.pdf"), std::logic_error);
-    EXPECT_THROW(stub.RemoveDocument("uploads"), std::logic_error);
-}
-
 }  // namespace
 }  // namespace ambient::guidance

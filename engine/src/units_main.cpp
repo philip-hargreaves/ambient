@@ -1,5 +1,5 @@
 // Prints the units the ingest would store for a PDF, one JSON object per
-// line, for the gates the plan runs on real documents
+// line. A dev tool for checking real documents by hand
 #include <cstdint>
 #include <cstdio>
 #include <exception>

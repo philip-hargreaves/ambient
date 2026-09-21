@@ -5,7 +5,7 @@
   python gold.py build-notes        -> rag/results/queries/notes-<date>.jsonl (whole notes per labelled PriMock consultation, four sources)
   python gold.py build-transcripts  -> rag/results/queries/transcripts-<date>.jsonl (transcript, doctor turns, note plus doctor turns)
 
-Gold inputs (each optional; missing sets are reported and skipped):
+Gold inputs, each optional. A missing set is reported and skipped:
   rag/gold/st-georges-cases/cases.jsonl       {qid, text, expected_ids, expected_codes}
   rag/gold/ucl-triplets/triplets.csv + mapping.jsonl
   rag/gold/primock-statements/statements.jsonl {qid, text, expected_ids, expected_codes, mode}
@@ -24,7 +24,7 @@ import time
 from common import GOLD, RESULTS, latest_chunks, log, read_jsonl, write_jsonl
 
 UCL = GOLD / "ucl-triplets"
-NON_NICE = {"anaphylaxis"}  # Resuscitation Council UK text, not in the corpus
+NON_NICE = {"anaphylaxis"}  # Resuscitation Council UK text, absent from the corpus
 GUIDELINE_CODES = [
     ("urinary", "ng109"), ("type1", "ng17"), ("type 1", "ng17"), ("type 2", "ng28"), ("thyroid", "ng145"),
     ("ovarian", "cg122"), ("hypertension", "ng136"), ("gastro", "cg184"), ("heart failure", "ng106"),
@@ -91,7 +91,7 @@ def map_ucl():
 
 
 def split_sentences(text: str) -> list[str]:
-    # Harness-only splitter; the engine uses ICU with clinical suppressions
+    # Harness-only splitter. The engine uses ICU with clinical suppressions
     parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])|\n+", text)
     return [p.strip() for p in parts if len(p.split()) >= 3]
 
@@ -106,7 +106,8 @@ def ngrams(text: str, n: int = 4) -> set[tuple]:
 
 
 def overlap_report(queries: list[dict], chunks: dict) -> list[str]:
-    """Log median and max token Jaccard per set; return synthetic rows sharing a 4-gram with an expected recommendation."""
+    """Logs median and max token Jaccard per set. Returns the synthetic rows that share a 4-gram
+    with a recommendation they expect."""
     per_set, offending = {}, []
     for q in queries:
         if not q["expected_ids"]:
@@ -202,7 +203,7 @@ def build():
 
 VAULT = GOLD.parents[2] / "intelliscribe"  # the docs and data vault beside the repo
 NOTE_SOURCES = {
-    # whole notes for the PriMock consultations that carry statement labels; labels pooled per consultation
+    # Whole notes for the PriMock consultations that carry statement labels, pooled per consultation
     "notes-human": (VAULT / "data" / "primock57" / "notes", "json"),
     "notes-4b": (VAULT / "bench" / "summarisation" / "notes" / "tier-constrained-standard", "md"),
     "notes-9b": (VAULT / "bench" / "summarisation" / "notes" / "tier-default-standard", "md"),
@@ -252,7 +253,7 @@ TRANSCRIPTS = VAULT / "data" / "primock57" / "transcripts"
 
 
 def read_textgrid(path) -> list[tuple[float, str]]:
-    """(start, text) per spoken interval; annotation tags such as <UNIN/> removed."""
+    """(start, text) per spoken interval, with annotation tags such as <UNIN/> removed."""
     out = []
     for m in re.finditer(r'xmin = ([\d.]+)\s+xmax = [\d.]+\s+text = "((?:[^"]|"")*)"', path.read_text(encoding="utf-8", errors="replace")):
         t = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m.group(2).replace('""', '"'))).strip()

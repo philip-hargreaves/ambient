@@ -156,7 +156,7 @@ TEST(Retriever, CitesTheGuidelineTheNoteDescribes) {
                   ", Fictional inflammatory joint disease: assessment and management");
     EXPECT_FALSE(results.shown[0].trigger.empty()) << "a sentence found it, not the whole note";
     EXPECT_EQ(results.floor, 0.2);
-    EXPECT_EQ(results.searched.size(), 2u);  // the two loaded corpora, not the stale one
+    EXPECT_EQ(results.searched.size(), 2u);  // the two loaded corpora, without the stale one
     const auto sentences = SplitSentences(note);
     for (const auto& r : results.shown) {
         EXPECT_EQ(r.corpus, "fixture-a");

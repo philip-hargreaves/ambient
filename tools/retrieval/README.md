@@ -53,7 +53,32 @@ native_check.py     C++ proof against the Python pipelines and the reference mod
 pdf_compare.py      word agreement, order, recommendation patterns, image-only detection
 vector_compare.py   numpy exact against hnswlib, usearch, sqlite-vec
 native/             proof.cpp: same embed and rerank through the GenAI C++ pipelines, for parity
+folder_study.py     offline study over the clinician's own folder: units, embeddings, ranking variants, blind judging, scoring
+folder_eval.py      the St George's cases, or every study query, through the engine the app ships
 ```
+
+## Folder study
+
+The shipped ranking was settled on the clinician's own folder, which has its own pair of scripts
+and its own working directory under `build/retrieval`.
+
+```
+python folder_study.py units                             engine chunker over the folder's PDFs
+python folder_study.py embed                             the shipped embedder over the units and the queries
+python folder_study.py check                             refuses gold that gives away its answer
+python folder_study.py run                               every ranking variant over every query
+python folder_study.py pool                              cards not yet judged, blinded, for the judge
+python folder_study.py score                             the variants against the judgments
+python folder_eval.py --mode note --tag before           the St George's cases through the engine
+python folder_eval.py --tag frozen study                 every study query through the engine
+python folder_study.py score runs-engine-frozen.jsonl    that engine run, judged the same way
+```
+
+`FOLDER_STUDY=<name>` moves the working directory, for the same study over a changed folder or
+chunker. The splitter, the exclusion filter, the vote and the floor in `folder_study.py` are ports
+of the engine's `guidance_query.hpp` and `guidance_rank.hpp`, and `folder_study.py parity <file>`
+proves the port against a `folder_eval.py` note-mode run. Close the app before any `folder_eval.py`
+run. Each script's docstring has the rest.
 
 ## Native proof
 

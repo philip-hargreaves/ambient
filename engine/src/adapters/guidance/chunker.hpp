@@ -38,8 +38,8 @@ bool IncludeDocument(const nlohmann::json& manifest_entry, const std::string& co
 std::vector<Chunk> ChunksFromDocument(const nlohmann::json& doc, std::set<std::string>& seen);
 
 // Plain or markdown text: paragraphs split on blank lines and collapsed to one
-// line; runs close at a recommendation heading, at kTargetWords, or before
-// kMaxWords; paragraphs under kMinParagraphWords are dropped
+// line. Runs close at a recommendation heading, at kTargetWords, or before
+// kMaxWords. Paragraphs under kMinParagraphWords are dropped
 std::vector<Chunk> ChunksFromText(const std::string& code, const std::string& title,
                                   const std::string& text, const std::string& url = "");
 

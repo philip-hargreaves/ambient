@@ -467,7 +467,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             GuidanceCard.Field(corpus, "attribution"), false);
     }
 
-    // Added documents
+    // ---- added documents --------------------------------------------------
 
     /// <summary>The documents in the guidelines folder: the batch in progress, then by name.</summary>
     public ObservableCollection<DocumentRow> Documents { get; } = [];
@@ -509,7 +509,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>The list is closed unless it was left open; work or a failure opens it.</summary>
+    /// <summary>The list is closed unless it was left open. Work or a failure opens it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DocumentsCollapsed))]
     public partial bool DocumentsExpanded { get; set; }
@@ -730,8 +730,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         folder.Length > 0
         && roots.Any(root => folder.StartsWith(root, StringComparison.OrdinalIgnoreCase));
 
-    // The summary follows every change; the first sign of work or a failure opens the
-    // list once, without making that the remembered choice
+    // The summary follows every change. The first sign of work or a failure opens
+    // the list once, without making that the remembered choice
     private void RefreshBatch()
     {
         OnPropertyChanged(nameof(DocumentsSummary));

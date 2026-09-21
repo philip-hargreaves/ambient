@@ -68,7 +68,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
               "corpus.db size differs from the manifest");
         Guard(models::Sha256File(path) == info.sha256, "corpus.db hash differs from the manifest");
 
-        // 3. a corpus file of this format, not left in WAL mode
+        // 3. a corpus file of this format, out of WAL mode
         store::Db db(path, store::Db::Mode::kImmutableReadOnly);
         Guard(db.ApplicationId() == static_cast<std::int64_t>(kCorpusApplicationId),
               "not a corpus file");
@@ -126,7 +126,7 @@ std::unique_ptr<CorpusStore> CorpusStore::Open(const std::filesystem::path& dir,
         store->matrix_.resize(rows * dim);
         store->cites_.reserve(rows);
 
-        // 7. shards are contiguous and the right length; then fill
+        // 7. shards are contiguous and the right length, then fill
         auto shards = store->db_.Prepare(
             "SELECT shard, first_ord, count, dim, data FROM guidance_vectors ORDER BY shard");
         std::int64_t expected_shard = 0, next_ord = 0;

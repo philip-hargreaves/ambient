@@ -50,14 +50,13 @@ struct Accepted {
     std::vector<Skipped> skipped;
 };
 
-// One page drawn for the page view: a BMP under the scratch folder, its
-// size, the document's page count and the chunk's boxes as JSON
+// One page drawn for the page view: a BMP under the scratch folder
 struct PageRender {
     std::filesystem::path path;
     int width = 0;
     int height = 0;
-    int pages = 0;
-    std::string boxes;
+    int pages = 0;      // the document's page count
+    std::string boxes;  // the chunk's line boxes as page fractions, JSON
 };
 
 // The clinician's guidelines folder: what is in it is searched. Files are
@@ -72,6 +71,7 @@ class IDocumentIngest {
     virtual Listing List() = 0;
     // Every file holding the document goes to the Recycle Bin
     virtual void Remove(std::int64_t id) = 0;
+    // Every document goes, and the count of them comes back
     virtual std::size_t RemoveAll() = 0;
     virtual PageRender Render(std::int64_t id, int page, std::int64_t chunk) = 0;
     // Her file, for the PDF viewer

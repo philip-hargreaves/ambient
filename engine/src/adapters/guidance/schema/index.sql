@@ -1,7 +1,7 @@
 -- The added-documents index: what the app derived from the files in the
--- guidelines folder. A cache, rebuilt whole when its format or embedder no
--- longer matches. Plaintext, since every text here is a file of the
--- clinician's own in her folder
+-- guidelines folder. A cache, rebuilt whole when its format or embedder does
+-- not match. Plaintext, since every text here is a file of the clinician's
+-- own in her folder
 
 CREATE TABLE index_meta (
     id            INTEGER PRIMARY KEY CHECK (id = 1),
@@ -27,8 +27,8 @@ CREATE TABLE documents (
     pages_without_text INTEGER
 );
 
--- A file in the folder holding a document; several may hold the same one.
--- A document no file holds goes
+-- A file in the folder holding a document. Several may hold the same one, and
+-- a document no file holds goes
 CREATE TABLE files (
     path          TEXT    NOT NULL PRIMARY KEY,     -- relative to the folder, UTF-8
     document_id   INTEGER NOT NULL REFERENCES documents (id) ON DELETE CASCADE,

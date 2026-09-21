@@ -447,7 +447,7 @@ int main(int argc, char* argv[]) {
         } catch (const std::exception& e) {
             std::fprintf(stderr, "ambient-engine: no translation (%s)\n", e.what());
         }
-        // Guidance retrieval runs on the CPU in its own lane; the embedder loads
+        // Guidance retrieval runs on the CPU in its own lane. The embedder loads
         // in the background so the first note's search is warm
         ambient::guidance::Retriever guidance_retriever(
             [&model_store]() -> std::unique_ptr<ambient::guidance::IEmbedder> {

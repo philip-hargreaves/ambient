@@ -1,14 +1,14 @@
 """Tables from evaluation runs, written to rag/results/report-*.md.
 
-  python report.py embedders [--ref bge-base] [--mode sentence]   first stage per embedder, latest complete run; paired wins, bootstrap CI on s@10
+  python report.py embedders [--ref bge-base] [--mode sentence]   first stage per embedder from its latest complete run, with paired wins and a bootstrap CI on s@10
   python report.py rerankers                                      each reranker against none on the same 50 candidates, per embedder
-  python report.py ordering <run> [--mode sentence]               ordering rules on a --dump-union run: rerank 50/20/10, RRF; abstention coverage
+  python report.py ordering <run> [--mode sentence]               ordering rules on a --dump-union run: rerank 50/20/10, RRF, abstention coverage
   python report.py second-stage <run> [--mode both] [--pool a,b]  every second-stage rule against cosine order: s@3 endpoint, bootstrap CI, sign test
   python report.py union-rules <run>... [--mode both]             runs differing only in --union, paired by query
   python report.py sources <run>... [--mode both] [--sets ...]    the same consultations queried from different texts, paired by consultation
 
-Paired statistics are on identical query sets; RRF is reciprocal rank fusion (Cormack, Clarke and
-Buettcher 2009, k=60); nDCG follows Jarvelin and Kekalainen 2002.
+Paired statistics are on identical query sets. RRF is reciprocal rank fusion (Cormack, Clarke
+and Buettcher 2009, k=60). nDCG follows Jarvelin and Kekalainen 2002.
 """
 
 import argparse
@@ -240,7 +240,8 @@ def ordering(args):
     write(RESULTS / f"report-ordering-{args.run}.md", out)
 
 
-# second stage: every rule against cosine order on identical candidate lists; endpoint s@3, decided on the bootstrap CI
+# second stage: every rule against cosine order on identical candidate lists. The endpoint is
+# s@3 and the decision is the bootstrap interval
 
 K_SWEEP = (3, 5, 10, 20, 50)
 ALPHAS = [i / 10 for i in range(11)]
@@ -324,7 +325,7 @@ def second_stage(args):
         raise SystemExit(f"no positives in sets {sets} for run {args.run}, mode {args.mode}")
 
     def alpha_for(rk, target_set):
-        """alpha chosen on the other sets; in-sample if there is no other set (flagged in the report)."""
+        """alpha chosen on the other sets, or in-sample if there is no other set. The report says which."""
         others = [q for s, qs in by_set.items() if s != target_set for q in qs]
         insample = target_set is None or not others
         train = by_set.get(target_set, []) if insample and target_set else (others if not insample else [q for qs in by_set.values() for q in qs])

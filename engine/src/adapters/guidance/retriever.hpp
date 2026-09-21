@@ -18,8 +18,6 @@ struct RetrieverOptions {
     double floor = kDefaultFloor;
     double upload_floor = kDefaultFloor;
     double upload_note_floor = kNoteFloor;
-    int note_weight = 1;
-    int union_size = kUnionSize;
     bool include_research = false;  // dev only
 };
 
@@ -35,7 +33,6 @@ struct UploadSnapshot {
         std::string number;
         std::string section;
         std::string text;
-        std::string boxes;
         std::string added_at;
     };
     int dim = 0;

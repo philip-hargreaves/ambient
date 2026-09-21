@@ -61,8 +61,7 @@ std::string ShortDate(const std::string& iso) {
     return std::to_string(day) + " " + kMonths[month - 1] + " " + iso.substr(0, 4);
 }
 
-// "BSR PMR guidelines 2009, page 3, 1.2 (added 15 Sep 2026)": the name, then
-// what the document gives, then when it was added
+// "BSR PMR guidelines 2009, page 3, 1.2 (added 15 Sep 2026)"
 std::string UploadCitation(const UploadSnapshot::Row& row) {
     std::string out = row.name;
     if (row.pages > 0) out += ", page " + std::to_string(row.page + 1);
@@ -210,10 +209,10 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
         std::size_t size;
         int dim;
     };
-    const int k = options_.union_size;
-    // One group's sources sort into one list per sub-query before the vote
-    // A narrow group is strict: silent unless the whole note clears its own floor, and a
-    // sentence votes only at or above the group's floor
+    const int k = kUnionSize;
+    // One group's sources sort into one list per sub-query before the vote.
+    // A narrow group is strict: silent unless the whole note clears its own
+    // floor, and a sentence votes only at or above the group's floor
     const auto vote = [&](const std::vector<Source>& sources, double floor,
                           std::map<std::string, Located>& where, bool strict) {
         std::vector<SubQueryHits> lists;
@@ -242,7 +241,16 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             silent.abstained = true;
             return silent;
         }
-        return ApplyFloor(RankVote(lists, options_.note_weight, k, strict ? floor : -1.0), floor);
+        return ApplyFloor(RankVote(lists, k, strict ? floor : -1.0), floor);
+    };
+
+    // A hit the population guard rules out, or one that restates a shown card, spends no slot
+    const auto suppressed = [&](const std::string& body, const std::string& title) {
+        if (PopulationConflict(text, body, title)) {
+            std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n", title.c_str());
+            return true;
+        }
+        return Restates(out.shown, body);
     };
 
     // Added documents lead, as their own group with their own floor
@@ -256,12 +264,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             if (shown >= limit) break;
             const auto& at = where.at(candidate.id);
             const auto& row = uploads->rows[at.ord];
-            if (PopulationConflict(text, row.text, row.name)) {
-                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
-                             row.name.c_str());
-                continue;
-            }
-            if (Restates(out.shown, row.text)) continue;
+            if (suppressed(row.text, row.name)) continue;
             Result result;
             result.corpus = "upload:" + std::to_string(row.document);
             result.chunk_id = result.corpus + "-" + std::to_string(row.ord);
@@ -296,12 +299,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             auto* store = stores[at.corpus];
             auto chunk = store->TextAt(at.ord);
             const auto& cite = store->CiteAt(at.ord);
-            if (PopulationConflict(text, chunk.text, cite.title)) {
-                std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n",
-                             cite.title.c_str());
-                continue;
-            }
-            if (Restates(out.shown, chunk.text)) continue;
+            if (suppressed(chunk.text, cite.title)) continue;
             Result result;
             result.corpus = store->Info().id;
             result.chunk_id = cite.chunk_id;

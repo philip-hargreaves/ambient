@@ -413,7 +413,7 @@ public class GuidanceViewModelTest
     }
 
     [Fact]
-    public async Task AFailedCorporaPollReadsAsUnavailable()
+    public void AFailedCorporaPollReadsAsUnavailable()
     {
         var engine = new FakeEngineClient(autoNotify: false)
         {

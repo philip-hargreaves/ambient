@@ -6,10 +6,14 @@ the engine the app ships. Every card is checked against the documents the gold n
 
 note (default) is what the app does after a note is written: the case becomes the stored note
 of a demo copy and the engine searches it sentence by sentence. query sends the case as one
-typed search. study runs every query of folder_study.py, in scope and out, and writes its
-cards in that tool's run format so `folder_study.py score <file>` judges the engine itself.
-Close the app first. Writes build/retrieval/folder-<date>-<tag>.jsonl with every card and the
+typed search. Either writes build/retrieval/folder-<date>-<tag>.jsonl with every card and the
 sentence that found it, and prints hit@1, hit@3 and abstentions.
+
+study runs every query of folder_study.py, in scope and out, and writes its cards in that
+tool's run format to the study working directory as runs-engine-<tag>.jsonl, so that
+`folder_study.py score runs-engine-<tag>.jsonl` judges the engine itself.
+
+Close the app first.
 """
 
 import json
@@ -22,15 +26,15 @@ sys.path.insert(0, os.path.join(ROOT, "tools", "demo"))
 sys.path.insert(0, os.path.join(ROOT, "tools", "retrieval"))
 import record_masters as rm  # noqa: E402
 
-NL = chr(10)
 GOLD = os.path.join(ROOT, "rag", "gold", "st-georges-cases", "cases.jsonl")
+INDEX_MINUTES = 20
 
 
-def wait_for_index(engine, minutes=20):
+def wait_for_index(engine):
     """Waits until every document in the folder is indexed: a chunker or embedder change
     rebuilds the whole index at startup, and searching before that reads a partial one."""
     settled = 0
-    for _ in range(minutes * 12):
+    for _ in range(INDEX_MINUTES * 12):
         docs = engine.request("guidance/documents", None, 30).get("documents", [])
         if docs and all(d.get("state") in ("ready", "failed", "unsupported") for d in docs):
             settled += 1
@@ -67,7 +71,7 @@ def search(engine, case, copy):
 
 def study(engine, copy, tag):
     import folder_study as fs
-    # The engine numbers its units itself; a card is matched to the study's unit by its text
+    # The engine numbers its units itself, so a card is matched to the study's unit by its text
     by_text = {(u["doc"], " ".join(u["text"].split())): u["id"] for u in fs.load_units()}
     rows, unmatched = [], 0
     for q in fs.load_queries():
@@ -83,9 +87,9 @@ def study(engine, copy, tag):
                      "shown": cards, "note_best": 0, "any_best": 0})
         rm.log(f"{q['qid']}: {len(cards)} cards")
     out = str(fs.STUDY / f"runs-engine-{tag}.jsonl")
-    with open(out, "w", encoding="utf-8", newline=NL) as f:
+    with open(out, "w", encoding="utf-8", newline="\n") as f:
         for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + NL)
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
     rm.log(f"{out}; {unmatched} cards matched no study unit")
 
 
@@ -98,6 +102,7 @@ def main():
     rows = []
     copy = None
     try:
+        # A minute for the engine to answer at all, then four for the embedder to load
         for _ in range(600):
             try:
                 engine.request("engine/echo", {"payload": "up"}, 2)

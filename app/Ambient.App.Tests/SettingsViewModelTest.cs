@@ -696,11 +696,11 @@ public class SettingsViewModelTest
     }
 
     private static object Document(long id, string name, string state, int chunks = 0,
-        string? error = null, int pages = 0, int pagesWithoutText = 0, string? path = null) => new
+        string? error = null, int pages = 0, int pagesWithoutText = 0) => new
         {
             id,
             name,
-            path = path ?? name + ".txt",
+            path = name + ".txt",
             sha256 = new string('0', 64),
             mime = "text/plain",
             state,

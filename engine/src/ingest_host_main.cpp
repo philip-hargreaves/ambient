@@ -1,5 +1,6 @@
-// Reads a PDF from stdin and writes its pages as JSON on stdout. Its own
-// process, so a parser fault ends one document and never the engine
+// Reads a PDF from stdin and writes its pages as JSON, or one page as a BMP,
+// on stdout. Its own process, so a parser fault ends one document and never
+// the engine
 #include <fcntl.h>
 #include <io.h>
 
@@ -34,6 +35,7 @@ namespace {
 
 using json = nlohmann::json;
 
+// The engine reads these back as refusal reasons, so the numbers are fixed
 constexpr int kOk = 0;
 constexpr int kBadArgs = 1;
 constexpr int kCannotOpen = 2;

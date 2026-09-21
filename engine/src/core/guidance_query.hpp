@@ -10,8 +10,7 @@ namespace ambient::guidance {
 
 // Sub-queries for retrieval: each sentence of the note on its own, plus the
 // whole note. The boundaries mirror the evaluation harness's splitter so the
-// engine and the harness build the same candidate lists; common note
-// abbreviations do not end a sentence
+// engine and the harness build the same candidate lists
 inline constexpr int kMinSentenceWords = 3;
 
 namespace detail {
@@ -73,9 +72,10 @@ inline bool Contains(std::string_view s, std::string_view needle) {
 
 }  // namespace detail
 
-// A newline always ends a sentence; ., ! or ? ends one when whitespace and a
-// capital, digit, quote or bracket follow and the word before is not an
-// abbreviation. Fragments under kMinSentenceWords are dropped
+// A newline always ends a sentence. A full stop, exclamation mark or question
+// mark ends one when whitespace and a capital, digit, quote or bracket follow
+// and the word before is not an abbreviation. Fragments under
+// kMinSentenceWords are dropped
 inline std::vector<std::string> SplitSentences(std::string_view note) {
     std::vector<std::string> out;
     auto flush = [&](std::size_t from, std::size_t to) {

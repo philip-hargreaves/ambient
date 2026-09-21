@@ -37,7 +37,7 @@ std::string NowUtc() {
     return out;
 }
 
-// Beside the executable, as the engine finds its models; one level up for
+// Beside the executable, as the engine finds its models. One level up for
 // packaged debug layouts
 std::filesystem::path DefaultModelsRoot() {
     wchar_t exe_path[MAX_PATH];

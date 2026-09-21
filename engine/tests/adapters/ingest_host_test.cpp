@@ -47,6 +47,7 @@ TEST(IngestHost, ExitCodesNameTheRefusal) {
     EXPECT_EQ(ReasonOf(Fake(), "FAKE exit 7"), "crashed");
     EXPECT_EQ(ReasonOf(Fake(), "FAKE crash"), "crashed");
     EXPECT_EQ(ReasonOf(Fake(), "FAKE garbage"), "badOutput");
+    EXPECT_EQ(ReasonOf(Fake(), "FAKE partial"), "badOutput");
 }
 
 TEST(IngestHost, AStallIsKilledAtTheTimeout) {

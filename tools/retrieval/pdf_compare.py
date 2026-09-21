@@ -36,7 +36,7 @@ def pdfium_text(path: Path) -> tuple[str, int, int]:
 
 
 def pdftotext_text(path: Path, exe: str) -> str:
-    # Reading order; -layout interleaves columns
+    # Reading order. -layout interleaves columns
     return subprocess.run([exe, str(path), "-"], capture_output=True, text=True,
                           encoding="utf-8", errors="replace").stdout
 

@@ -35,7 +35,7 @@ inline constexpr int kLegendPairs = 4;   // "ADA: adalimumab; CZP: ..." under a 
 inline constexpr int kAffiliations = 3;  // institution words in a block of authors' addresses
 inline constexpr int kAuthors = 5;       // names carrying an address number: "Skeoch32,"
 
-// A unit opening with one of these is front matter or a caption, not guidance
+// A unit opening with one of these is front matter or a caption
 inline constexpr std::string_view kFrontMatter[] = {"key words",
                                                     "keywords",
                                                     "correspondence",
@@ -364,10 +364,10 @@ inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& parag
     return out;
 }
 
-// Not guidance: a short unmarked run that never ends a sentence is figure
-// labels or a table fragment, a shorter one a sentence's tail; front matter and
-// captions are known by their opening; tables and addresses by what they hold,
-// unless they say what to do
+// Not guidance. A short unmarked run that never ends a sentence is figure
+// labels or a table fragment, a shorter one a sentence's tail. Front matter
+// and captions are known by their opening, tables and addresses by what they
+// hold, unless they say what to do
 inline bool IsFragment(const Unit& unit) {
     const int words = detail::WordCount(unit.text);
     if (unit.number.empty() &&
@@ -386,10 +386,7 @@ inline bool IsFragment(const Unit& unit) {
          detail::Contains(lower, "creative commons"))) {
         return true;
     }
-    std::string head;
-    for (const char c : std::string_view(unit.text).substr(0, 24)) {
-        head.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    }
+    const auto head = detail::Lower(std::string_view(unit.text).substr(0, 24));
     for (const auto label : kFrontMatter) {
         if (head.starts_with(label)) return true;
     }

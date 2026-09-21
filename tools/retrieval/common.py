@@ -20,16 +20,16 @@ DEVICE = "CPU"
 
 
 def plugin_properties() -> dict:
-    # Several harness processes share the CPU; a per-process thread cap stops them starving each other
+    # Harness processes share the CPU. A per-process thread cap stops them starving each other
     threads = os.environ.get("RETRIEVAL_THREADS")
     return {"INFERENCE_NUM_THREADS": int(threads)} if threads else {}
 
-# Model downloads land beside the exports, not on C:
+# Model downloads land beside the exports to keep them off C:
 os.environ.setdefault("HF_HOME", str(CANDIDATES / ".hf"))
 
 
 def force_ipv4() -> None:
-    # IPv6 drops on this network; RETRIEVAL_IPV6=1 disables
+    # IPv6 drops on this network. RETRIEVAL_IPV6=1 disables the workaround
     if os.environ.get("RETRIEVAL_IPV6") == "1":
         return
     import socket

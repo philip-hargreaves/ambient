@@ -35,29 +35,17 @@ TEST(RankVote, KeepsTheBestCosineAndTheQueryThatRankedItHighest) {
     EXPECT_EQ(ranked[2].trigger, "the whole note");
 }
 
-TEST(RankVote, TheNoteWeightMultipliesEveryVoteOfTheWholeNoteList) {
-    // weight 3: y = 1/62 + 1/61 + 3/62, z = 1/63 + 3/61, x = 1/61 + 1/62; z passes x, y stays first
-    const auto ranked = RankVote(Lists(), 3);
-    ASSERT_EQ(ranked.size(), 3u);
-    EXPECT_EQ(ranked[0].id, "y");
-    EXPECT_EQ(ranked[1].id, "z");
-    EXPECT_EQ(ranked[2].id, "x");
-    EXPECT_NEAR(ranked[1].score, 1.0 / 63 + 3.0 / 61, 1e-12);
-    EXPECT_NEAR(ranked[0].score, 1.0 / 62 + 1.0 / 61 + 3.0 / 62, 1e-12);
-    EXPECT_EQ(RankVote(Lists(), 0)[2].id, "z") << "a weight under one counts as one";
-}
-
 TEST(RankVote, HonoursTheUnionSize) {
     std::vector<SubQueryHits> lists{{"q", false, {}}};
     for (int i = 0; i < 80; ++i) lists[0].hits.push_back({"c" + std::to_string(i), 0.9});
     EXPECT_EQ(RankVote(lists).size(), static_cast<std::size_t>(kUnionSize));
-    EXPECT_EQ(RankVote(lists, 1, 10).size(), 10u);
+    EXPECT_EQ(RankVote(lists, 10).size(), 10u);
 }
 
 TEST(RankVote, AHitUnderTheVoteFloorCastsNoVote) {
     std::vector<SubQueryHits> lists{{"sentence", false, {{"a", 0.90}, {"b", 0.80}}},
                                     {"note", true, {{"b", 0.88}, {"c", 0.70}}}};
-    const auto ranked = RankVote(lists, 1, kUnionSize, 0.85);
+    const auto ranked = RankVote(lists, kUnionSize, 0.85);
     ASSERT_EQ(ranked.size(), 3u);
     EXPECT_EQ(ranked[0].id, "a");
     EXPECT_EQ(ranked[1].id, "b");
@@ -130,17 +118,6 @@ TEST(Citation, CodeNumberTitle) {
     EXPECT_EQ(Citation("fx100", "1.1.1", "Fictional inflammatory joint disease"),
               "FX100 1.1.1, Fictional inflammatory joint disease");
     EXPECT_EQ(Citation("ng100", "", ""), "NG100");
-}
-
-struct NoRerank : IReranker {
-    std::vector<double> Score(const std::string&, const std::vector<std::string>& texts) override {
-        return std::vector<double>(texts.size(), 0.0);
-    }
-};
-
-TEST(IReranker, TheSeamCompilesAndCanBeANoOp) {
-    NoRerank none;
-    EXPECT_EQ(none.Score("q", {"a", "b"}).size(), 2u);
 }
 
 TEST(NearDuplicate, AQualityStatementRestatingItsGuidelineIsADuplicate) {

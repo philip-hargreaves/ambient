@@ -45,8 +45,8 @@ void Fail(const std::string& id, const std::string& why) {
 
 }  // namespace
 
-std::unique_ptr<Embedder> Embedder::Load(const models::ModelStore& store, const std::string& tier) {
-    const models::ModelInfo& info = store.Resolve("embedding", tier);
+std::unique_ptr<Embedder> Embedder::Load(const models::ModelStore& store) {
+    const models::ModelInfo& info = store.Resolve("embedding", "default");
     store.Verify(info);
     if (info.device != "CPU") Fail(info.id, "manifest device is " + info.device + ", expected CPU");
     const auto weights = info.file_hashes.find("openvino_model.bin");

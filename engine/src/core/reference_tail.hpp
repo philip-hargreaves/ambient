@@ -44,10 +44,6 @@ inline bool IsCitationLine(std::string_view text) {
     return i < text.size() && text[i] == ' ';
 }
 
-}  // namespace detail
-
-namespace detail {
-
 inline bool CitationsFollow(const std::vector<Paragraph>& paragraphs, std::size_t heading) {
     int seen = 0;
     int citations = 0;
@@ -96,7 +92,6 @@ inline bool EndsList(const std::vector<Paragraph>& paragraphs, std::size_t i) {
     return true;
 }
 
-// The paragraph without its last line
 inline void DropLastLine(Paragraph& paragraph) {
     paragraph.lines.pop_back();
     paragraph.text.clear();

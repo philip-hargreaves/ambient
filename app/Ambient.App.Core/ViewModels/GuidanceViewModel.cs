@@ -29,7 +29,7 @@ public enum GuidanceSection
 
 /// <summary>
 /// The Guidelines section under the note. The consultation view model owns the
-/// engine and feeds this from the wire; nothing here talks to it.
+/// engine and feeds this from the wire. Nothing here talks to it.
 /// </summary>
 public sealed partial class GuidanceViewModel : ObservableObject
 {
@@ -40,7 +40,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SearchNoteCommand), nameof(SearchQueryCommand))]
     public partial GuidanceReadiness Readiness { get; private set; } = GuidanceReadiness.Loading;
 
-    /// <summary>The loader's reason when unavailable, for the log; never shown.</summary>
+    /// <summary>The loader's reason when unavailable, for the log. Never shown.</summary>
     public string ReadinessDetail { get; private set; } = "";
 
     /// <summary>Corpora the engine refused, as "id: reason", for the log.</summary>
@@ -96,7 +96,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     [ObservableProperty]
     public partial string Hovered { get; set; } = "";
 
-    /// <summary>A typed query's cards while one shows; otherwise the note's.</summary>
+    /// <summary>A typed query's cards while one shows, otherwise the note's.</summary>
     public ObservableCollection<GuidanceCard> Cards { get; } = [];
 
     /// <summary>Set by the consultation view model, which owns the engine.</summary>
@@ -249,7 +249,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ClearQuery();
     }
 
-    /// <summary>The note is being written; its search follows.</summary>
+    /// <summary>The note is being written. Its search follows.</summary>
     public void NoteStarted()
     {
         _noteResults = [];
@@ -260,7 +260,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ShowCards();
     }
 
-    /// <summary>The note arrived; a result or failure that beat it stands.</summary>
+    /// <summary>The note arrived. A result or failure that beat it stands.</summary>
     public void NoteReady()
     {
         if (Section == GuidanceSection.FollowsNote)
@@ -493,13 +493,11 @@ public sealed partial class GuidanceViewModel : ObservableObject
     // The source label needs the corpus name, which only the searched list carries
     private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)
     {
-        var names = new Dictionary<string, string>(StringComparer.Ordinal);
-        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+        var sources = new Dictionary<string, (string Name, string Label)>(StringComparer.Ordinal);
         foreach (var corpus in Searched(record))
         {
-            var id = GuidanceCard.Field(corpus, "id");
-            names[id] = GuidanceCard.Field(corpus, "name");
-            labels[id] = GuidanceCard.Field(corpus, "label");
+            sources[GuidanceCard.Field(corpus, "id")] =
+                (GuidanceCard.Field(corpus, "name"), GuidanceCard.Field(corpus, "label"));
         }
 
         var results = new List<GuidanceRecommendation>();
@@ -507,12 +505,11 @@ public sealed partial class GuidanceViewModel : ObservableObject
         {
             foreach (var result in shown.EnumerateArray())
             {
-                var corpus = GuidanceCard.Field(result, "corpus");
-                var label = labels.GetValueOrDefault(corpus, "");
+                var (name, label) = sources.GetValueOrDefault(
+                    GuidanceCard.Field(result, "corpus"), ("", ""));
                 var labelled = label.Length > 0;
                 results.Add(GuidanceRecommendation.From(
-                    result, labelled ? label : names.GetValueOrDefault(corpus, ""), fromNote,
-                    labelled));
+                    result, labelled ? label : name, fromNote, labelled));
             }
         }
 

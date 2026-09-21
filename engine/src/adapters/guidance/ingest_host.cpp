@@ -19,6 +19,7 @@ namespace {
 
 using json = nlohmann::json;
 
+// The host's exit codes, defined alongside its main
 constexpr int kCannotOpen = 2;
 constexpr int kPassword = 3;
 constexpr int kOutputBound = 4;
@@ -135,13 +136,7 @@ float Fraction(const json& value, float whole) {
 }
 
 // The host's JSON as pages, refused when a count or a size is out of range
-std::vector<Page> PagesFrom(const std::string& text) {
-    json root;
-    try {
-        root = json::parse(text);
-    } catch (const json::exception& e) {
-        throw HostError("badOutput", e.what());
-    }
+std::vector<Page> PagesOf(json root) {
     if (!root.is_object() || !root["pages"].is_array() || root["pages"].size() > kMaxPages) {
         throw HostError("badOutput", "pages missing or too many");
     }
@@ -157,17 +152,17 @@ std::vector<Page> PagesFrom(const std::string& text) {
         page.height = static_cast<float>(height);
         page.rotation = p.value("rotation", 0);
         page.images = p.value("images", 0);
-        const auto& lines = p["lines"];
+        const auto& lines = p.at("lines");
         if (!lines.is_array() || lines.size() > kMaxLinesPerPage) {
             throw HostError("badOutput", "lines missing or too many");
         }
         for (const auto& l : lines) {
-            const auto& box = l["box"];
-            if (!l["text"].is_string() || !box.is_array() || box.size() != 4) {
+            const auto& box = l.at("box");
+            if (!l.at("text").is_string() || !box.is_array() || box.size() != 4) {
                 throw HostError("badOutput", "line shape");
             }
             PageLine line;
-            line.text = l["text"].get<std::string>();
+            line.text = l.at("text").get<std::string>();
             line.box = {Fraction(box[0], page.width), Fraction(box[1], page.height),
                         Fraction(box[2], page.width), Fraction(box[3], page.height)};
             if (line.box.right < line.box.left || line.box.bottom < line.box.top) {
@@ -178,6 +173,16 @@ std::vector<Page> PagesFrom(const std::string& text) {
         pages.push_back(std::move(page));
     }
     return pages;
+}
+
+// The host's output is untrusted: anything that does not parse to the expected
+// shape is bad output
+std::vector<Page> PagesFrom(const std::string& text) {
+    try {
+        return PagesOf(json::parse(text));
+    } catch (const json::exception& e) {
+        throw HostError("badOutput", e.what());
+    }
 }
 
 std::uint32_t Read32(const std::string& s, std::size_t at) {
