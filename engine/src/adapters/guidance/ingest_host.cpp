@@ -90,6 +90,14 @@ Outcome RunHost(const std::filesystem::path& exe, const std::wstring& args,
                                 sizeof(job_limits));
         AssignProcessToJobObject(job.value, process.value);
     }
+    // Without a job the process is ended directly
+    const auto kill = [&] {
+        if (job.value != nullptr) {
+            TerminateJobObject(job.value, 1);
+        } else {
+            TerminateProcess(process.value, 1);
+        }
+    };
     ResumeThread(thread.value);
     CloseHandle(in_read.Release());
     CloseHandle(out_write.Release());
@@ -112,7 +120,7 @@ Outcome RunHost(const std::filesystem::path& exe, const std::wstring& args,
         while (ReadFile(out_read.value, buffer, sizeof buffer, &count, nullptr) && count > 0) {
             if (outcome.output.size() + count > limits.output_cap) {
                 outcome.bounded = true;
-                TerminateJobObject(job.value, 1);
+                kill();
                 break;
             }
             outcome.output.append(buffer, count);
@@ -121,7 +129,7 @@ Outcome RunHost(const std::filesystem::path& exe, const std::wstring& args,
     if (WaitForSingleObject(process.value, static_cast<DWORD>(limits.timeout.count())) ==
         WAIT_TIMEOUT) {
         outcome.timed_out = true;
-        TerminateJobObject(job.value, 1);
+        kill();
     }
     // The reader ends when the process is gone and its end of the pipe with it
     writer.join();
@@ -175,8 +183,7 @@ std::vector<Page> PagesOf(json root) {
     return pages;
 }
 
-// The host's output is untrusted: anything that does not parse to the expected
-// shape is bad output
+// A missing key or a wrong type is bad output like any other
 std::vector<Page> PagesFrom(const std::string& text) {
     try {
         return PagesOf(json::parse(text));
