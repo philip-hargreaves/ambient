@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,6 +28,24 @@ inline constexpr int kHeadingWords = 8;
 inline constexpr int kMinUnitWords = 25;
 inline constexpr int kMaxUnitWords = 200;
 inline constexpr int kSplitWords = 150;
+
+// A unit opening with one of these is front matter or a caption, not guidance
+inline constexpr std::string_view kFrontMatter[] = {"key words",
+                                                    "keywords",
+                                                    "correspondence",
+                                                    "received",
+                                                    "accepted",
+                                                    "conflict of interest",
+                                                    "conflicts of interest",
+                                                    "funding",
+                                                    "disclosure",
+                                                    "how to cite",
+                                                    "doi",
+                                                    "copyright",
+                                                    "fig.",
+                                                    "fig ",
+                                                    "figure ",
+                                                    "table "};
 
 namespace detail {
 
@@ -208,19 +227,41 @@ inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& parag
     return out;
 }
 
+// Not guidance: a short unmarked run that never ends a sentence is figure
+// labels or a table fragment; front matter and captions are known by their opening
+inline bool IsFragment(const Unit& unit) {
+    if (unit.number.empty() && detail::WordCount(unit.text) < kMinUnitWords &&
+        !detail::EndsSentence(unit.text)) {
+        return true;
+    }
+    std::string head;
+    for (const char c : std::string_view(unit.text).substr(0, 24)) {
+        head.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    for (const auto label : kFrontMatter) {
+        if (head.starts_with(label)) return true;
+    }
+    return false;
+}
+
+inline std::vector<Unit> DropFragments(std::vector<Unit> units) {
+    std::erase_if(units, IsFragment);
+    return units;
+}
+
 // From the host's pages to the units stored: cleaned, in paragraphs, the
 // reference tail dropped
 inline std::vector<Unit> UnitsFromPages(std::vector<Page>& pages) {
     CleanPages(pages);
     auto paragraphs = ParagraphsFromPages(pages);
     DropReferenceTail(paragraphs);
-    return UnitsFromParagraphs(paragraphs);
+    return DropFragments(UnitsFromParagraphs(paragraphs));
 }
 
 inline std::vector<Unit> UnitsFromText(const std::string& text) {
     auto paragraphs = ParagraphsFromText(text);
     DropReferenceTail(paragraphs);
-    return UnitsFromParagraphs(paragraphs);
+    return DropFragments(UnitsFromParagraphs(paragraphs));
 }
 
 }  // namespace ambient::guidance

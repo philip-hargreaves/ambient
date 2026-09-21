@@ -177,5 +177,26 @@ TEST(DocumentUnits, AGradedRowWithoutMarksHoldsUntilItsToken) {
     EXPECT_TRUE(units[1].text.ends_with("(GRADE 2C, SoA 90%)."));
 }
 
+TEST(DocumentUnits, FragmentsFrontMatterAndCaptionsAreDropped) {
+    // A caption with its flowchart labels, a keyword line, a short sentence, and
+    // numbered recommendations, one short without a full stop
+    const auto units = DropFragments(UnitsFromParagraphs(
+        {Para("Fig. 1 Approach to the evaluation of proximal pain and stiffness. ACJ: joint."),
+         Para("Predominant peripheral joint symptoms, X-rays RA, other inflammatory arthritis "
+              "Inflammatory Morning stiffness Joint swelling Peripheral hand/foot oedema"),
+         Para("Treatment:"),
+         Para("Key words: Guidelines, Polymyalgia rheumatica, Diagnosis, Treatment."),
+         Para("Monitoring:"), Para("Aim for a target serum urate level below 360 micromol/litre."),
+         Para("1.1 Offer allopurinol after a first attack when urate stays high."),
+         Para("1.2 Image the femur when thigh pain develops on bisphosphonate therapy"),
+         Para("1.3 Offer colchicine or an NSAID for an acute flare of gout.")}));
+
+    ASSERT_EQ(units.size(), 4u);
+    EXPECT_EQ(units[0].text, "Aim for a target serum urate level below 360 micromol/litre.");
+    EXPECT_EQ(units[1].number, "1.1");
+    EXPECT_EQ(units[2].number, "1.2");
+    EXPECT_EQ(units[3].number, "1.3");
+}
+
 }  // namespace
 }  // namespace ambient::guidance

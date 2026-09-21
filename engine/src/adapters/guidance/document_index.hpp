@@ -13,7 +13,8 @@
 namespace ambient::guidance {
 
 inline constexpr std::uint32_t kIndexApplicationId = 0x414D4249;  // "AMBI"
-inline constexpr int kIndexFormat = 1;
+// 2: fragments and front matter are no longer units
+inline constexpr int kIndexFormat = 2;
 inline constexpr const char* kIndexFile = "index.db";
 
 std::string Sha256Hex(std::span<const std::uint8_t> bytes);
