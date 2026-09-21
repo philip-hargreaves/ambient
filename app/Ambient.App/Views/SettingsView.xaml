@@ -219,15 +219,41 @@
                                     Style="{StaticResource AccentButtonStyle}" />
                             </Grid>
                         </Border>
-                        <Border
-                            Style="{StaticResource SettingsRowChrome}"
-                            Visibility="{x:Bind ViewModel.BatchVisible, Mode=OneWay}">
-                            <TextBlock
-                                Margin="0"
-                                VerticalAlignment="Center"
-                                Style="{StaticResource SettingsDescription}"
-                                Text="{x:Bind ViewModel.BatchCaption, Mode=OneWay}" />
-                        </Border>
+                        <!-- The list folds to one line: the count and what needs attention -->
+                        <Button
+                            Padding="16,10"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.Name="Guideline documents list"
+                            Background="Transparent"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,0,0"
+                            Command="{x:Bind ViewModel.ToggleDocumentsCommand}"
+                            CornerRadius="0"
+                            Visibility="{x:Bind ViewModel.DocumentsPresent, Mode=OneWay}">
+                            <Grid>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SettingsDescription}"
+                                    Text="{x:Bind ViewModel.DocumentsSummary, Mode=OneWay}" />
+                                <FontIcon
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Glyph="&#xE70D;"
+                                    Visibility="{x:Bind ViewModel.DocumentsCollapsed, Mode=OneWay}" />
+                                <FontIcon
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    FontSize="10"
+                                    Glyph="&#xE70E;"
+                                    Visibility="{x:Bind ViewModel.DocumentsExpanded, Mode=OneWay}" />
+                            </Grid>
+                        </Button>
+                        <ScrollViewer
+                            MaxHeight="420"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="{x:Bind ViewModel.DocumentsExpanded, Mode=OneWay}">
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Documents}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:DocumentRow">
@@ -272,6 +298,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </ScrollViewer>
                     </StackPanel>
                 </Border>
 

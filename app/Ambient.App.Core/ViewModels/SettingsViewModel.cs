@@ -64,6 +64,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         KeepConsultations = preferences?.KeepConsultations ?? false;
         ShowPerformanceMetrics = preferences?.ShowPerformanceMetrics ?? false;
         DeveloperToolsExpanded = preferences?.DeveloperToolsExpanded ?? false;
+        DocumentsExpanded = preferences?.DocumentsExpanded ?? false;
         IncludeResearchGuidance = preferences?.IncludeResearchGuidance ?? false;
         Theme = preferences?.Theme ?? "system";
         _noteTier = preferences?.NoteTier ?? "default";
@@ -490,12 +491,45 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool DocumentsCaptionVisible => DocumentsCaption.Length > 0;
 
-    /// <summary>How many documents are still being read, empty when none is.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(BatchVisible))]
-    public partial string BatchCaption { get; private set; } = "";
+    /// <summary>"32 documents · all ready", or what is still being read or could not be.</summary>
+    public string DocumentsSummary
+    {
+        get
+        {
+            var working = Documents.Count(r => r.Working);
+            var failed = Documents.Count(r => r.Failed);
+            var state = (working, failed) switch
+            {
+                (0, 0) => "all ready",
+                (_, 0) => $"reading {working}",
+                (0, _) => $"{failed} could not be read",
+                _ => $"reading {working}, {failed} could not be read",
+            };
+            return $"{GuidanceCard.Count(Documents.Count, "document")} · {state}";
+        }
+    }
 
-    public bool BatchVisible => BatchCaption.Length > 0;
+    /// <summary>The list is closed unless it was left open; work or a failure opens it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DocumentsCollapsed))]
+    public partial bool DocumentsExpanded { get; set; }
+
+    public bool DocumentsCollapsed => !DocumentsExpanded;
+
+    [RelayCommand]
+    private void ToggleDocuments() => DocumentsExpanded = !DocumentsExpanded;
+
+    private bool _documentsNeededAttention;
+    private bool _openingForAttention;
+
+    partial void OnDocumentsExpandedChanged(bool value)
+    {
+        if (!_initialising && !_openingForAttention && _preferences is not null)
+        {
+            _preferences.DocumentsExpanded = value;
+            _preferences.Save();
+        }
+    }
 
     public bool DocumentsPresent => Documents.Count > 0;
 
@@ -696,10 +730,20 @@ public sealed partial class SettingsViewModel : ObservableObject
         folder.Length > 0
         && roots.Any(root => folder.StartsWith(root, StringComparison.OrdinalIgnoreCase));
 
+    // The summary follows every change; the first sign of work or a failure opens the
+    // list once, without making that the remembered choice
     private void RefreshBatch()
     {
-        var working = Documents.Count(r => r.Working);
-        BatchCaption = working == 0 ? "" : $"Reading {GuidanceCard.Count(working, "document")}";
+        OnPropertyChanged(nameof(DocumentsSummary));
+        var attention = Documents.Any(r => r.Working || r.Failed);
+        if (attention && !_documentsNeededAttention && !DocumentsExpanded)
+        {
+            _openingForAttention = true;
+            DocumentsExpanded = true;
+            _openingForAttention = false;
+        }
+
+        _documentsNeededAttention = attention;
     }
 
     /// <summary>Remove sends the file to the Recycle Bin, so it always confirms.</summary>

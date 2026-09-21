@@ -233,6 +233,31 @@ public class SettingsViewModelTest
     }
 
     [Fact]
+    public void TheDocumentsListIsClosedUnlessLeftOpenAndAFailureOpensItOnce()
+    {
+        var engine = new FakeEngineClient();
+        engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
+        var preferences = TempPreferences();
+        var settings = new SettingsViewModel(preferences, client: engine);
+
+        Assert.Equal("1 document · all ready", settings.DocumentsSummary);
+        Assert.False(settings.DocumentsExpanded);
+
+        engine.RaiseNotification("guidance/document", Json(Document(2, "Letter", "failed", error: "password")));
+        Assert.True(settings.DocumentsExpanded);
+        Assert.False(preferences.DocumentsExpanded, "opening for attention is not the remembered choice");
+
+        settings.ToggleDocumentsCommand.Execute(null);
+        Assert.False(settings.DocumentsExpanded);
+        engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "ready", 10)));
+        Assert.False(settings.DocumentsExpanded, "the same failure does not reopen it");
+
+        settings.ToggleDocumentsCommand.Execute(null);
+        Assert.True(preferences.DocumentsExpanded);
+        Assert.True(new SettingsViewModel(preferences).DocumentsExpanded);
+    }
+
+    [Fact]
     public void DemoModeRowFollowsTheSavedRuns()
     {
         var masters = Path.Combine(Path.GetTempPath(), $"ambient-masters-{Guid.NewGuid():N}.json");
@@ -707,7 +732,8 @@ public class SettingsViewModelTest
         Assert.StartsWith("Not searched: this looks like a document about a patient.",
             settings.Documents[3].Detail);
         Assert.True(settings.Documents[3].Failed);
-        Assert.Equal("Reading 1 document", settings.BatchCaption);
+        Assert.Equal("4 documents · reading 1, 1 could not be read", settings.DocumentsSummary);
+        Assert.True(settings.DocumentsExpanded, "work or a failure opens the list");
         Assert.True(settings.DocumentsPresent);
         Assert.True(settings.AddDocumentsCommand.CanExecute(null));
     }
@@ -787,7 +813,7 @@ public class SettingsViewModelTest
         engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "ready", 10)));
         Assert.Equal("10 passages · added 15 Sep 2026", row.Detail);
         Assert.False(row.Working);
-        Assert.Equal("", settings.BatchCaption);
+        Assert.EndsWith("all ready", settings.DocumentsSummary);
 
         await settings.RemoveDocumentCommand.ExecuteAsync(row);
         Assert.Equal(2, asked);
