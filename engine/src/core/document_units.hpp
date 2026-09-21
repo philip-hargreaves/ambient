@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cctype>
+#include <initializer_list>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -28,6 +29,11 @@ inline constexpr int kHeadingWords = 8;
 inline constexpr int kMinUnitWords = 25;
 inline constexpr int kMaxUnitWords = 200;
 inline constexpr int kSplitWords = 150;
+inline constexpr int kTailWords = 6;     // fewer, unnumbered: a sentence's tail or a running head
+inline constexpr int kCountRun = 8;      // consecutive integers in a row: a proof's line numbers
+inline constexpr int kLegendPairs = 4;   // "ADA: adalimumab; CZP: ..." under a table
+inline constexpr int kAffiliations = 3;  // institution words in a block of authors' addresses
+inline constexpr int kAuthors = 5;       // names carrying an address number: "Skeoch32,"
 
 // A unit opening with one of these is front matter or a caption, not guidance
 inline constexpr std::string_view kFrontMatter[] = {"key words",
@@ -40,6 +46,14 @@ inline constexpr std::string_view kFrontMatter[] = {"key words",
                                                     "funding",
                                                     "disclosure",
                                                     "how to cite",
+                                                    "submitted",
+                                                    "supplementary data",
+                                                    "supplementary material",
+                                                    "e-mail",
+                                                    "\xC2\xA9",  // the copyright sign
+                                                    "this is an open access",
+                                                    "all other authors",
+                                                    "for permissions",
                                                     "doi",
                                                     "copyright",
                                                     "fig.",
@@ -63,10 +77,133 @@ inline bool Continues(std::string_view text) {
            (!text.empty() && std::islower(static_cast<unsigned char>(text.front())));
 }
 
-// Short, without a mark, a sentence end or a bullet: a title, a caption or a label
+// Short, without a mark, a sentence end or a bullet: a title, a caption or a label.
+// A short question is a heading too
 inline bool IsHeading(const Paragraph& paragraph, Scheme scheme) {
-    return WordCount(paragraph.text) < kHeadingWords && !EndsSentence(paragraph.text) &&
-           MarkOf(paragraph.text, scheme).empty() && !Continues(paragraph.text);
+    const std::string_view text = paragraph.text;
+    return WordCount(text) < kHeadingWords && (!EndsSentence(text) || text.ends_with('?')) &&
+           MarkOf(text, scheme).empty() && !Continues(text);
+}
+
+inline std::vector<std::string_view> Tokens(std::string_view text) {
+    std::vector<std::string_view> out;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        while (i < text.size() && text[i] == ' ') ++i;
+        const auto start = i;
+        while (i < text.size() && text[i] != ' ') ++i;
+        if (i > start) out.push_back(text.substr(start, i - start));
+    }
+    return out;
+}
+
+// The token as a whole number, or -1
+inline long Integer(std::string_view token) {
+    if (token.empty() || token.size() > 6) return -1;
+    long value = 0;
+    for (const char c : token) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) return -1;
+        value = value * 10 + (c - '0');
+    }
+    return value;
+}
+
+// Without its runs of consecutive integers, the line numbers of a proof copy
+inline std::string WithoutCounts(std::string_view text) {
+    const auto tokens = Tokens(text);
+    std::string out;
+    for (std::size_t i = 0; i < tokens.size();) {
+        std::size_t end = i + 1;
+        while (end < tokens.size() && Integer(tokens[end - 1]) >= 0 &&
+               Integer(tokens[end]) == Integer(tokens[end - 1]) + 1) {
+            ++end;
+        }
+        if (end - i >= static_cast<std::size_t>(kCountRun)) {
+            i = end;
+            continue;
+        }
+        if (!out.empty()) out += ' ';
+        out += tokens[i++];
+    }
+    return out;
+}
+
+// Figures, ranges and citation numbers: "59", "(81.9)", "[26-29,", "40.5%"
+inline bool Numeric(std::string_view token) {
+    bool digit = false;
+    for (const unsigned char c : token) {
+        if (std::isdigit(c)) {
+            digit = true;
+        } else if (std::isalpha(c)) {
+            return false;
+        }
+    }
+    return digit;
+}
+
+// How many of the text's words are among these
+inline int CountWords(std::string_view lower, std::initializer_list<std::string_view> among,
+                      int* total = nullptr) {
+    int found = 0;
+    std::string word;
+    for (const char c : std::string(lower) + " ") {
+        if (std::isalpha(static_cast<unsigned char>(c))) {
+            word.push_back(c);
+            continue;
+        }
+        if (word.empty()) continue;
+        if (total != nullptr) ++*total;
+        for (const auto one : among) found += word == one;
+        word.clear();
+    }
+    return found;
+}
+
+// Says what to do, so it stays whatever it looks like
+inline bool Guides(std::string_view lower) {
+    return CountWords(lower, {"should", "recommend", "recommended", "offer", "consider", "refer"}) >
+           0;
+}
+
+// A table's cells read across, or the abbreviations printed under it
+inline bool IsTable(const Unit& unit) {
+    const auto tokens = Tokens(unit.text);
+    if (tokens.empty()) return false;
+    int numeric = 0;
+    for (const auto token : tokens) numeric += Numeric(token);
+    if (unit.number.empty() && numeric * 10 >= static_cast<int>(tokens.size()) * 4) return true;
+    int pairs = 0;
+    for (std::size_t i = 0; i + 1 < tokens.size(); ++i) {
+        const bool opens = i == 0 || tokens[i - 1].ends_with(';');
+        pairs += opens && tokens[i].ends_with(':') && tokens[i].size() <= 13;
+    }
+    return pairs >= kLegendPairs && tokens[0].ends_with(':');
+}
+
+// The author list: name after name ending in the number of its address
+inline bool IsAuthors(std::string_view text) {
+    int names = 0;
+    for (const auto token : Tokens(text)) {
+        auto end = token.size();
+        while (end > 0 && (token[end - 1] == ',' ||
+                           std::isdigit(static_cast<unsigned char>(token[end - 1])))) {
+            --end;
+        }
+        const bool numbered = token.find_first_of("0123456789", end) != std::string_view::npos;
+        names += numbered && end > 2 && std::isalpha(static_cast<unsigned char>(token[end - 1]));
+    }
+    return names >= kAuthors;
+}
+
+// Authors' addresses: institution after institution
+inline bool IsAffiliations(std::string_view lower) {
+    int words = 0;
+    const int institutions = CountWords(
+        lower,
+        {"university", "hospital", "hospitals", "department", "institute", "centre", "center",
+         "nhs", "trust", "school", "college", "foundation", "division", "faculty"},
+        &words);
+    return institutions >= kAffiliations && institutions * 14 >= words;
 }
 
 // A long paragraph in pieces of whole lines, each closed at a sentence end
@@ -228,10 +365,25 @@ inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& parag
 }
 
 // Not guidance: a short unmarked run that never ends a sentence is figure
-// labels or a table fragment; front matter and captions are known by their opening
+// labels or a table fragment, a shorter one a sentence's tail; front matter and
+// captions are known by their opening; tables and addresses by what they hold,
+// unless they say what to do
 inline bool IsFragment(const Unit& unit) {
-    if (unit.number.empty() && detail::WordCount(unit.text) < kMinUnitWords &&
-        !detail::EndsSentence(unit.text)) {
+    const int words = detail::WordCount(unit.text);
+    if (unit.number.empty() &&
+        (words < kTailWords || (words < kMinUnitWords && !detail::EndsSentence(unit.text)))) {
+        return true;
+    }
+    // "5.5 Diagnosis": a numbered heading the scheme took for a recommendation
+    if (!unit.number.empty() && words < kHeadingWords && !detail::EndsSentence(unit.text) &&
+        !unit.text.ends_with(':')) {
+        return true;
+    }
+    if (detail::Contains(unit.text, ".....")) return true;  // a contents page's dot leaders
+    const auto lower = detail::Lower(unit.text);
+    if (!detail::Guides(lower) &&
+        (detail::IsTable(unit) || detail::IsAffiliations(lower) || detail::IsAuthors(unit.text) ||
+         detail::Contains(lower, "creative commons"))) {
         return true;
     }
     std::string head;
@@ -245,6 +397,7 @@ inline bool IsFragment(const Unit& unit) {
 }
 
 inline std::vector<Unit> DropFragments(std::vector<Unit> units) {
+    for (auto& unit : units) unit.text = detail::WithoutCounts(unit.text);
     std::erase_if(units, IsFragment);
     return units;
 }
