@@ -9,7 +9,7 @@ the diariser finds the turns, the transcriber decodes each turn's own audio, and
 other transcription path. Without models the engine runs on scripted stand-ins (CI).
 
 ```
-core/            header-only, one folder per stage; namespace = folder
+core/            a static library, one folder per stage; namespace = folder
   audio/         capture ring, level meter, resume source, the enrolment sink
   session/       the session controller and its events, transcription, note lane,
                  enrolment, demo playback

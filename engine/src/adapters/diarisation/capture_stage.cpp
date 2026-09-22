@@ -204,7 +204,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
                              static_cast<double>(b) / audio::kSampleRate);
             }
             if (text.empty()) continue;  // rejected, silent, or stopping
-            if (detail::MaxRepeatedNgram(text) >= kPerTurnMaxRepeat) continue;
+            if (MaxRepeatedNgram(text) >= kPerTurnMaxRepeat) continue;
             s.turn_texts[{a, b}] = text;
             s.turn_chunks[{a, b}] = std::move(chunks_of_span);
         }

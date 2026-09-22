@@ -15,6 +15,10 @@ inline std::string Lower(std::string_view s) {
     return out;
 }
 
+inline bool Contains(std::string_view s, std::string_view needle) {
+    return s.find(needle) != std::string_view::npos;
+}
+
 inline std::string_view Trim(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);

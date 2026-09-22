@@ -13,6 +13,11 @@ TEST(Strings, LowerLeavesNonAsciiBytesAlone) {
     EXPECT_EQ(Lower("caf\xC3\xA9"), "caf\xC3\xA9");
 }
 
+TEST(Strings, ContainsIsASubstringTest) {
+    EXPECT_TRUE(Contains("creative commons licence", "commons"));
+    EXPECT_FALSE(Contains("commons", "creative commons"));
+}
+
 TEST(Strings, TrimStripsBothEnds) {
     EXPECT_EQ(Trim("  a b \t\n"), "a b");
     EXPECT_EQ(Trim("   "), "");

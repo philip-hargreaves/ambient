@@ -1,6 +1,24 @@
 # core has no deps; OpenVINO and Win32 live in adapters
-add_library(ambient_core INTERFACE)
-target_include_directories(ambient_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_library(ambient_core STATIC
+    src/core/diarisation/resplit.cpp
+    src/core/diarisation/role_naming.cpp
+    src/core/diarisation/tidy_transcript.cpp
+    src/core/diarisation/turn_decode.cpp
+    src/core/guidance/document_units.cpp
+    src/core/guidance/guidance_query.cpp
+    src/core/guidance/guidance_rank.cpp
+    src/core/guidance/page_clean.cpp
+    src/core/guidance/page_text.cpp
+    src/core/guidance/patient_screen.cpp
+    src/core/guidance/recommendation_marks.cpp
+    src/core/guidance/reference_tail.cpp
+    src/core/session/enrolment.cpp
+    src/core/session/note_lane.cpp
+    src/core/session/playback.cpp
+    src/core/session/session_controller.cpp
+    src/core/session/transcribe_recording.cpp)
+target_include_directories(ambient_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(ambient_core PRIVATE ambient_warnings)
 
 # Toolchain is fetched and pinned by tools/get-openvino.ps1
 if(NOT EXISTS "${ambient_SOURCE_DIR}/external/openvino")
