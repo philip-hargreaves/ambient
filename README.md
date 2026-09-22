@@ -133,16 +133,37 @@ dotnet test ambient.slnx
 The workflow runs configure, build and the engine tests in one step. `dotnet test` builds and
 runs the C# suites; the integration tests launch `ambient_engine.exe`, so build the engine first.
 
-Unit tests cover the view models and the supervision policy with fakes at the ports.
-Integration tests exercise the real Win32 adapters (job objects, process launch, kill and
-restart) by spawning short-lived stand-in processes, and carry the `Integration` trait:
+Unit tests cover the view models and the supervision policy with fakes at the ports, and
+run anywhere. Tests that need the built engine carry `Requires=Engine`; the ten-minute replay
+at 1x carries `Requires=EngineSlow` and the crash battery `Requires=CrashBattery`. The fast
+local run is:
 
 ```powershell
-dotnet test ambient.slnx --filter "Category!=Integration"
+dotnet test ambient.slnx --filter "Requires!=Engine&Requires!=EngineSlow&Requires!=CrashBattery"
 ```
 
-runs the unit tests alone. Both kinds run on every build. There is no UI automation; the
-views hold no logic to test.
+CI runs that filter without an engine and `Requires=Engine` after building one; the slow and
+crash sets run on demand through `tools/run-gates.ps1`. There is no UI automation: the views
+are XAML with thin code-behind, and the logic they bind to is tested through the view models.
+
+## Repository layout
+
+```
+engine/            C++20 engine: src/core (pure logic, one folder per stage), src/ports (the
+                   interfaces), src/adapters (one folder per seam); tests/ mirrors src/
+app/               .NET shell: Ambient.App (WinUI views), Ambient.App.Core (view models, no WinUI),
+                   Ambient.Client (the engine SDK over the pipe); one test project each
+tools/             Ambient.FetchModels (weights download and packing) and the staging scripts
+schema/            the JSON-RPC contract between shell and engine, with fixtures
+weights/           model pack manifests; the packs themselves are release assets
+prompts/  demo/    note prompts; the bundled demo consultations
+```
+
+The shell talks to the engine over a named pipe; nothing in `engine/` references `app/`. Both
+halves are organised by feature within each layer: `engine/src/core/guidance/`,
+`engine/src/adapters/guidance/`, `app/Ambient.App.Core/Features/Guidance/` and
+`app/Ambient.App/Features/Guidance/` are one feature read across the product. `app/README.md` and
+`engine/src/README.md` describe each half.
 
 ## Notes
 
