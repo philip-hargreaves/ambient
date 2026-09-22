@@ -5,7 +5,6 @@
 
 #include "adapters/diarisation/cluster_voiceprint.hpp"
 #include "adapters/diarisation/speaker_clustering.hpp"
-#include "core/common/env_flag.hpp"
 #include "core/diarisation/clip_cuts.hpp"
 #include "core/diarisation/diar_regions.hpp"
 #include "core/diarisation/role_naming.hpp"
@@ -79,9 +78,8 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio,
     const auto regions = SpeechRegions(probabilities, audio.size());
     seg.change_points.insert(seg.change_points.end(), turn_boundaries.begin(),
                              turn_boundaries.end());
-    if (EnvFlag("AMBIENT_CLIP_CUTS")) {
+    {
         const auto cuts = SnapClipCuts(capture.clip_cuts, probabilities, seg.change_points);
-        LogClipCuts("finalise", capture.clip_cuts, cuts, probabilities);
         seg.change_points.insert(seg.change_points.end(), cuts.begin(), cuts.end());
     }
     std::sort(seg.change_points.begin(), seg.change_points.end());

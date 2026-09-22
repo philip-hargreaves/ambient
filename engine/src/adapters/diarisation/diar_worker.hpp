@@ -28,9 +28,9 @@ struct CaptureDiarisation {
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<float>> embeddings;
     TurnTexts turn_texts;    // the speculation cache, keyed on exact decode spans
     TurnChunks turn_chunks;  // the chunks behind it, same keys
-    // Edge-chunk span -> embedding, computed during capture (AMBIENT_RESPLIT)
+    // Edge-chunk span -> embedding, computed during capture for the re-split
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<float>> chunk_embeddings;
-    std::vector<std::uint64_t> clip_cuts;  // AMBIENT_CLIP_CUTS: segment edges from clip decodes
+    std::vector<std::uint64_t> clip_cuts;  // segment edges from clip decodes
 };
 
 // What the last Advance could say about the sealed transcript's opening

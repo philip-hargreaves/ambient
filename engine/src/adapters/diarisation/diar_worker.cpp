@@ -8,7 +8,6 @@
 #include <string>
 
 #include "adapters/diarisation/speaker_clustering.hpp"
-#include "core/common/env_flag.hpp"
 #include "core/diarisation/clip_cuts.hpp"
 #include "core/diarisation/diar_capture.hpp"
 #include "core/diarisation/diar_regions.hpp"
@@ -61,7 +60,7 @@ const std::vector<float>& DiarWorker::EmbedSlice(std::span<const float> audio,
     return slot;
 }
 
-void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn> turns,
+void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn> /*turns*/,
                          const DecodeClipFn& decode, int budget) {
     auto& s = state_;
 
@@ -83,9 +82,7 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
     }
 
     const auto settled =
-        EnvFlag("AMBIENT_SEG_FRONTIER")
-            ? SegSettledFrontier(s.seg_done, s.vad_probabilities.size() * audio::kVadHopFrames)
-            : SettledFrontier(s.seg_done, turns, audio.size());
+        SegSettledFrontier(s.seg_done, s.vad_probabilities.size() * audio::kVadHopFrames);
     if (settled == 0) return;
     // Without a budget this is finalise's catch-up; its phases are logged
     const bool catch_up = budget == std::numeric_limits<int>::max();
@@ -96,19 +93,9 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
     };
 
     // Slices behind the frontier, cut exactly as finalise cuts them
-    // (including the AMBIENT_DIAR_SEG_CUTS_ONLY windowless ablation)
     auto cps = s.seg.change_points;
-    if (!EnvFlag("AMBIENT_DIAR_SEG_CUTS_ONLY")) {
-        for (const auto& turn : turns) {
-            if (turn.first_frame <= settled) cps.push_back(turn.first_frame);
-            if (turn.first_frame + turn.frame_count <= settled) {
-                cps.push_back(turn.first_frame + turn.frame_count);
-            }
-        }
-    }
-    if (EnvFlag("AMBIENT_CLIP_CUTS")) {
+    {
         const auto cuts = SnapClipCuts(s.clip_cuts, s.vad_probabilities, cps);
-        LogClipCuts("capture", s.clip_cuts, cuts, s.vad_probabilities);
         cps.insert(cps.end(), cuts.begin(), cuts.end());
     }
     std::sort(cps.begin(), cps.end());
@@ -211,7 +198,7 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
             const std::string text = JoinedText(chunks_of_span);
             ++decoded;
             decoded_audio += static_cast<double>(b - a) / audio::kSampleRate;
-            if (catch_up || EnvFlag("AMBIENT_CUT_DEBUG")) {
+            if (catch_up) {
                 std::fprintf(stderr, "ambient-engine: %s decoded %.1f-%.1f s\n",
                              catch_up ? "catch-up" : "tick",
                              static_cast<double>(a) / audio::kSampleRate,
@@ -236,9 +223,9 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
                      seconds(t_decode, t_end), seconds(t_start, t_end));
     }
 
-    // AMBIENT_RESPLIT: edge chunks are embedded now, a few per tick, so the
-    // finalise re-split only takes dot products
-    if (EnvFlag("AMBIENT_RESPLIT")) {
+    // Edge chunks are embedded now, a few per tick, so the finalise re-split
+    // only takes dot products
+    {
         int embeds = catch_up ? std::numeric_limits<int>::max() : kEdgeEmbedBudget;
         for (std::size_t i = 0; i < merged.size() && embeds > 0; ++i) {
             const auto key = std::make_pair(spans[i].first_frame, spans[i].end_frame);
@@ -264,7 +251,7 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
     speculation_.cluster_count = clusters.count;
     // The prefill reads this transcript; it must re-split as the seal does or
     // the prompt diverges at the first move
-    if (EnvFlag("AMBIENT_RESPLIT") && clusters.count >= 2 && !speculation_.turns.empty()) {
+    if (clusters.count >= 2 && !speculation_.turns.empty()) {
         const auto spec_spans = DecodeSpans(speculation_.turns, audio.size());
         std::vector<std::vector<asr::Turn>> chunks(speculation_.turns.size());
         for (std::size_t i = 0; i < spec_spans.size(); ++i) {
@@ -272,8 +259,6 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
                 s.turn_chunks.find({spec_spans[i].first_frame, spec_spans[i].end_frame});
             if (it != s.turn_chunks.end()) chunks[i] = it->second;
         }
-        const std::string margin_env = EnvValue("AMBIENT_RESPLIT_MARGIN");
-        const double margin = margin_env.empty() ? kResplitMargin : std::atof(margin_env.c_str());
         const auto pieces = ResplitByEmbedding(
             speculation_.turns, speculation_.texts, chunks,
             [&](std::uint64_t first, std::uint64_t end) -> std::vector<float> {
@@ -281,7 +266,7 @@ void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn
                 if (it != s.chunk_embeddings.end()) return it->second;
                 return {};  // not yet embedded: judged next tick
             },
-            clusters.centroids, margin);
+            clusters.centroids);
         speculation_.turns.clear();
         speculation_.texts.clear();
         for (const auto& piece : pieces) {

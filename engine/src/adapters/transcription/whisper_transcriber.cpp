@@ -9,7 +9,6 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/system/gpu_lease.hpp"
-#include "core/common/env_flag.hpp"
 #include "core/metrics/metrics.hpp"
 #include "core/transcription/turn_assembly.hpp"
 #include "ports/audio_source.hpp"

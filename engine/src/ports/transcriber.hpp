@@ -52,7 +52,7 @@ class ITranscriber {
     }
 
     // Chunk edges (absolute frames, inside the clip) from every decode since
-    // the last call; AMBIENT_CLIP_CUTS feeds them back as cut points. Empty
+    // the last call; the diariser takes them as cut points. Empty
     // when unsupported
     virtual std::vector<std::uint64_t> TakeClipCuts() {
         return {};

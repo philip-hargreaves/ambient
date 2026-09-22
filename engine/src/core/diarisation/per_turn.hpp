@@ -10,7 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "core/common/env_flag.hpp"
 #include "core/diarisation/diar_regions.hpp"
 #include "ports/diariser.hpp"
 
@@ -79,13 +78,12 @@ inline std::vector<Region> DecodeSpans(const std::vector<LabelledSlice>& turns,
     return spans;
 }
 
-// AMBIENT_CHUNK_ASSEMBLE: a span whose edges sit on a cached decode's chunk edges
-// (a cut re-sliced a decoded turn) takes those chunks instead of a second decode
+// A span whose edges sit on a cached decode's chunk edges (a cut re-sliced a
+// decoded turn) takes those chunks instead of a second decode
 inline constexpr std::uint64_t kAssembleTolFrames = 5600;  // 0.35 s: snap window plus span clamp
 
 inline std::optional<std::vector<asr::Turn>> AssembleFromChunks(const TurnChunks& cache,
                                                                 std::uint64_t a, std::uint64_t b) {
-    if (!EnvFlag("AMBIENT_CHUNK_ASSEMBLE")) return std::nullopt;
     const auto close_to = [](std::uint64_t x, std::uint64_t y) {
         return (x > y ? x - y : y - x) <= kAssembleTolFrames;
     };
@@ -102,13 +100,6 @@ inline std::optional<std::vector<asr::Turn>> AssembleFromChunks(const TurnChunks
         const auto& last = inside.back();
         if (!close_to(first.first_frame, a) || !close_to(last.first_frame + last.frame_count, b))
             continue;
-        if (EnvFlag("AMBIENT_CUT_DEBUG")) {
-            std::fprintf(
-                stderr,
-                "ambient-engine: assembled %.2f-%.2f s from decode %.2f-%.2f s (%zu chunks)\n",
-                a / 16000.0, b / 16000.0, span.first / 16000.0, span.second / 16000.0,
-                inside.size());
-        }
         return inside;
     }
     return std::nullopt;

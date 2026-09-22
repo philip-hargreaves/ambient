@@ -51,7 +51,7 @@ class INoteWriter {
     virtual void Prepare() {}
 
     // Capture-phase guess at how the sealed transcript begins, so the stop
-    // path prefills only the tail (AMBIENT_NOTE_PREFILL); never blocks capture
+    // path prefills only the tail; never blocks capture
     virtual void Prefill(const std::vector<asr::Turn>&, const NoteOptions&) {}
 
     // An in-process writer needs the transcriber off the GPU first

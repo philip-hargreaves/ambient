@@ -23,25 +23,6 @@ namespace {
 
 constexpr auto kTestSettle = std::chrono::milliseconds(200);
 
-// The pipeline switches default to the single-decode product (env_flag.hpp);
-// tests of the retained two-pass arm (live windows, no cuts, no prefill) say so
-struct TwoPassArm {
-    static constexpr const char* kSwitches[] = {"AMBIENT_DIAR_SEG_CUTS_ONLY",
-                                                "AMBIENT_SEG_FRONTIER",
-                                                "AMBIENT_NO_LIVE_ASR",
-                                                "AMBIENT_NOTE_PREFILL",
-                                                "AMBIENT_CLIP_CUTS",
-                                                "AMBIENT_RESPLIT",
-                                                "AMBIENT_TIDY",
-                                                "AMBIENT_CHUNK_ASSEMBLE"};
-    TwoPassArm() {
-        for (const char* name : kSwitches) _putenv_s(name, "0");
-    }
-    ~TwoPassArm() {
-        for (const char* name : kSwitches) _putenv_s(name, "");
-    }
-};
-
 // One 100 ms window at an amplitude the meter reads as full scale
 std::vector<float> Window() {
     return std::vector<float>(LevelMeter::kWindowFrames, 0.70710678F);
@@ -626,7 +607,6 @@ struct GatedVad : PassthroughVad {
 };
 
 TEST(SessionController, WindowsAreIdenticalWhenTheVadArrivesLate) {
-    TwoPassArm two_pass;
     const auto run = [](bool vad_ready) {
         RecordingEvents events;
         FakeSessionStore store;
@@ -648,7 +628,6 @@ TEST(SessionController, WindowsAreIdenticalWhenTheVadArrivesLate) {
 }
 
 TEST(SessionController, HopsBufferedWhileTheVadLoadsDrainMidSession) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     RecordingTranscriber transcriber;
@@ -694,7 +673,6 @@ TEST(SessionController, MetricsCarryTheSessionAndItsStages) {
 }
 
 TEST(SessionController, EveryCapturedFrameReachesTheTranscriberByStop) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     RecordingTranscriber transcriber;
@@ -731,7 +709,6 @@ TEST(SessionController, WithoutADiariserTheLiveWindowsAreTheTranscript) {
 }
 
 TEST(SessionController, TurnsReachTheStoreAndTheEvents) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -750,7 +727,6 @@ TEST(SessionController, TurnsReachTheStoreAndTheEvents) {
 }
 
 TEST(SessionController, TheNoteFollowsTheSeal) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -785,7 +761,6 @@ TEST(SessionController, TheNoteFollowsTheSeal) {
 }
 
 TEST(SessionController, ARefusedNoteSaveStillReachesTheShellAndFiresNoNoteSaved) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     store.refuse_documents = true;
@@ -806,7 +781,6 @@ TEST(SessionController, ARefusedNoteSaveStillReachesTheShellAndFiresNoNoteSaved)
 }
 
 TEST(SessionController, WhatFollowsTheNoteCannotFailIt) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     events.note_saved_throws = true;
     FakeSessionStore store;
@@ -1302,7 +1276,6 @@ TEST(SessionController, StartFailsWhenTheStoreRefusesASession) {
 }
 
 TEST(SessionController, StopFinalisesTheSession) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -1326,9 +1299,6 @@ struct FakeDiariser : diar::IDiariser {
     int clusters = 1;
     std::vector<double> similarities;
     diar::DiariseTiming timing;
-
-    std::size_t boundary_cuts = 0;
-    std::vector<std::uint64_t> bounds;
 
     // Written on the diarisation thread; read after the controller joins it
     int advances = 0;
@@ -1354,9 +1324,7 @@ struct FakeDiariser : diar::IDiariser {
     bool speculate_first_turn = false;
 
     diar::DiariseResult Diarise(std::span<const float> audio,
-                                std::span<const std::uint64_t> turn_boundaries) override {
-        boundary_cuts = turn_boundaries.size();
-        bounds.assign(turn_boundaries.begin(), turn_boundaries.end());
+                                std::span<const std::uint64_t> /*turn_boundaries*/) override {
         ++calls;
         audio_frames = audio.size();
         diar::DiariseResult result;
@@ -1457,7 +1425,6 @@ bool WaitForFrames(FakeSessionStore& store, std::size_t n) {
 }
 
 TEST(SessionController, StopReplacesTurnsWithTheAttributedTranscript) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -1474,16 +1441,14 @@ TEST(SessionController, StopReplacesTurnsWithTheAttributedTranscript) {
     EXPECT_FALSE(store.frames.empty());
     EXPECT_EQ(diariser.audio_frames, store.frames.size())
         << "the diariser hears exactly the captured audio";
-    EXPECT_EQ(store.Calls(),
-              (std::vector<std::string>{"begin s1", "turn s1", "replace s1", "finalise s1"}))
-        << "the attributed transcript supersedes the live turns before the seal";
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "replace s1", "finalise s1"}))
+        << "the attributed transcript is the only transcript the store sees";
     ASSERT_EQ(store.turns.size(), 1u);
     EXPECT_EQ(store.turns[0].speaker, "speaker 1") << "one cluster cannot be named";
     EXPECT_EQ(diariser.accruals, 0) << "an abstained session must not teach the anchor";
 }
 
 TEST(SessionController, AnchorSimilaritiesNameTheRolesAndAccrue) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -1505,7 +1470,6 @@ TEST(SessionController, AnchorSimilaritiesNameTheRolesAndAccrue) {
     EXPECT_EQ(diariser.accruals, 1);
     EXPECT_EQ(diariser.accrued_cluster, 1) << "the nearer cluster to the anchor is the doctor";
     EXPECT_EQ(diariser.similarity_calls, 1) << "the anchor is consulted once, off the decode path";
-    EXPECT_GT(diariser.boundary_cuts, 0u) << "transcribed-turn edges reach the diariser as cuts";
 }
 
 TEST(SessionController, FinaliseDecodesEachTurnFromItsOwnAudio) {
@@ -1553,17 +1517,8 @@ TEST(SessionController, DiarisationAdvancesDuringCapture) {
     EXPECT_EQ(diariser.calls, 1);
 }
 
-TEST(SessionController, TheSpeculatedOpeningReachesTheNoteWriterOnlyBehindTheFlag) {
-    struct FlagScope {
-        explicit FlagScope(const char* value) {
-            _putenv_s("AMBIENT_NOTE_PREFILL", value);
-        }
-        ~FlagScope() {
-            _putenv_s("AMBIENT_NOTE_PREFILL", "");
-        }
-    };
-    for (const bool flag : {false, true}) {
-        FlagScope scope(flag ? "1" : "0");
+TEST(SessionController, TheSpeculatedOpeningReachesTheNoteWriter) {
+    {
         RecordingEvents events;
         FakeSessionStore store;
         asr::ScriptedTranscriber transcriber;
@@ -1578,26 +1533,13 @@ TEST(SessionController, TheSpeculatedOpeningReachesTheNoteWriterOnlyBehindTheFla
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         controller.Stop();
         ASSERT_GT(diariser.advances, 0);
-        if (flag) {
-            EXPECT_GT(writer.prefills.load(), 0) << "each tick hands the guess to the note lane";
-            EXPECT_EQ(writer.last_prefill_speaker, "doctor");
-        } else {
-            EXPECT_EQ(writer.prefills.load(), 0) << "shipped behaviour: no prefill";
-        }
+        EXPECT_GT(writer.prefills.load(), 0) << "each tick hands the guess to the note lane";
+        EXPECT_EQ(writer.last_prefill_speaker, "doctor");
     }
 }
 
-TEST(SessionController, FinaliseSettlesTheRemainingAudioOnlyBehindTheClipCutsFlag) {
-    struct FlagScope {
-        explicit FlagScope(const char* value) {
-            _putenv_s("AMBIENT_CLIP_CUTS", value);
-        }
-        ~FlagScope() {
-            _putenv_s("AMBIENT_CLIP_CUTS", "");
-        }
-    };
-    for (const bool flag : {false, true}) {
-        FlagScope scope(flag ? "snap" : "0");
+TEST(SessionController, FinaliseSettlesTheRemainingAudio) {
+    {
         RecordingEvents events;
         FakeSessionStore store;
         asr::ScriptedTranscriber transcriber;
@@ -1609,25 +1551,13 @@ TEST(SessionController, FinaliseSettlesTheRemainingAudioOnlyBehindTheClipCutsFla
         ASSERT_TRUE(controller.Start());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         controller.Stop();
-        if (flag) {
-            EXPECT_EQ(diariser.settles, 1) << "finalise decodes what capture had not reached";
-            EXPECT_EQ(diariser.settled_frames, store.frames.size());
-        } else {
-            EXPECT_EQ(diariser.settles, 0) << "shipped behaviour: no catch-up pass";
-        }
+        EXPECT_EQ(diariser.settles, 1) << "finalise decodes what capture had not reached";
+        EXPECT_EQ(diariser.settled_frames, store.frames.size());
         EXPECT_EQ(diariser.calls, 1);
     }
 }
 
 TEST(SessionController, ATicksClipCutsAreAppliedInTheSameTick) {
-    struct FlagScope {
-        FlagScope() {
-            _putenv_s("AMBIENT_CLIP_CUTS", "snap");
-        }
-        ~FlagScope() {
-            _putenv_s("AMBIENT_CLIP_CUTS", "");
-        }
-    } scope;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -1928,7 +1858,6 @@ TEST(SessionController, CancelErasesTheSession) {
 }
 
 TEST(SessionController, MidSessionDeathRaisesInterruptedAndAbandons) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -1948,7 +1877,6 @@ TEST(SessionController, MidSessionDeathRaisesInterruptedAndAbandons) {
 }
 
 TEST(SessionController, AThrowingSourceIsGuardedAndReported) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -1967,7 +1895,6 @@ TEST(SessionController, AThrowingSourceIsGuardedAndReported) {
 }
 
 TEST(SessionController, ACompletedReplayEndsQuietlyAndFinalises) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -2206,7 +2133,6 @@ TEST(SessionController, EnrolmentEmbedsTheSpeechAndReplacesTheAnchor) {
 }
 
 TEST(SessionController, EnrolmentIsRefusedDuringASessionAndViceVersa) {
-    TwoPassArm two_pass;
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;

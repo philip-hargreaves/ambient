@@ -458,30 +458,20 @@ WorkerNoteWriter::~WorkerNoteWriter() {
     impl_->CloseWorker();
 }
 
-// Spawn and load hide inside capture; AMBIENT_NOTE_LOAD=stop defers the load
-// (co-residency experiment knob). Failure surfaces on Write
+// Spawn and load hide inside capture. Failure surfaces on Write
 void WorkerNoteWriter::Prepare() {
-    static const bool load_at_stop = [] {
-        char* value = nullptr;
-        const bool at_stop = _dupenv_s(&value, nullptr, "AMBIENT_NOTE_LOAD") == 0 &&
-                             value != nullptr && std::string(value) == "stop";
-        std::free(value);
-        return at_stop;
-    }();
     if (impl_->Wedged()) return;
     try {
         impl_->EnsureWorker();
-        if (!load_at_stop) {
-            bool starting = false;
-            impl_->Transition([&starting](NoteModelState& s) {
-                if (s.phase == NoteModelState::Phase::kReady) return;
-                starting = s.phase != NoteModelState::Phase::kLoading;
-                s.phase = NoteModelState::Phase::kLoading;
-                s.detail.clear();
-            });
-            impl_->Send("prepare", json::object());
-            if (starting) impl_->StartWatcher();
-        }
+        bool starting = false;
+        impl_->Transition([&starting](NoteModelState& s) {
+            if (s.phase == NoteModelState::Phase::kReady) return;
+            starting = s.phase != NoteModelState::Phase::kLoading;
+            s.phase = NoteModelState::Phase::kLoading;
+            s.detail.clear();
+        });
+        impl_->Send("prepare", json::object());
+        if (starting) impl_->StartWatcher();
     } catch (const std::exception& e) {
         std::fprintf(stderr, "ambient-engine: note worker prepare failed (%s)\n", e.what());
         impl_->Transition([&e](NoteModelState& s) {

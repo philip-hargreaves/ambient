@@ -8,12 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "core/common/env_flag.hpp"
 #include "ports/diariser.hpp"
 
 namespace ambient::diar {
 
-// AMBIENT_RESPLIT: a merged turn can carry the other speaker's sentence at an
+// A merged turn can carry the other speaker's sentence at an
 // edge when the segmenter's boundary fell short and no cut caught it. At finalise
 // each turn's edge chunks are embedded and compared with the cluster centroids; a
 // chunk nearer the other cluster by the margin becomes that speaker's turn. Only
@@ -58,16 +57,11 @@ inline int BetterCluster(const std::vector<float>& e, int own,
 
 }  // namespace detail
 
-// dry_run: every edge chunk is scored and logged, nothing moves; the calibration
-// study reads the log against the reference
 inline std::vector<ResplitTurn> ResplitByEmbedding(
     const std::vector<LabelledSlice>& turns, const std::vector<std::string>& texts,
     const std::vector<std::vector<asr::Turn>>& chunks, const EmbedSpanFn& embed,
-    const std::vector<std::vector<float>>& centroids, double margin = kResplitMargin,
-    bool dry_run = false) {
+    const std::vector<std::vector<float>>& centroids, double margin = kResplitMargin) {
     std::vector<ResplitTurn> out;
-    const bool debug = EnvFlag("AMBIENT_CUT_DEBUG") || dry_run;
-    if (dry_run) margin = 0.0;
     for (std::size_t i = 0; i < turns.size(); ++i) {
         const auto& turn = turns[i];
         const auto& parts = i < chunks.size() ? chunks[i] : std::vector<asr::Turn>{};
@@ -87,14 +81,6 @@ inline std::vector<ResplitTurn> ResplitByEmbedding(
             double best = 0.0;
             const int other =
                 detail::BetterCluster(embed(lo, hi), turn.cluster, centroids, margin, &own, &best);
-            if (debug) {
-                std::fprintf(
-                    stderr,
-                    "ambient-engine: resplit-candidate %.2f-%.2f s cluster %d own %.3f other "
-                    "%.3f %s '%s'\n",
-                    lo / 16000.0, hi / 16000.0, turn.cluster, own, best,
-                    other >= 0 ? "moves" : "stays", p.text.c_str());
-            }
             if (other < 0) return false;
             owner[j] = other;
             return true;
@@ -103,7 +89,7 @@ inline std::vector<ResplitTurn> ResplitByEmbedding(
         while (front + 1 < parts.size() && judge(front)) ++front;
         std::size_t back = parts.size();
         while (back > front + 1 && judge(back - 1)) --back;
-        if (dry_run || (front == 0 && back == parts.size())) {
+        if (front == 0 && back == parts.size()) {
             out.push_back({turn, texts[i]});
             continue;
         }

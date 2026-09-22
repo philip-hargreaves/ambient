@@ -16,7 +16,7 @@
 
 namespace ambient::system {
 
-// AMBIENT_NOTE_PREFILL: one named mutex serialises the engine's Whisper decodes
+// One named mutex serialises the engine's Whisper decodes
 // against the note host's capture-phase prefills, so the two GPU models never run
 // concurrently (the driver fault configuration). Named by
 // AMBIENT_GPU_LEASE, which the engine sets and the host inherits; inert when unset

@@ -156,14 +156,6 @@ namespace ambient::diar {
 namespace {
 
 TEST(AssembleFromChunks, ACutPieceOnChunkEdgesIsAssembledNotRedecoded) {
-    struct Flag {
-        Flag() {
-            _putenv_s("AMBIENT_CHUNK_ASSEMBLE", "1");
-        }
-        ~Flag() {
-            _putenv_s("AMBIENT_CHUNK_ASSEMBLE", "");
-        }
-    } flag;
     TurnChunks cache;
     asr::Turn c1, c2, c3;
     c1.first_frame = 0;

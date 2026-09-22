@@ -11,7 +11,7 @@
 
 namespace ambient::diar {
 
-// AMBIENT_TIDY: the sealed transcript tidied as a professional
+// The sealed transcript tidied as a professional
 // transcriber would. Three rules in this order; none moves a word between speakers:
 //   1. one speaker's consecutive turns under kTidyMergeGapFrames apart merge, so a
 //      fragment cut from its sentence ("So I..." / "to know what's going on.") rejoins it

@@ -85,9 +85,7 @@ struct QwenNoteWriter::Impl {
             metrics->RecordDevice("note", device);
             metrics->RecordLoad("note", report.seconds);
         }
-        if (built->ExtendsKv()) {
-            WarmPromptPrefix(*built);
-        }
+        WarmPromptPrefix(*built);
         std::lock_guard<std::mutex> lock(swap_mutex);
         pipeline = std::move(built);
         report.ok = true;
@@ -222,7 +220,7 @@ std::string QwenNoteWriter::WriteSummary(const std::string& note) {
 void QwenNoteWriter::Prefill(const std::vector<asr::Turn>& transcript, const NoteOptions& options) {
     if (transcript.empty()) return;
     const auto pipeline = impl_->Pipeline();
-    if (pipeline == nullptr || !pipeline->ExtendsKv()) return;
+    if (pipeline == nullptr) return;
     std::unique_lock<std::mutex> lock(impl_->generate_mutex, std::try_to_lock);
     if (!lock.owns_lock()) return;
     const std::string prompt = "<|im_start|>user\n" +

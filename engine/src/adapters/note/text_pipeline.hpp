@@ -28,11 +28,6 @@ class TextPipeline {
     // Streams pieces to the streamer when given; the streamer's STOP ends the generation
     virtual Result Generate(const std::string& prompt, const ov::genai::GenerationConfig& config,
                             const Streamer& streamer) = 0;
-
-    // Whether a generate call extends the previous call's KV on this
-    // pipeline (measured per implementation): the capture-phase prefill and
-    // the prefix warm are pointless work otherwise
-    virtual bool ExtendsKv() const = 0;
 };
 
 // Builds the pipeline the manifest names, on the resolved device, with the

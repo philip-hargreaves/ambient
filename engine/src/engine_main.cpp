@@ -49,7 +49,6 @@
 #include "core/audio/playback.hpp"
 #include "core/audio/session_controller.hpp"
 #include "core/common/cli_args.hpp"
-#include "core/common/env_flag.hpp"
 #include "core/metrics/metrics.hpp"
 #include "core/metrics/throughput.hpp"
 
@@ -244,9 +243,11 @@ int main(int argc, char* argv[]) {
         const std::string guidelines_override = ambient::TakeFlag(args, "--guidelines");
         // Dev builds only: a demo corpus marked research is searched when this is set
         const bool include_research = ambient::TakeSwitch(args, "--include-research");
-        // AMBIENT_NOTE_PREFILL: whisper and the note host take turns on the GPU;
-        // with whisper on the NPU there is nothing to share
-        if (ambient::EnvFlag("AMBIENT_NOTE_PREFILL") && asr_device != "NPU") {
+        // Evaluation only: a held-out run must not teach the voiceprint
+        const bool freeze_anchor = ambient::TakeSwitch(args, "--freeze-anchor");
+        // Whisper and the note host take turns on the GPU; with whisper on the
+        // NPU there is nothing to share
+        if (asr_device != "NPU") {
             const std::string lease = "Local\\ambient-gpu-" + std::to_string(GetCurrentProcessId());
             _putenv_s("AMBIENT_GPU_LEASE", lease.c_str());
             std::fprintf(stderr, "ambient-engine: note prefill on, GPU lease %s\n", lease.c_str());
@@ -467,6 +468,7 @@ int main(int argc, char* argv[]) {
         ambient::audio::SessionController controller(
             std::move(factory), events, session_store, *transcriber, *vad, std::chrono::seconds(10),
             diariser.get(), 5 * ambient::audio::kSampleRate, note_writer.get(), &metrics);
+        if (freeze_anchor) controller.FreezeAnchor();
 
         // Added documents live in her guidelines folder, embed between note
         // searches and wait while a consultation runs

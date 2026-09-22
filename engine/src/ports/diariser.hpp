@@ -110,7 +110,7 @@ class IDiariser {
     }
 
     // Extra cut points (absolute frames) for the next Advance and Diarise;
-    // AMBIENT_CLIP_CUTS feeds Whisper's chunk edges here
+    // Whisper's chunk edges arrive here
     virtual void AddCutPoints(std::span<const std::uint64_t>) {}
 
     // A voiceprint of the given speech (unit norm), empty when too short or

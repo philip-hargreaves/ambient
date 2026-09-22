@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "adapters/guidance/chunker.hpp"
-#include "core/common/env_flag.hpp"
 
 namespace ambient::guidance {
 namespace {
@@ -115,8 +114,14 @@ TEST(ChunksFromText, NeverExceedsTheMaximum) {
 // The engine chunker over the real NICE research copy must reproduce the
 // harness's chunk file exactly. Opt in with the two paths, skipped elsewhere
 TEST(ChunksFromDocument, ReproducesTheHarnessChunkFileWhenTheCorpusIsPresent) {
-    const auto dir = EnvValue("AMBIENT_NICE_DIR");
-    const auto file = EnvValue("AMBIENT_NICE_CHUNKS");
+    const auto env = [](const char* name) {
+        char* value = nullptr;
+        std::string out = _dupenv_s(&value, nullptr, name) == 0 && value != nullptr ? value : "";
+        std::free(value);
+        return out;
+    };
+    const auto dir = env("AMBIENT_NICE_DIR");
+    const auto file = env("AMBIENT_NICE_CHUNKS");
     if (dir.empty() || file.empty()) GTEST_SKIP() << "set AMBIENT_NICE_DIR and AMBIENT_NICE_CHUNKS";
     const std::filesystem::path root(dir);
     std::set<std::string> requested;

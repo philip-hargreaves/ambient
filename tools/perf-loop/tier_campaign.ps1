@@ -10,10 +10,9 @@ param(
 $ErrorActionPreference = "Continue"
 Set-Location C:\dev\ambient
 $arms = @(
-    @{ tag = "tier-4b";        tier = "constrained"; vlmPrefill = "" },
-    @{ tag = "tier-9b";        tier = "default";     vlmPrefill = "" },
-    @{ tag = "tier-35b";       tier = "accuracy";    vlmPrefill = "" },
-    @{ tag = "tier-35b-pf";    tier = "accuracy";    vlmPrefill = "1" }
+    @{ tag = "tier-4b";        tier = "constrained" },
+    @{ tag = "tier-9b";        tier = "default" },
+    @{ tag = "tier-35b";       tier = "accuracy" }
 )
 "campaign $(Get-Date -Format 'yyyy-MM-dd HH:mm')  power: $((Get-CimInstance -Namespace root/cimv2/power -ClassName Win32_PowerPlan -Filter 'IsActive=true' -ErrorAction SilentlyContinue).ElementName)" | Tee-Object -FilePath (Join-Path $Out "tier-campaign.log") -Append
 foreach ($track in $Tracks) {
@@ -21,7 +20,6 @@ foreach ($track in $Tracks) {
         $env:PERF_NOTE_TIER = $arm.tier
         $env:PERF_TAG = "-" + $arm.tag
         $env:PERF_CYCLES = "1"
-        if ($arm.vlmPrefill) { $env:AMBIENT_VLM_PREFILL = $arm.vlmPrefill } else { Remove-Item Env:AMBIENT_VLM_PREFILL -ErrorAction SilentlyContinue }
         "=== $track / $($arm.tag)  $(Get-Date -Format 'HH:mm:ss')" | Tee-Object -FilePath (Join-Path $Out "tier-campaign.log") -Append
         python tools/perf-loop/perf_loop.py 1 $track 2>&1 | Select-Object -Last 3 | Tee-Object -FilePath (Join-Path $Out "tier-campaign.log") -Append
         $log = Join-Path $Out "logs\engine-001.log"
@@ -29,5 +27,5 @@ foreach ($track in $Tracks) {
         Start-Sleep 5
     }
 }
-Remove-Item Env:AMBIENT_VLM_PREFILL, Env:PERF_NOTE_TIER, Env:PERF_TAG -ErrorAction SilentlyContinue
+Remove-Item Env:PERF_NOTE_TIER, Env:PERF_TAG -ErrorAction SilentlyContinue
 "campaign done $(Get-Date -Format 'HH:mm:ss')" | Tee-Object -FilePath (Join-Path $Out "tier-campaign.log") -Append
