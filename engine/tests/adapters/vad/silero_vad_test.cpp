@@ -65,7 +65,7 @@ TEST(SileroVad, SeparatesSpeechFromSilenceAtTheShippedThresholds) {
     EXPECT_LT(max_silence, 0.25f) << "digital silence must stay under the exit threshold";
     // Release measures 0.097 ms, matching the spec's ~0.1; the slack is Debug
     // harness overhead, and a 32 ms hop budget keeps inline capture safe
-    EXPECT_LT(per_hop, 2.0) << "inline on the capture path requires margin";
+    EXPECT_LT(per_hop, 2.0) << "inline on the audio pipeline requires margin";
 }
 
 TEST(SileroVad, ResetClearsTheRecurrentState) {
