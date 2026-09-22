@@ -46,10 +46,10 @@
 #include "adapters/vad/deferred_vad.hpp"
 #include "adapters/vad/passthrough_vad.hpp"
 #include "adapters/vad/silero_vad.hpp"
-#include "core/audio/playback.hpp"
-#include "core/audio/session_controller.hpp"
 #include "core/common/cli_args.hpp"
 #include "core/metrics/metrics.hpp"
+#include "core/session/playback.hpp"
+#include "core/session/session_controller.hpp"
 
 namespace {
 
@@ -84,9 +84,9 @@ bool Uncompiled(const ambient::models::ModelStore& store, const std::string& rol
 
 // A replay request plays a wav through the same port; a launch-time wav path
 // (CI, scripts) forces every session to replay that file
-ambient::audio::SourceFactory MakeSourceFactory(std::string forced) {
+ambient::session::SourceFactory MakeSourceFactory(std::string forced) {
     return [forced = std::move(forced)](
-               const std::optional<ambient::audio::ReplaySpec>& replay,
+               const std::optional<ambient::session::ReplaySpec>& replay,
                const std::string& mic_id) -> std::unique_ptr<ambient::audio::IAudioSource> {
         if (replay.has_value()) {
             return std::make_unique<ambient::audio::WavSource>(
@@ -298,7 +298,7 @@ int main(int argc, char* argv[]) {
 
         // 10 s, not 3: a Bluetooth microphone link waking measured 1.6-8.8 s
         // before first audio; wired mics answer in well under a second either way
-        ambient::audio::SessionController controller(
+        ambient::session::SessionController controller(
             MakeSourceFactory(args.size() > 3 ? args[3] : std::string()), events, session_store,
             *transcriber, *vad, *diariser, std::chrono::seconds(10),
             5 * ambient::audio::kSampleRate, note_writer.get(), &metrics);
@@ -321,7 +321,7 @@ int main(int argc, char* argv[]) {
                 }
             });
         // Demo playback ends in a review of the copy, its note searched like any other
-        ambient::audio::Playback playback(
+        ambient::session::Playback playback(
             events, session_store,
             {.finalised = [&controller](const std::string& id) { controller.Open(id); },
              .guidance =

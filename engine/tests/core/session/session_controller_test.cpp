@@ -1,4 +1,4 @@
-#include "core/audio/session_controller.hpp"
+#include "core/session/session_controller.hpp"
 
 #include <gtest/gtest.h>
 
@@ -18,8 +18,17 @@
 #include "adapters/transcription/scripted_transcriber.hpp"
 #include "adapters/vad/passthrough_vad.hpp"
 
-namespace ambient::audio {
+namespace ambient::session {
 namespace {
+
+using audio::EnrolProgress;
+using audio::IAudioSink;
+using audio::IAudioSource;
+using audio::kSampleRate;
+using audio::LevelMeter;
+using audio::LevelReading;
+using audio::PassthroughVad;
+using audio::SourceEndReason;
 
 constexpr auto kTestSettle = std::chrono::milliseconds(200);
 
@@ -698,7 +707,7 @@ TEST(SessionController, MetricsCarryTheSessionAndItsStages) {
     EXPECT_TRUE(s.stage_seconds.contains("capture joined"));
 }
 
-TEST(SessionController, TheNoteFollowsTheSeal) {
+TEST(SessionController, TheNoteFollowsTheTranscript) {
     RecordingEvents events;
     FakeSessionStore store;
     asr::ScriptedTranscriber transcriber;
@@ -727,7 +736,7 @@ TEST(SessionController, TheNoteFollowsTheSeal) {
     EXPECT_TRUE(events.note_failed.empty());
     EXPECT_EQ(store.note, "the clinical note");
     const auto calls = store.Calls();
-    EXPECT_EQ(calls.back(), "note s1") << "the note is stored after the seal";
+    EXPECT_EQ(calls.back(), "note s1") << "the note is stored after the transcript";
     ASSERT_EQ(writer.calls.size(), 1u);
     EXPECT_FALSE(writer.calls[0].empty()) << "the writer gets the transcript";
     EXPECT_GE(writer.prepares.load(), 1) << "the weights warm while the session records";
@@ -1003,7 +1012,7 @@ TEST(SessionController, OpenIsRefusedWhileRecordingOrForAnUnknownSession) {
     }
     controller.Stop();
     ASSERT_TRUE(events.WaitForNote());
-    EXPECT_EQ(controller.LastFinalised(), "s1") << "the seal sets its own target";
+    EXPECT_EQ(controller.LastFinalised(), "s1") << "a finalise sets its own target";
 }
 
 TEST(SessionController, RetainReachesTheStoreAndLeavingSweeps) {
@@ -1267,7 +1276,7 @@ TEST(SessionController, StopFinalisesTheSession) {
     controller.Stop();
 
     EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "replace s1", "finalise s1"}))
-        << "the attributed transcript lands before the session seals";
+        << "the attributed transcript lands before the session finalises";
     EXPECT_FALSE(store.frames.empty()) << "captured audio must reach the store";
 }
 
@@ -1350,7 +1359,7 @@ TEST(SessionController, FinaliseDecodesEachTurnFromItsOwnAudio) {
     ASSERT_EQ(store.turns.size(), 2u) << "one merged turn per cluster";
     const auto half = diariser.audio_frames / 2;
     EXPECT_EQ(store.turns[0].text, "Scripted turn 0, " + std::to_string(half) + " frames.")
-        << "tidied at the seal";
+        << "tidied at finalise";
     EXPECT_EQ(store.turns[1].first_frame, half);
     EXPECT_NE(store.turns[0].speaker, store.turns[1].speaker);
 }
@@ -1730,7 +1739,7 @@ TEST(SessionController, MidSessionDeathRaisesInterruptedAndAbandons) {
     EXPECT_EQ(events.interruptions[0], SourceEndReason::kDeviceLost);
     EXPECT_EQ(events.last_detail, "unplugged");
     EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "abandon s1"}))
-        << "an interrupted recording is kept for recovery, never sealed";
+        << "an interrupted recording is kept for recovery, never finalised";
 }
 
 TEST(SessionController, AThrowingSourceIsGuardedAndReported) {
@@ -1767,7 +1776,7 @@ TEST(SessionController, ACompletedReplayEndsQuietlyAndFinalises) {
     EXPECT_TRUE(events.interruptions.empty());
     EXPECT_EQ(controller.LostFrames(), 3u);
     EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "finalise s1"}))
-        << "one window is under the shortest decodable turn, so it seals without a transcript";
+        << "one window is under the shortest decodable turn, so it finalises without a transcript";
     EXPECT_EQ(store.frames.size(), Window().size());
     EXPECT_EQ(store.lost, 3u) << "loss accounting must reach the store";
 }
@@ -1946,7 +1955,7 @@ TEST(SessionController, AResumedSessionReplaysStoredAudioThenSupersedesTheOld) {
     const auto calls = store.Calls();
     EXPECT_NE(std::find(calls.begin(), calls.end(), "readAudio old-session"), calls.end());
     EXPECT_NE(std::find(calls.begin(), calls.end(), "delete old-session"), calls.end())
-        << "the old session is superseded once the new one seals";
+        << "the old session is superseded once the new one finalises";
     // The new session's store holds the stored audio and the live audio as
     // one continuous stream
     EXPECT_EQ(store.frames.size(), LevelMeter::kWindowFrames * 3 + Window().size());
@@ -2225,4 +2234,4 @@ TEST(SessionController, AWrittenNoteLetsThePrintLearnAndAConfirmedRewriteCannotB
 
 }  // namespace
 
-}  // namespace ambient::audio
+}  // namespace ambient::session

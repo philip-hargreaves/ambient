@@ -6,8 +6,8 @@
 #include <string>
 
 #include "adapters/ipc/pipe_server.hpp"
-#include "core/audio/session_controller.hpp"
 #include "core/metrics/throughput.hpp"
+#include "core/session/session_events.hpp"
 #include "ports/guidance_lane.hpp"
 #include "ports/session_store.hpp"
 #include "ports/translator.hpp"
@@ -16,7 +16,7 @@ namespace ambient::ipc {
 
 // Session events as pipe notifications. Streamed text is metered at the
 // source and capped at ~12 Hz on the wire
-class WireEvents : public audio::ISessionEvents {
+class WireEvents : public session::ISessionEvents {
    public:
     WireEvents(PipeServer& server, store::ISessionStore& sessions);
 

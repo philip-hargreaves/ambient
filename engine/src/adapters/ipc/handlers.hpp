@@ -10,8 +10,8 @@
 #include "adapters/ipc/messages.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
-#include "core/audio/playback.hpp"
-#include "core/audio/session_controller.hpp"
+#include "core/session/playback.hpp"
+#include "core/session/session_controller.hpp"
 #include "ports/document_ingest.hpp"
 #include "ports/guidance_lane.hpp"
 #include "ports/note_lane.hpp"
@@ -136,7 +136,7 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
 
 // Every method the engine serves. first_use: model caches were cold at
 // launch, so the one-off compiles are running and readiness reports them.
-void RegisterMethods(PipeServer& server, ambient::audio::SessionController& controller,
+void RegisterMethods(PipeServer& server, ambient::session::SessionController& controller,
                      const ambient::models::ModelStore& models,
                      ambient::store::ISessionStore& sessions,
                      ambient::metrics::Registry* metrics = nullptr,
@@ -146,6 +146,6 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                      bool first_use = false, ambient::diar::AnchorStore* anchors = nullptr,
                      ambient::note::INoteLane* note_lane = nullptr, bool stray_note_host = false,
                      const std::filesystem::path& demo_dir = {},
-                     ambient::audio::Playback* playback = nullptr);
+                     ambient::session::Playback* playback = nullptr);
 
 }  // namespace ambient::ipc

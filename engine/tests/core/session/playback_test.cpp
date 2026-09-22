@@ -1,4 +1,4 @@
-#include "core/audio/playback.hpp"
+#include "core/session/playback.hpp"
 
 #include <gtest/gtest.h>
 
@@ -12,8 +12,11 @@
 
 #include "adapters/storage/sqlite_session_store.hpp"
 
-namespace ambient::audio {
+namespace ambient::session {
 namespace {
+
+using audio::LevelReading;
+using audio::SourceEndReason;
 
 using store::DocumentKind;
 
@@ -271,4 +274,4 @@ TEST(Playback, ASourceNeverSearchedStillHasItsCopySearched) {
 }
 
 }  // namespace
-}  // namespace ambient::audio
+}  // namespace ambient::session

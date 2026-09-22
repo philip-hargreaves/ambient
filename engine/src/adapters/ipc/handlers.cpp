@@ -385,7 +385,7 @@ json HandleReflectionList(ambient::store::ISessionStore& sessions) {
     return json{{"reflections", std::move(list)}};
 }
 
-void RegisterMethods(PipeServer& server, ambient::audio::SessionController& controller,
+void RegisterMethods(PipeServer& server, ambient::session::SessionController& controller,
                      const ambient::models::ModelStore& models,
                      ambient::store::ISessionStore& sessions, ambient::metrics::Registry* metrics,
                      ambient::models::OvRuntime* runtime,
@@ -393,7 +393,7 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                      ambient::translate::TranslateLane* translate_lane, bool first_use,
                      ambient::diar::AnchorStore* anchors, ambient::note::INoteLane* note_lane,
                      bool stray_note_host, const std::filesystem::path& demo_dir,
-                     ambient::audio::Playback* playback) {
+                     ambient::session::Playback* playback) {
     server.RegisterMethod("engine/hello", HandleHello);
     server.RegisterMethod("engine/echo", HandleEcho);
     const auto note_tier = [note_lane] {
@@ -461,7 +461,7 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
         server.RegisterMethod(
             "anchor/enrol", [&controller](const json& params) -> std::variant<json, Error> {
                 const double seconds = params.value("seconds", 45.0);
-                ambient::audio::MicSelection mic;
+                ambient::session::MicSelection mic;
                 if (params.contains("mic") && params["mic"].is_object()) {
                     mic.id = params["mic"].value("id", "");
                     mic.name = params["mic"].value("name", "");
@@ -625,18 +625,18 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
             }
             // An optional replay block plays a file through the same
             // pipeline; absent means microphone
-            std::optional<ambient::audio::ReplaySpec> replay;
+            std::optional<ambient::session::ReplaySpec> replay;
             if (params.contains("replay")) {
                 const auto& r = params["replay"];
                 if (!r.contains("path") || !r["path"].is_string()) {
                     return Error{kInvalidParams, "replay.path is required", {}};
                 }
-                replay = ambient::audio::ReplaySpec{
+                replay = ambient::session::ReplaySpec{
                     r["path"].get<std::string>(), r.value("speed", 1.0), r.value("monitor", false)};
             }
             // micId pins the picker's choice; one that has gone falls back
             // to the default, logged, and the snapshot records the fallback
-            ambient::audio::MicSelection mic;
+            ambient::session::MicSelection mic;
             if (!replay.has_value()) {
                 const std::string requested = params.value("micId", "");
                 const auto device = ambient::audio::ResolveMicrophone(

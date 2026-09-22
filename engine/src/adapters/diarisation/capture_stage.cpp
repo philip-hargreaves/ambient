@@ -248,7 +248,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     speculation_.turns = SpeculatedTurns(merged, audio.size(), s.turn_texts, &speculation_.texts);
     speculation_.centroids = clusters.centroids;
     speculation_.cluster_count = clusters.count;
-    // The prefill reads this transcript; it must re-split as the seal does or
+    // The prefill reads this transcript; it must re-split as the finalise does or
     // the prompt diverges at the first move
     if (clusters.count >= 2 && !speculation_.turns.empty()) {
         const auto spec_spans = DecodeSpans(speculation_.turns, audio.size());

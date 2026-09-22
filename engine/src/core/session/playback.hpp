@@ -16,10 +16,10 @@
 #include <utility>
 #include <vector>
 
-#include "core/audio/session_controller.hpp"
+#include "core/session/session_events.hpp"
 #include "ports/session_store.hpp"
 
-namespace ambient::audio {
+namespace ambient::session {
 
 // The clock covers the whole recording in `listen`; each document waits
 // `first_token` then types itself out a little faster than the accuracy tier
@@ -56,7 +56,7 @@ class Playback {
     Playback& operator=(const Playback&) = delete;
 
     // Copies `source` and starts the clock; false while one plays or when
-    // the source has no sealed transcript and note
+    // the source has no finished transcript and note
     bool Start(const store::SessionId& source) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -144,13 +144,13 @@ class Playback {
         const auto turns = store_.ReadTurns(source);
         const auto note = store_.ReadDocument(source, DocumentKind::kNote);
         if (turns.empty() || note.text.empty()) {
-            throw std::runtime_error("no sealed transcript and note to play back");
+            throw std::runtime_error("no finished transcript and note to play back");
         }
         Copy copy;
         for (const auto& turn : turns) {
-            copy.audio_seconds =
-                std::max(copy.audio_seconds,
-                         static_cast<double>(turn.first_frame + turn.frame_count) / kSampleRate);
+            copy.audio_seconds = std::max(
+                copy.audio_seconds,
+                static_cast<double>(turn.first_frame + turn.frame_count) / audio::kSampleRate);
         }
         const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
         store::SessionSeed seed;
@@ -303,4 +303,4 @@ class Playback {
     store::SessionId current_;
 };
 
-}  // namespace ambient::audio
+}  // namespace ambient::session
