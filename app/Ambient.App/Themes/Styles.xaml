@@ -2,7 +2,7 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:views="using:Ambient.App.Views">
+    xmlns:views="using:Ambient.App.Controls">
 
     <!-- Style roles derived from WinUI's own styles and theme resources, so
          states, themes and focus visuals come from the platform. No hexes. -->
@@ -79,34 +79,9 @@
         <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
     </Style>
 
-    <!-- Record pills: accent to begin, neutral to stop -->
-    <Style x:Key="RecordIdleButton" TargetType="Button"
-           BasedOn="{StaticResource AccentButtonStyle}">
-        <Setter Property="Padding" Value="16,8" />
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-    </Style>
-
-    <Style x:Key="RecordLiveButton" TargetType="Button"
-           BasedOn="{StaticResource DefaultButtonStyle}">
-        <Setter Property="Padding" Value="16,8" />
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
-    </Style>
-
     <!-- Tabular figures so the running clock does not jitter -->
     <Style x:Key="ClockText" TargetType="TextBlock"
            BasedOn="{StaticResource SubtitleTextBlockStyle}">
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-
-    <!-- One bordered tray with flat segments inside; a divider says
-         "segments of one control", a gap would say "unrelated items" -->
-    <Style x:Key="DemoTray" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
-        <Setter Property="Padding" Value="2" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
@@ -123,14 +98,6 @@
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="Padding" Value="9,5" />
         <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-
-    <Style x:Key="TrayDivider" TargetType="Rectangle">
-        <Setter Property="Width" Value="1" />
-        <Setter Property="Height" Value="16" />
-        <Setter Property="Margin" Value="2,0" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
     </Style>
 
     <!-- A document that accepts a caret: card chrome, no box chrome. The
