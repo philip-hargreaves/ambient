@@ -16,10 +16,10 @@ asr::Turn C(std::uint64_t first, std::uint64_t end, const char* text) {
     return t;
 }
 
-// Two unit centroids on orthogonal axes; a chunk's voice is a unit vector too
+// Two unit centroids on orthogonal axes. A chunk's voice is a unit vector too
 const std::vector<std::vector<float>> kCentroids{{1.0f, 0.0f}, {0.0f, 1.0f}};
 
-// Audio before 100000 is the patient's voice (cluster 1); after it the doctor's (0)
+// Audio before 100000 is the patient's voice (cluster 1), after it the doctor's (0)
 std::vector<float> Voice(std::uint64_t first, std::uint64_t /*end*/) {
     return first < 100000 ? std::vector<float>{0.1f, 0.995f} : std::vector<float>{0.995f, 0.1f};
 }
@@ -55,8 +55,8 @@ TEST(Resplit, OnlyEdgeChunksMoveAndAShortOneStays) {
 }
 
 TEST(Resplit, AChunkStampedPastTheTurnIsJudgedOnTheTurnsAudioOnly) {
-    // The tail chunk's stamp runs 5 s past the turn end into the patient's audio;
-    // judged on the turn's own audio it is the doctor's and stays
+    // The tail chunk's stamp runs 5 s past the turn end into the patient's audio.
+    // Judged on the turn's own audio it is the doctor's and stays
     const std::vector<LabelledSlice> turns{{100000, 140000, 0}};
     const std::vector<std::string> texts{"a b"};
     const std::vector<std::vector<asr::Turn>> chunks{

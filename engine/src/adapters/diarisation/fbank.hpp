@@ -13,8 +13,8 @@ struct FbankFeatures {
     std::size_t frames = 0;
 };
 
-// Kaldi fbank to the researched contract; input must be float32 [-1, 1]
-// mono 16 kHz - int16-range values break parity
+// Kaldi fbank to the researched contract. Input must be float32 [-1, 1]
+// mono 16 kHz. int16-range values break parity
 FbankFeatures EmbedderFbank(std::span<const float> audio);
 
 }  // namespace ambient::diar

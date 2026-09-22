@@ -14,8 +14,8 @@ inline std::filesystem::path ExeDir() {
     return std::filesystem::path(exe_path).parent_path();
 }
 
-// Beside the executable is the production shape (the package directory);
-// packaged debug runs put the executable one level below the layout
+// Beside the executable is the production shape (the package directory).
+// Packaged debug runs put the executable one level below the layout
 inline std::filesystem::path DefaultModelsRoot() {
     const auto exe_dir = ExeDir();
     auto root = exe_dir / "models";

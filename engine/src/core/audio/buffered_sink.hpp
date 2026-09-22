@@ -20,7 +20,7 @@ namespace ambient::audio {
 // behind the sink (a model compile, a slow disk) costs latency up to the
 // ring's capacity, then frames, counted as lost like any other gap. OnEnd
 // waits for the ring to drain and the inner OnEnd to run, so the source's
-// contract - end is last, and delivered before Run returns - holds.
+// contract holds: end is last, and delivered before Run returns.
 class BufferedSink : public IAudioSink {
    public:
     BufferedSink(IAudioSink& inner, std::size_t capacity_frames)
@@ -41,7 +41,7 @@ class BufferedSink : public IAudioSink {
 
     // Source thread. Never blocks: what does not fit is lost, and said so.
     // The source's loss sits before its packet, so it is counted before the
-    // push and travels with these frames; an overrun sits after what fitted,
+    // push and travels with these frames. An overrun sits after what fitted,
     // so it is counted after and travels with the next
     void OnAudio(std::span<const float> frames, std::uint64_t lost_frames) override {
         if (lost_frames > 0) {

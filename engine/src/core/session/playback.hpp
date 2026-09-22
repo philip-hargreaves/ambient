@@ -13,7 +13,7 @@
 
 namespace ambient::session {
 
-// The clock covers the whole recording in `listen`; each document waits
+// The clock covers the whole recording in `listen`. Each document waits
 // `first_token` then types itself out a little faster than the accuracy tier
 struct PlaybackPacing {
     std::chrono::milliseconds listen{5000};
@@ -43,13 +43,13 @@ class Playback {
     Playback(const Playback&) = delete;
     Playback& operator=(const Playback&) = delete;
 
-    // Copies `source` and starts the clock; false while one plays or when
+    // Copies `source` and starts the clock. False while one plays or when
     // the source has no finished transcript and note
     bool Start(const store::SessionId& source);
-    // Ends listening and returns once finalise has run; the documents
+    // Ends listening and returns once finalise has run. The documents
     // follow on the playback thread
     void Stop();
-    // Abandons the run; a copy still listening is erased
+    // Abandons the run. A copy still listening is erased
     void Cancel();
     void SetPaused(bool paused);
     bool Listening() const;

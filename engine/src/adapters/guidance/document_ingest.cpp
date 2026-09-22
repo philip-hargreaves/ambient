@@ -8,20 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <system_error>
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-// clang-format off
-#include <windows.h>
-#include <objbase.h>
-#include <shellapi.h>
-#include <shobjidl_core.h>
-// clang-format on
-
-#include "core/common/strings.hpp"
+#include "adapters/guidance/folder_scan.hpp"
 #include "core/guidance/document_units.hpp"
 #include "core/guidance/patient_screen.hpp"
 #include "ports/store_error.hpp"
@@ -52,18 +39,6 @@ constexpr const char* kReadMeText =
     "sync like the rest of your Documents.\n\n"
     "Only add documents you are entitled to use.\n";
 
-std::string LowerExtension(const std::filesystem::path& path) {
-    return strings::Lower(path.extension().string());
-}
-
-std::string Mime(const std::filesystem::path& path) {
-    const auto ext = LowerExtension(path);
-    if (ext == ".txt") return "text/plain";
-    if (ext == ".md" || ext == ".markdown") return "text/markdown";
-    if (ext == ".pdf") return kPdf;
-    return "";
-}
-
 // The unit's line boxes as fractions of the page, each with its page
 std::string BoxesJson(const Unit& unit) {
     nlohmann::json boxes = nlohmann::json::array();
@@ -81,35 +56,6 @@ std::vector<std::uint8_t> ReadAll(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in.is_open()) throw store::StoreError(store::StoreCode::kIo, "cannot read the file");
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-}
-
-std::int64_t Ticks(std::filesystem::file_time_type time) {
-    return time.time_since_epoch().count();
-}
-
-// The open does not share writing, so a file another program is still writing
-// refuses it
-bool Unlocked(const std::filesystem::path& path) {
-    const HANDLE handle =
-        CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (handle == INVALID_HANDLE_VALUE) return false;
-    CloseHandle(handle);
-    return true;
-}
-
-bool HiddenOrSystem(const std::filesystem::path& path) {
-    const auto attributes = GetFileAttributesW(path.c_str());
-    return attributes != INVALID_FILE_ATTRIBUTES &&
-           (attributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) != 0;
-}
-
-// Copies in progress, Office locks and downloads in the making
-bool Transient(const std::filesystem::path& path) {
-    const auto name = path.filename().string();
-    const auto ext = LowerExtension(path);
-    return name.starts_with("~") || name.starts_with(".") || ext == ".tmp" ||
-           ext == ".crdownload" || ext == ".partial";
 }
 
 void RequireInFolder(const std::filesystem::path& path) {
@@ -132,43 +78,6 @@ DocumentInfo Removed(DocumentInfo info) {
 }
 
 }  // namespace
-
-void RecycleFile(const std::filesystem::path& path) {
-    struct Apartment {
-        HRESULT hr;
-        Apartment() : hr(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
-        ~Apartment() {
-            if (SUCCEEDED(hr)) CoUninitialize();
-        }
-    } com;
-    IFileOperation* op = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&op)))) {
-        throw store::StoreError(store::StoreCode::kOther, "the Recycle Bin is not available");
-    }
-    IShellItem* item = nullptr;
-    const auto fail = [&](const char* what) {
-        if (item != nullptr) item->Release();
-        op->Release();
-        throw store::StoreError(store::StoreCode::kBusy, what);
-    };
-    if (FAILED(op->SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT |
-                                     FOF_NOERRORUI | FOFX_RECYCLEONDELETE))) {
-        fail("the Recycle Bin is not available");
-    }
-    if (FAILED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item)))) {
-        fail("the file was not found");
-    }
-    if (FAILED(op->DeleteItem(item, nullptr))) fail("the file could not be removed");
-    const HRESULT hr = op->PerformOperations();
-    BOOL aborted = FALSE;
-    op->GetAnyOperationsAborted(&aborted);
-    item->Release();
-    op->Release();
-    if (FAILED(hr) || aborted) {
-        throw store::StoreError(store::StoreCode::kBusy,
-                                "the file could not be removed, it may be open in another program");
-    }
-}
 
 DocumentIngest::DocumentIngest(Retriever& retriever, std::filesystem::path folder,
                                std::filesystem::path root, std::function<bool()> busy,
@@ -362,7 +271,7 @@ void DocumentIngest::SetListener(std::function<void(const IngestProgress&)> prog
 
 // The folder is the truth: a file that went takes its document, a file that
 // is new or changed by content starts one. A file still being written waits
-// for the next scan, as does one that has just appeared unless Add put it there
+// for the next scan, as does one that appeared moments ago unless Add put it there
 void DocumentIngest::Scan(const std::set<std::string>& fresh) {
     std::vector<Queued> queued;
     std::vector<DocumentInfo> changed;
@@ -382,26 +291,11 @@ void DocumentIngest::Scan(const std::set<std::string>& fresh) {
         }
 
         std::map<std::string, Seen> present;
-        int unsupported = 0;
-        std::filesystem::recursive_directory_iterator it(
-            folder_, std::filesystem::directory_options::skip_permission_denied, ec);
-        for (const std::filesystem::recursive_directory_iterator end; !ec && it != end;
-             it.increment(ec)) {
-            const auto& entry = *it;
-            const bool symlink = entry.is_symlink(ec);
-            if (it.depth() >= kMaxDepth || symlink) it.disable_recursion_pending();
-            if (symlink || !entry.is_regular_file(ec)) continue;
-            if (HiddenOrSystem(entry.path()) || Transient(entry.path())) continue;
-            const auto relative = Utf8(entry.path().lexically_relative(folder_));
-            if (relative == kReadMe) continue;
-            if (!Supported(Mime(entry.path()))) {
-                ++unsupported;
-                continue;
-            }
-            present[relative] = {static_cast<std::int64_t>(entry.file_size(ec)),
-                                 Ticks(entry.last_write_time(ec))};
-        }
-        unsupported_ = unsupported;
+        const auto listing = ListFolder(
+            folder_, kMaxDepth, [this](const std::string& mime) { return Supported(mime); },
+            kReadMe);
+        for (const auto& file : listing.files) present[file.path] = {file.size, file.modified};
+        unsupported_ = listing.unsupported;
 
         std::map<std::string, IndexedFile> known;
         for (auto& file : index_.Files()) known.emplace(file.path, std::move(file));

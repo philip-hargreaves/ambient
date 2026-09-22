@@ -27,7 +27,7 @@ struct ComApartment {
 
 }  // namespace
 
-// The apartment is declared first so it outlives every COM pointer; the
+// The apartment is declared first so it outlives every COM pointer. The
 // replay thread never initialises COM itself
 struct WasapiPlayer::Impl {
     ComApartment com;
@@ -59,7 +59,7 @@ struct WasapiPlayer::Impl {
         want.wBitsPerSample = 32;
         want.nBlockAlign = static_cast<WORD>(want.nChannels * want.wBitsPerSample / 8);
         want.nAvgBytesPerSec = want.nSamplesPerSec * want.nBlockAlign;
-        constexpr REFERENCE_TIME kBuffer = 4'000'000;  // 400 ms; drops are free
+        constexpr REFERENCE_TIME kBuffer = 4'000'000;  // 400 ms. Drops are free
         const DWORD flags =
             AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
         if (FAILED(

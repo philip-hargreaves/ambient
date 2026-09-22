@@ -62,6 +62,7 @@ add_executable(engine_tests
     adapters/guidance/guidance_retriever_test.cpp
     adapters/guidance/document_index_test.cpp
     adapters/guidance/document_ingest_test.cpp
+    adapters/guidance/folder_scan_test.cpp
     adapters/guidance/ingest_host_test.cpp
     core/guidance/document_units_test.cpp
     core/guidance/page_text_test.cpp

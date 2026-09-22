@@ -102,7 +102,7 @@ std::vector<asr::Turn> TidyTranscript(std::vector<asr::Turn> turns) {
             const std::uint64_t prev_end = prev.first_frame + prev.frame_count;
             const std::uint64_t gap = turn.first_frame > prev_end ? turn.first_frame - prev_end : 0;
             if (gap <= kTidyMergeGapFrames) {
-                // A fragment after a finished sentence starts the next one; after
+                // A fragment after a finished sentence starts the next one. After
                 // a trail-off ("So I...") it continues the same one
                 const bool trail_off =
                     prev.text.size() >= 3 && prev.text.compare(prev.text.size() - 3, 3, "...") == 0;

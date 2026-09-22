@@ -25,8 +25,8 @@ Turn Labelled(std::uint64_t first_frame, std::size_t count) {
 
 TEST(WhisperWorker, ClipSegmentEdgesInsideTheClipAreTakenAsCuts) {
     // Two segments in a 3 s clip starting at frame 16000: the interior edge at
-    // 1.2 s (and the segment end short of the clip end) are cuts; the clip's own
-    // edges are not
+    // 1.2 s (and the segment end short of the clip end) are cuts. The clip's own
+    // edges are excluded
     WhisperTranscriber transcriber([](std::span<const float> f, std::uint64_t first) {
         return std::vector<Turn>{{first, 19200, "", "have you had any clots"},
                                  {first + 19200, static_cast<std::uint64_t>(f.size()) - 19200 - 800,
@@ -91,7 +91,7 @@ TEST(WhisperWorker, DecodeClipReturnsTheJoinedTurnTexts) {
     WhisperTranscriber transcriber([](std::span<const float>, std::uint64_t first) {
         std::vector<Turn> turns{Labelled(first, 100), Labelled(first + 100, 100)};
         turns.push_back(Labelled(first + 200, 100));
-        turns.back().text.clear();  // empty texts are skipped, not joined
+        turns.back().text.clear();  // empty texts are skipped
         return turns;
     });
 

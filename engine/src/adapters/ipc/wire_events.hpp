@@ -20,7 +20,7 @@ class WireEvents : public session::ISessionEvents {
    public:
     WireEvents(PipeServer& server, store::ISessionStore& sessions);
 
-    // The translator warms after the note; the note's guidance search starts
+    // The translator warms after the note. The note's guidance search starts
     // once the note is stored
     void SetTranslator(translate::ITranslator* translator);
     void SetGuidance(guidance::IGuidanceLane* lane);

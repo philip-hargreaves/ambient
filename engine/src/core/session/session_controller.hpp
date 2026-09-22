@@ -27,13 +27,13 @@
 
 namespace ambient::session {
 
-// One session at a time; every ending has a storage outcome: Stop
+// One session at a time. Every ending has a storage outcome: Stop
 // finalises, Cancel erases, an interruption abandons recoverable
 class SessionController {
    public:
     static constexpr std::size_t kMinNoteWords = NoteLane::kMinNoteWords;
     // Audio the capture thread can run ahead of the pipeline before frames are
-    // lost; a first-launch model compile stalls for seconds, not tens
+    // lost. A first-launch model compile stalls for a few seconds
     static constexpr std::size_t kCaptureBufferFrames = 30 * audio::kSampleRate;
 
     SessionController(SourceFactory factory, ISessionEvents& events, store::ISessionStore& store,
@@ -50,16 +50,16 @@ class SessionController {
     SessionController& operator=(const SessionController&) = delete;
 
     // True once audio flows. resume replays stored audio ahead of the live
-    // source; retain false erases once the consultation is left
+    // source, and retain false erases once the consultation is left
     bool Start(std::optional<ReplaySpec> replay = std::nullopt,
                const store::SessionId& resume_from = {}, bool retain = true,
                const MicSelection& mic = {});
-    // Idempotent; a stop is the user's, so it never counts as an interruption.
+    // Idempotent. A stop is the user's, so it never counts as an interruption.
     // The recording is kept
     void Stop();
-    // Idempotent; the recording is erased (D5)
+    // Idempotent. The recording is erased
     void Cancel();
-    // Hold the source's delivery; stop and cancel always win
+    // Holds the source's delivery. Stop and cancel always win
     void SetPaused(bool paused);
     void SetMonitor(bool monitor);
     bool Running() const;
@@ -67,7 +67,7 @@ class SessionController {
     void FreezeAnchor();
 
     // Enrolment is refused while a consultation runs, and recording while an
-    // enrolment runs; the lock orders the two checks
+    // enrolment runs. The lock orders the two checks
     bool StartEnrolment(double seconds, const MicSelection& mic = {},
                         double min_speech_s = audio::kEnrolMinSpeechSeconds);
     void CancelEnrolment();
@@ -77,9 +77,9 @@ class SessionController {
     audio::SourceEnd LastEnd() const;
     std::uint64_t LostFrames() const;
     // The most recently finalised session, for the shell's post-stop
-    // transcript fetch; empty until a session has finalised
+    // transcript fetch, empty until a session has finalised
     store::SessionId LastFinalised() const;
-    // Reopens a stored session as the regenerate target; refused while
+    // Reopens a stored session as the regenerate target, refused while
     // recording or writing
     bool Open(const store::SessionId& id);
     // Leaving the consultation: ends a review (regenerate refuses until the
@@ -90,11 +90,11 @@ class SessionController {
     // The recording session's id, so the shell can resume it after a crash
     store::SessionId CurrentSession() const;
 
-    // Applied to the next note; the shell sets these ahead of the stop
+    // Applied to the next note. The shell sets these ahead of the stop
     void SetNoteOptions(note::NoteOptions options);
     note::NoteOptions CurrentNoteOptions() const;
     bool HasNoteWriter() const;
-    // Rewrites the last finalised session's note; false when busy - the RPC
+    // Rewrites the last finalised session's note. False when busy, so the RPC
     // thread never blocks on the lane
     bool RegenerateNote(note::NoteOptions options);
     // Case summary from the stored note, edits included, for any stored
@@ -138,7 +138,7 @@ class SessionController {
     std::thread worker_;
     std::thread diar_thread_;
     bool diar_stop_ = false;  // under mutex_
-    int diar_ticks_ = 0;      // under mutex_; diagnostics
+    int diar_ticks_ = 0;      // under mutex_, diagnostics
     audio::LevelMeter meter_;
     bool learn_anchor_ = true;  // set before Start
     mutable std::mutex mutex_;
@@ -152,8 +152,8 @@ class SessionController {
     store::SessionId resumed_from_;
     bool note_prepared_ = false;  // diar thread only
     store::SessionId last_finalised_;
-    bool reviewing_ = false;  // last_finalised_ came from Open, not a finalise
-    // Appended under mutex_ (the diarisation thread snapshots it); finalise
+    bool reviewing_ = false;  // last_finalised_ came from Open
+    // Appended under mutex_ (the diarisation thread snapshots it). Finalise
     // reads it after every other thread has joined
     std::vector<float> session_audio_;
     audio::SourceEnd end_{};

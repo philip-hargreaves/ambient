@@ -47,7 +47,7 @@ TEST(DecodeTurnTexts, EachTurnDecodesItsOwnAudioExactly) {
 }
 
 TEST(DecodeTurnTexts, AnOverlappingHeadIsClampedNotDecodedTwice) {
-    // The second turn starts inside the first; only its unheard tail decodes
+    // The second turn starts inside the first. Only its unheard tail decodes
     const std::vector<LabelledSlice> turns{{0, 40000, 0}, {30000, 60000, 1}};
     std::vector<std::pair<std::uint64_t, std::uint64_t>> calls;
     (void)DecodeTurnTexts(turns, kAudio, Decoder(&calls));
@@ -56,7 +56,7 @@ TEST(DecodeTurnTexts, AnOverlappingHeadIsClampedNotDecodedTwice) {
 }
 
 TEST(DecodeTurnTexts, ANestedOverlapTurnGetsNoText) {
-    // The audio belongs to whoever talked through it; decoding it would put
+    // The audio belongs to whoever talked through it. Decoding it would put
     // the louder speaker's words under the quieter speaker's name
     const std::vector<LabelledSlice> turns{{0, 60000, 0}, {20000, 40000, 1}};
     std::vector<std::pair<std::uint64_t, std::uint64_t>> calls;
@@ -99,7 +99,7 @@ TEST(DecodeTurnTexts, ACachedSpanIsUsedWithoutDecoding) {
 
 TEST(DecodeTurnTexts, ACacheKeyMustMatchTheSpanExactly) {
     // A stale speculation whose boundaries did not survive clustering is
-    // never found; the turn decodes fresh
+    // never found, so the turn decodes fresh
     const std::vector<LabelledSlice> turns{{0, 30000, 0}};
     TurnTexts cache;
     cache[{0, 29999}] = "stale speculation";

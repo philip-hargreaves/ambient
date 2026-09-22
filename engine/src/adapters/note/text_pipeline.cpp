@@ -46,7 +46,7 @@ class LlmTextPipeline : public TextPipeline {
     ov::genai::LLMPipeline pipeline_;
 };
 
-// The multimodal export used text-only; the vision towers load and idle
+// The multimodal export used text-only. The vision towers load and idle
 class VlmTextPipeline : public TextPipeline {
    public:
     VlmTextPipeline(const models::ModelInfo& info, const std::string& device)

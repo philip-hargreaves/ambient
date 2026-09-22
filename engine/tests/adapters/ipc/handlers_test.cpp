@@ -62,7 +62,7 @@ TEST(Handlers, HelloRejectsAPeerItCannotParse) {
 }
 
 TEST(Handlers, HelloIgnoresWhatThePeerClaimsAboutItself) {
-    // The reply describes the engine, never the caller
+    // The reply describes the engine
     const auto outcome = HandleHello(
         json{{"name", "impostor"}, {"version", "9.9.9"}, {"protocolVersion", kProtocolVersion}});
 
@@ -372,7 +372,7 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
     fixture.store->Finalise(id);
     fixture.store->SaveDocument(id, DocumentKind::kLabel, {.text = "Elbow swelling"});
 
-    // Nothing yet: label only, both parts null, not listed
+    // Nothing yet: label only, both parts null, and unlisted
     json got = std::get<json>(HandleReflectionGet(*fixture.store, json{{"id", id}}));
     EXPECT_EQ(got["label"], "Elbow swelling");
     EXPECT_TRUE(got["summary"].is_null());
@@ -388,12 +388,12 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
     EXPECT_EQ(listed[0]["summary"], "A patient in their forties.");
     EXPECT_TRUE(listed[0]["createdAt"].is_string());
 
-    // Three empty answers keep the entry; only delete removes it
+    // Three empty answers keep the entry. Only delete removes it
     ASSERT_TRUE(std::holds_alternative<json>(HandleReflectionUpdate(
         *fixture.store, json{{"id", id}, {"happened", ""}, {"learned", ""}, {"next", ""}})));
     EXPECT_EQ(HandleReflectionList(*fixture.store)["reflections"].size(), 1u);
 
-    // A first answer creates the entry; a later one merges into it
+    // A first answer creates the entry and a later one merges into it
     ASSERT_TRUE(std::holds_alternative<json>(HandleReflectionUpdate(
         *fixture.store, json{{"id", id}, {"learned", "check the temperature"}})));
     ASSERT_TRUE(std::holds_alternative<json>(HandleReflectionUpdate(
@@ -431,7 +431,7 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
         EXPECT_TRUE(list[0].contains(key)) << key;
     }
 
-    // Wrong types are parameter errors; unknown ids session errors
+    // Wrong types are parameter errors, unknown ids session errors
     EXPECT_TRUE(std::holds_alternative<Error>(
         HandleReflectionUpdate(*fixture.store, json{{"id", id}, {"learned", 3}})));
     EXPECT_TRUE(
@@ -1129,8 +1129,8 @@ TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
     EXPECT_EQ(again["noteRevision"], note.revision);
     EXPECT_EQ(again["considered"], 1);
 
-    // Without an ingest to compare against, the documents are not reported changed. With
-    // one, the record searched no added documents and one is ready now, so they have
+    // Without an ingest, documents are never reported changed. With one, the record searched
+    // no added documents and one is now ready, so they are reported changed
     EXPECT_FALSE(again["documentsChanged"]);
     FakeIngest ingest;
     const json compared =

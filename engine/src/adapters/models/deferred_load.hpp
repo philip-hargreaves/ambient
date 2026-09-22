@@ -15,7 +15,7 @@
 
 namespace ambient::models {
 
-// Builds T on a background thread; Get waits and rethrows a load failure.
+// Builds T on a background thread. Get waits and rethrows a load failure.
 // A successful build records its seconds under `name`
 template <typename T>
 class DeferredLoad {
@@ -62,12 +62,12 @@ class DeferredLoad {
         return *built_;
     }
 
-    // True only for a successful build; never blocks
+    // True only for a successful build. Never blocks
     bool Loaded() const {
         return ready_.load() && error_ == nullptr;
     }
 
-    // True once the build finished, loaded or failed; never blocks
+    // True once the build finished, loaded or failed. Never blocks
     bool Settled() const {
         return ready_.load();
     }

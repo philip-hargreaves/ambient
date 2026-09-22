@@ -79,7 +79,9 @@ target_link_libraries(ambient_guidance_record
     PRIVATE ambient_warnings)
 
 add_library(ambient_ipc STATIC
-    src/adapters/ipc/handlers.cpp
+    src/adapters/ipc/engine_handlers.cpp
+    src/adapters/ipc/guidance_handlers.cpp
+    src/adapters/ipc/session_handlers.cpp
     src/adapters/ipc/pipe_security.cpp
     src/adapters/ipc/pipe_server.cpp
     src/adapters/ipc/wire_events.cpp)
@@ -124,7 +126,8 @@ configure_file(src/adapters/storage/schema.hpp.in
 add_library(ambient_storage STATIC
     src/adapters/storage/chunk_cipher.cpp
     src/adapters/storage/db.cpp
-    src/adapters/storage/sqlite_session_store.cpp)
+    src/adapters/storage/sqlite_session_store.cpp
+    src/adapters/storage/store_migrations.cpp)
 target_include_directories(ambient_storage PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(ambient_storage
     PUBLIC ambient_core
@@ -169,6 +172,7 @@ configure_file(src/adapters/guidance/schema.hpp.in
 add_library(ambient_guidance STATIC
     src/adapters/guidance/document_index.cpp
     src/adapters/guidance/document_ingest.cpp
+    src/adapters/guidance/folder_scan.cpp
     src/adapters/guidance/ingest_host.cpp
     src/adapters/guidance/corpus_store.cpp
     src/adapters/guidance/embedder.cpp

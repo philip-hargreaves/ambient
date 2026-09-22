@@ -92,7 +92,7 @@ TEST(LevelMeter, ClipFlagsOnlyTheHotWindow) {
     const auto flagged = meter.Push(hot);
     const auto calm = meter.Push(Silence());
 
-    // The flag is about the samples, not the level: a single spike clips
+    // The flag follows the samples rather than the level: a single spike clips
     EXPECT_TRUE(flagged[0].clipped);
     EXPECT_FALSE(calm[0].clipped);
 }
@@ -128,7 +128,7 @@ TEST(LevelMeter, ChunkingDoesNotChangeTheReadings) {
     ASSERT_EQ(from_tiny.size(), 5u);
     ASSERT_EQ(from_packets.size(), 5u);
     for (std::size_t i = 0; i < expected.size(); ++i) {
-        // Same samples in the same order: bit-identical, not merely close
+        // Same samples in the same order: bit-identical
         EXPECT_EQ(expected[i].level, from_tiny[i].level);
         EXPECT_EQ(expected[i].level, from_packets[i].level);
         EXPECT_EQ(expected[i].clipped, from_tiny[i].clipped);

@@ -16,10 +16,10 @@
 
 namespace ambient::system {
 
-// One named mutex serialises the engine's Whisper decodes
-// against the note host's capture-phase prefills, so the two GPU models never run
-// concurrently (the driver fault configuration). Named by
-// AMBIENT_GPU_LEASE, which the engine sets and the host inherits; inert when unset
+// One named mutex serialises the engine's Whisper decodes against the note host's
+// capture-phase prefills, so the two GPU models never run concurrently (the driver
+// fault configuration). Named by AMBIENT_GPU_LEASE, which the engine sets and the
+// host inherits. Inert when unset
 class GpuLease {
    public:
     class Guard {
@@ -82,7 +82,7 @@ class GpuLease {
         return mutex_ != nullptr;
     }
 
-    // Blocks until the GPU is ours; an abandoned mutex (the other process died
+    // Blocks until the GPU is ours. An abandoned mutex (the other process died
     // mid-decode) counts as acquired
     Guard Acquire() {
         return Acquire(std::chrono::milliseconds(INFINITE));

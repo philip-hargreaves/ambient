@@ -119,7 +119,7 @@ std::vector<std::string> DecodeTurnTexts(const std::vector<LabelledSlice>& turns
             }
             auto chunks = decode(audio.subspan(a, b - a), a);
             std::string text = JoinedText(chunks);
-            // A degenerate loop has no safe fallback; empty is the answer
+            // A degenerate loop has no safe fallback, so empty is the answer
             if (MaxRepeatedNgram(text) >= kPerTurnMaxRepeat) continue;
             texts[i] = std::move(text);
             if (chunks_out != nullptr) (*chunks_out)[i] = std::move(chunks);

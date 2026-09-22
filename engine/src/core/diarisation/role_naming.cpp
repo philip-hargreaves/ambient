@@ -32,7 +32,7 @@ bool In(const std::vector<std::string>& set, const std::string& word) {
     return std::find(set.begin(), set.end(), word) != set.end();
 }
 
-// Consecutive whole tokens, never substrings: "we can" must not fire
+// Consecutive whole tokens only: "we can" must not fire
 // inside "we cancelled"
 bool HasPhrase(const std::vector<std::string>& words, const std::vector<std::string>& phrase) {
     if (phrase.empty() || words.size() < phrase.size()) return false;
@@ -44,7 +44,7 @@ bool HasPhrase(const std::vector<std::string>& words, const std::vector<std::str
     return false;
 }
 
-// The clinician naming themselves; "dr" and "doctor" both, ASR output varies
+// The clinician naming themselves, as "dr" or "doctor" since ASR output varies
 const std::vector<std::vector<std::string>> kIdentPhrases = {
     {"i'm", "dr"},
     {"i'm", "doctor"},
@@ -58,7 +58,7 @@ const std::vector<std::vector<std::string>> kIdentPhrases = {
     {"calling", "from"},
 };
 
-// Plan speech is all first-person; unnamed, the penalty would score the
+// Plan speech is all first-person. Unnamed, the penalty would score the
 // doctor's most characteristic speech as the patient's
 const std::vector<std::vector<std::string>> kPlanPhrases = {
     {"i'll"},
@@ -143,7 +143,7 @@ RoleResult NameRoles(const std::vector<RoleTurn>& turns, int cluster_count,
         double sum1 = 0.0, sum2 = 0.0;
         int n1 = 0, n2 = 0;
         for (const auto& turn : turns) {
-            if (turn.text.empty()) continue;  // no lexical evidence; would dilute the mean
+            if (turn.text.empty()) continue;  // no lexical evidence, would dilute the mean
             const double score = LexicalDoctorScore(turn.text);
             if (turn.cluster == top1) {
                 sum1 += score;
@@ -154,13 +154,13 @@ RoleResult NameRoles(const std::vector<RoleTurn>& turns, int cluster_count,
                 ++n2;
             }
         }
-        // Means, not sums: turn counts are near 50/50 and carry no signal
+        // Means rather than sums, since turn counts are near 50/50 and carry no signal
         const double mean1 = n1 > 0 ? sum1 / n1 : 0.0;
         const double mean2 = n2 > 0 ? sum2 / n2 : 0.0;
         result.margin = std::abs(mean1 - mean2);
         if (result.margin < kRoleMinMargin || top1 == top2) {
-            // Numbered, not unknown: the separation is still certain, only
-            // the roles are not
+            // Numbered rather than unknown: the separation is still certain,
+            // and only the roles are undecided
             result.role_of_cluster[static_cast<std::size_t>(top1)] = "speaker 1";
             if (top2 != top1) result.role_of_cluster[static_cast<std::size_t>(top2)] = "speaker 2";
             return result;

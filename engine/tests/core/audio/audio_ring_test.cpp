@@ -122,7 +122,7 @@ TEST(AudioRing, TwoThreadsMoveEveryFrameInOrder) {
 }
 
 // Pins the pipeline's one format and shows the port is implementable in a
-// handful of lines; the wav source's tests are the real contract tests.
+// handful of lines. The wav source's tests are the real contract tests.
 TEST(AudioSourcePort, ASinkReceivesAudioThenTheEnd) {
     struct RecordingSink : IAudioSink {
         std::vector<float> frames;

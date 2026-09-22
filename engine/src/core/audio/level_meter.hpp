@@ -16,7 +16,7 @@ struct LevelReading {
     bool clipped = false;
 };
 
-// RMS per 100 ms on dBFS, instant attack, exponential release; no wall
+// RMS per 100 ms on dBFS, instant attack, exponential release. No wall
 // clock, so replay speed cannot change the readings
 class LevelMeter {
    public:

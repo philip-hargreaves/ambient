@@ -39,7 +39,7 @@ struct TempRoot {
     }
 };
 
-// The victim with its stdout piped back; killed hard, never asked to exit
+// The victim with its stdout piped back, killed hard and never asked to exit
 class HelperProcess {
    public:
     HelperProcess(const std::filesystem::path& root, const char* mode) {

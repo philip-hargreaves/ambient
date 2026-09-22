@@ -29,7 +29,7 @@ class ISessionEvents {
     virtual void OnInterrupted(audio::SourceEndReason reason, const std::string& detail) = 0;
 
     // Finalise stages as they start ("transcript", "speakers"), on the
-    // stopping thread; fired only for work that actually runs
+    // stopping thread, and only for work that actually runs
     virtual void OnProgress(const std::string&) {}
 
     // Enrolment: the level and speech captured so far, then the outcome
@@ -43,7 +43,7 @@ class ISessionEvents {
     // The note as stored, with its revision, for work that follows the note
     virtual void OnNoteSaved(const std::string& /*session*/, const store::Document& /*note*/) {}
 
-    // The store could not write (disk full, I/O); recording continues
+    // The store could not write (disk full, I/O). Recording continues
     virtual void OnStorageFault(const std::string& /*detail*/) {}
     // No note, and why: too thin to write from (not overridable) or the model
     // says it was not a consultation (the clinician can insist)
@@ -59,7 +59,7 @@ class ISessionEvents {
     virtual void OnSummaryFailed(const std::string& /*session*/, const std::string& /*detail*/) {}
 };
 
-// A replay request, carried into the source factory; absent means microphone
+// A replay request, carried into the source factory. Absent means microphone
 struct ReplaySpec {
     std::string path;
     double speed = 1.0;
@@ -77,7 +77,7 @@ struct MicSelection {
 using SourceFactory = std::function<std::unique_ptr<audio::IAudioSource>(
     const std::optional<ReplaySpec>&, const std::string& mic_id)>;
 
-// Every store failure is logged; a full or failing disk is announced
+// Every store failure is logged. A full or failing disk is announced
 inline void ReportStoreFailure(ISessionEvents& events, const char* what, const std::exception& e) {
     std::fprintf(stderr, "ambient-engine: store %s failed: %s\n", what, e.what());
     const auto* fault = dynamic_cast<const store::StoreError*>(&e);

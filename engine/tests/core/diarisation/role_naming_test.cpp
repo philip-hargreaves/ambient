@@ -81,8 +81,8 @@ TEST(NameRoles, AThinMarginAbstainsToNumberedSpeakers) {
 }
 
 TEST(NameRoles, MeansDecideNotTurnCounts) {
-    // Two strong clinician turns against six mild patient turns: a sum
-    // would let the count vote; the mean must not
+    // Two strong clinician turns against six mild patient turns. A sum
+    // would let the count vote, the mean must not
     std::vector<RoleTurn> turns{
         Turn(0, "I'll arrange the scan and I want you to rest your knee"),
         Turn(0, "you should take the tablets with your evening meal"),

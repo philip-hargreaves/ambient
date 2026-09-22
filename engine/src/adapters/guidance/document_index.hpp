@@ -78,8 +78,8 @@ class DocumentIndex {
     std::vector<IndexChunk> ReadChunks(std::int64_t id);
     IndexChunk ReadChunk(std::int64_t id, std::int64_t ord);
 
-    // The first 63 bits of the sha256, never 0, so the same bytes at any path
-    // are one document
+    // The first 63 bits of the sha256, with 0 mapped to 1, so the same bytes at any
+    // path are one document
     static std::int64_t IdOf(const std::string& sha256);
 
    private:

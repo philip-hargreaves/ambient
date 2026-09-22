@@ -36,7 +36,7 @@ inline std::vector<float> Gather(std::span<const float> audio, const std::vector
     return clip;
 }
 
-// The centroid nearest an embedding other than `exclude`; -1 with none to choose
+// The centroid nearest an embedding other than `exclude`, or -1 with none to choose
 inline int NearestOther(std::span<const float> embedding,
                         const std::vector<std::vector<float>>& centroids, int exclude) {
     int best = -1;

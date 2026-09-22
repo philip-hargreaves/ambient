@@ -31,7 +31,7 @@ class ITranscriber {
    public:
     virtual ~ITranscriber() = default;
 
-    // Whisper's chunks for the clip, with absolute frames; safe mid-session,
+    // Whisper's chunks for the clip, with absolute frames. Safe mid-session,
     // empty when unsupported (a re-split then keeps the original turn)
     virtual std::vector<Turn> DecodeClipChunks(std::span<const float> frames,
                                                std::uint64_t first_frame) = 0;
@@ -42,7 +42,7 @@ class ITranscriber {
     }
 
     // Chunk edges (absolute frames, inside the clip) from every decode since
-    // the last call; the diariser takes them as cut points. Empty when
+    // the last call. The diariser takes them as cut points. Empty when
     // unsupported
     virtual std::vector<std::uint64_t> TakeClipCuts() {
         return {};

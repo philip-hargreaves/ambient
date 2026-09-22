@@ -24,7 +24,7 @@ SpeakerDiariser::SpeakerDiariser(const models::ModelStore& store, models::OvRunt
 DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
     DiariseResult result;
     if (audio.empty()) return result;
-    // Stage laps for the finalise breakdown; measurement only
+    // Stage laps for the finalise breakdown, measurement only
     auto lap_start = std::chrono::steady_clock::now();
     const auto lap = [&lap_start] {
         const auto now = std::chrono::steady_clock::now();
@@ -33,7 +33,7 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
         return seconds;
     };
 
-    // With capture-phase state, finalise only completes it; without, the
+    // With capture-phase state, finalise only completes it. Without it, the
     // whole recording is processed here. Either way the maths is identical
     CaptureDiarisation capture;
     std::vector<float> probabilities;
@@ -103,14 +103,14 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
     result.slices = std::move(out);
     result.cluster_count = clusters.count;
 
-    voiceprints_.clear();  // a new finalise; AnchorSimilarities refills them
+    voiceprints_.clear();  // AnchorSimilarities refills them per finalise
     return result;
 }
 
 std::vector<double> SpeakerDiariser::AnchorSimilarities(std::span<const float> audio,
                                                         const std::vector<LabelledSlice>& slices,
                                                         int cluster_count) {
-    // Each cluster's similarity to the accrued anchor; a cluster too short
+    // Each cluster's similarity to the accrued anchor. A cluster too short
     // for a voiceprint ranks below any real match
     const auto anchor = anchors_.Anchor();
     if (!anchor) return {};

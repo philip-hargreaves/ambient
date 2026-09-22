@@ -44,7 +44,7 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
             metrics->RecordStage("diarise overlap", t.overlap_s);
         }
     }
-    // The re-decode is transcript work again - and on the NPU it is the
+    // The re-decode is transcript work again, and on the NPU it is the
     // longest stage, so the spinner must say so
     events.OnProgress("turns");
     // The future's destructor waits, so an exception cannot orphan the task
@@ -135,7 +135,7 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
         turn.text = turn_texts[i];
         attributed.push_back(std::move(turn));
     }
-    // Fragments merged, slivers dropped, capitals and full stops; no word
+    // Fragments merged, slivers dropped, capitals and full stops. No word
     // changes speaker
     transcript.turns = diar::TidyTranscript(std::move(attributed));
     return transcript;

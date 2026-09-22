@@ -6,38 +6,18 @@
 #include <thread>
 #include <utility>
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "adapters/guidance/ingest_exit.hpp"
+#include "adapters/system/child_process.hpp"
 
 namespace ambient::guidance {
 namespace {
 
 using json = nlohmann::json;
 
-// The host's exit codes, defined alongside its main
-constexpr int kCannotOpen = 2;
-constexpr int kPassword = 3;
-constexpr int kOutputBound = 4;
-constexpr int kBadPage = 6;
 constexpr std::size_t kMaxPages = 10'000;
 constexpr std::size_t kMaxLinesPerPage = 100'000;
 constexpr int kMaxPixels = 10'000;
 constexpr std::size_t kBmpHeader = 54;
-
-struct Handle {
-    HANDLE value = nullptr;
-    ~Handle() {
-        if (value != nullptr) CloseHandle(value);
-    }
-    HANDLE Release() {
-        return std::exchange(value, nullptr);
-    }
-};
 
 struct Outcome {
     DWORD exit = 0;
@@ -46,61 +26,38 @@ struct Outcome {
     bool bounded = false;
 };
 
-void Pipe(Handle& read, Handle& write) {
+void Pipe(system::UniqueHandle& read, system::UniqueHandle& write) {
     SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
-    if (!CreatePipe(&read.value, &write.value, &attributes, 0)) {
+    HANDLE read_end = nullptr;
+    HANDLE write_end = nullptr;
+    if (!CreatePipe(&read_end, &write_end, &attributes, 0)) {
         throw HostError("crashed", "ingest host pipe failed");
     }
+    read.Reset(read_end);
+    write.Reset(write_end);
 }
 
 Outcome RunHost(const std::filesystem::path& exe, const std::wstring& args,
                 std::span<const std::uint8_t> input, const HostLimits& limits) {
-    Handle in_read, in_write, out_read, out_write;
+    system::UniqueHandle in_read, in_write, out_read, out_write;
     Pipe(in_read, in_write);
     Pipe(out_read, out_write);
-    SetHandleInformation(in_write.value, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(out_read.value, HANDLE_FLAG_INHERIT, 0);
-
-    // The host shares the engine's stderr so its counts land in the same log
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = in_read.value;
-    startup.hStdOutput = out_write.value;
-    startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-    SetHandleInformation(startup.hStdError, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-    std::wstring command = L"\"" + exe.wstring() + L"\" " + args;
-    // Suspended until it is in the job, so it can never outlive the engine
-    PROCESS_INFORMATION info{};
-    if (!CreateProcessW(exe.wstring().c_str(), command.data(), nullptr, nullptr, TRUE,
-                        CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &startup, &info)) {
+    SetHandleInformation(in_write.get(), HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(out_read.get(), HANDLE_FLAG_INHERIT, 0);
+    // One process on a memory cap. The document goes in on stdin, the
+    // pages come back on stdout
+    system::ChildProcess child;
+    try {
+        child = system::ChildProcess::Spawn(exe, args,
+                                            {.stdin_read = in_read.get(),
+                                             .stdout_write = out_write.get(),
+                                             .memory_cap = limits.memory_cap,
+                                             .single_process = true});
+    } catch (const std::exception&) {
         throw HostError("crashed", "ingest host failed to start");
     }
-    Handle process{info.hProcess};
-    Handle thread{info.hThread};
-    Handle job{CreateJobObjectW(nullptr, nullptr)};
-    if (job.value != nullptr) {
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits{};
-        job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-                                                      JOB_OBJECT_LIMIT_PROCESS_MEMORY |
-                                                      JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
-        job_limits.BasicLimitInformation.ActiveProcessLimit = 1;
-        job_limits.ProcessMemoryLimit = limits.memory_cap;
-        SetInformationJobObject(job.value, JobObjectExtendedLimitInformation, &job_limits,
-                                sizeof(job_limits));
-        AssignProcessToJobObject(job.value, process.value);
-    }
-    // Without a job the process is ended directly
-    const auto kill = [&] {
-        if (job.value != nullptr) {
-            TerminateJobObject(job.value, 1);
-        } else {
-            TerminateProcess(process.value, 1);
-        }
-    };
-    ResumeThread(thread.value);
-    CloseHandle(in_read.Release());
-    CloseHandle(out_write.Release());
+    in_read.Reset();
+    out_write.Reset();
 
     Outcome outcome;
     std::thread writer([&] {
@@ -109,32 +66,31 @@ Outcome RunHost(const std::filesystem::path& exe, const std::wstring& args,
             DWORD written = 0;
             const auto count =
                 static_cast<DWORD>(std::min<std::size_t>(input.size() - at, 1 << 16));
-            if (!WriteFile(in_write.value, input.data() + at, count, &written, nullptr)) break;
+            if (!WriteFile(in_write.get(), input.data() + at, count, &written, nullptr)) break;
             at += written;
         }
-        CloseHandle(in_write.Release());
+        in_write.Reset();
     });
     std::thread reader([&] {
         char buffer[1 << 16];
         DWORD count = 0;
-        while (ReadFile(out_read.value, buffer, sizeof buffer, &count, nullptr) && count > 0) {
+        while (ReadFile(out_read.get(), buffer, sizeof buffer, &count, nullptr) && count > 0) {
             if (outcome.output.size() + count > limits.output_cap) {
                 outcome.bounded = true;
-                kill();
+                child.Kill();
                 break;
             }
             outcome.output.append(buffer, count);
         }
     });
-    if (WaitForSingleObject(process.value, static_cast<DWORD>(limits.timeout.count())) ==
-        WAIT_TIMEOUT) {
+    if (!child.WaitFor(static_cast<DWORD>(limits.timeout.count()))) {
         outcome.timed_out = true;
-        kill();
+        child.Kill();
     }
     // The reader ends when the process is gone and its end of the pipe with it
     writer.join();
     reader.join();
-    GetExitCodeProcess(process.value, &outcome.exit);
+    outcome.exit = child.ExitCode();
     return outcome;
 }
 
@@ -228,13 +184,13 @@ std::string IngestHost::Run(std::span<const std::uint8_t> document,
     switch (outcome.exit) {
         case 0:
             return outcome.output;
-        case kCannotOpen:
+        case ingest_exit::kCannotOpen:
             throw HostError("cannotOpen", "not a PDF this reader can open");
-        case kPassword:
+        case ingest_exit::kPassword:
             throw HostError("password", "the PDF is password protected");
-        case kOutputBound:
+        case ingest_exit::kOutputBound:
             throw HostError("outputBound", "ingest host wrote too much");
-        case kBadPage:
+        case ingest_exit::kBadPage:
             throw HostError("badPage", "no such page");
         default:
             throw HostError("crashed", "ingest host exited with " + std::to_string(outcome.exit));

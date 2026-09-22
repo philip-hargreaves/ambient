@@ -109,7 +109,7 @@ void NoteLane::WriteNote(store::SessionId id, std::vector<asr::Turn> transcript,
             events_.OnNoteFailed("note generation failed");
             return;
         }
-        // Patient information follows from the finished note; a failure
+        // Patient information follows from the finished note. A failure
         // here leaves the note intact
         if (writer_->WritesPatient() && !note.empty()) {
             WritePatientNow(id, note);
@@ -160,7 +160,7 @@ void NoteLane::Join() {
     }
 }
 
-// One write on the lane's thread; busy until it returns. A join racing the
+// One write on the lane's thread, busy until it returns. A join racing the
 // thread's start must win: the writer's per-generation cancel reset would
 // otherwise erase the cancel
 void NoteLane::Run(std::function<void()> work) {
@@ -224,7 +224,7 @@ std::optional<store::Document> NoteLane::SaveNote(const store::SessionId& id,
     }
 }
 
-// Asked once the documents are done; a title failing the sanitiser is not
+// Asked once the documents are done. A title failing the sanitiser is not
 // stored, and a typed label is never overwritten
 void NoteLane::SaveLabel(const store::SessionId& id, const std::string& note_text) {
     try {

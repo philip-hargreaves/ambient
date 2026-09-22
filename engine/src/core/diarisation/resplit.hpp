@@ -11,13 +11,13 @@ namespace ambient::diar {
 
 // A merged turn can carry the other speaker's sentence at an
 // edge when the segmenter's boundary fell short and no cut caught it. At finalise
-// each turn's edge chunks are embedded and compared with the cluster centroids; a
+// each turn's edge chunks are embedded and compared with the cluster centroids. A
 // chunk nearer the other cluster by the margin becomes that speaker's turn. Only
 // edge chunks move, inwards until one stays, so a turn loses a borrowed head or
 // tail but is never shuffled. Chunks under kResplitMinFrames embed too poorly to move
 inline constexpr std::uint64_t kResplitMinFrames = 9600;  // 0.6 s
 
-inline constexpr double kResplitMargin = 0.20;  // cosine; calibrated by cross-validation
+inline constexpr double kResplitMargin = 0.20;  // cosine, calibrated by cross-validation
 
 using EmbedSpanFn = std::function<std::vector<float>(std::uint64_t first, std::uint64_t end)>;
 

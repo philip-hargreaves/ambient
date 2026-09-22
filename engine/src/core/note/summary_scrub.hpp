@@ -20,7 +20,7 @@ inline std::string Decade(int age) {
     return "in their " + std::string(kTens[index]);
 }
 
-// "a 53-year-old male" -> "a male in their fifties"; with no noun after
+// "a 53-year-old male" -> "a male in their fifties". With no noun after
 // it, "a patient in their fifties"
 inline std::string ScrubAgeNouns(std::string text) {
     static const std::regex kAgeNoun(

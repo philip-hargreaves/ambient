@@ -59,7 +59,7 @@ TEST(LlmNoteWriter, WritesASoapNoteWithinTheConciseLimit) {
     EXPECT_NE(text.find("Assessment:"), std::string::npos);
     EXPECT_NE(text.find("Plan:"), std::string::npos);
     EXPECT_EQ(text.find("doctor"), std::string::npos);
-    // The 80-word cap with slack; strict adherence is the quality commit
+    // The 80-word cap with slack. Strict adherence is the quality commit
     std::size_t words = 0;
     bool in_word = false;
     for (const char c : text) {

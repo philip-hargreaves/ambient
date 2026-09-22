@@ -103,7 +103,7 @@ store::SessionId Playback::Current() const {
     return current_;
 }
 
-// A finalised, demo-flagged twin of the source, dated as if just recorded
+// A finalised, demo-flagged twin of the source, dated as if newly recorded
 Playback::Copy Playback::MakeCopy(const store::SessionId& source) {
     using store::DocumentKind;
     const auto turns = store_.ReadTurns(source);
@@ -155,7 +155,7 @@ void Playback::Run(const Copy& copy) {
     Finish();
 }
 
-// Level readings carry the racing clock; a speech-shaped envelope, since a
+// Level readings carry the racing clock on a speech-shaped envelope, since a
 // meter pinned at one height reads as broken
 void Playback::Listen(double audio_seconds) {
     const int ticks = std::max<int>(1, static_cast<int>(pacing_.listen / pacing_.tick));

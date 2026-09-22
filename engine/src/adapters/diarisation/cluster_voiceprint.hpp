@@ -14,8 +14,8 @@ inline constexpr std::uint64_t kVoiceprintCapFrames = 90 * audio::kSampleRate;  
 inline constexpr std::uint64_t kVoiceprintMinFrames =
     audio::kSampleRate;  // under 1 s carries no identity
 
-// The cluster's slices in time order until the cap (the crossing slice
-// kept whole); empty under one second
+// The cluster's slices in time order until the cap, the crossing slice
+// kept whole. Empty under one second
 inline std::vector<Region> VoiceprintRanges(const std::vector<LabelledSlice>& slices, int cluster) {
     std::vector<Region> ranges;
     std::uint64_t total = 0;

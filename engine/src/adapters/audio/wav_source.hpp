@@ -8,8 +8,8 @@
 
 namespace ambient::audio {
 
-// Plays a mono 16 kHz wav through the audio port; the CI microphone
-// stand-in and the replay source
+// Plays a mono 16 kHz wav through the audio port. Serves as the CI
+// microphone stand-in and the replay source
 class WavSource : public IAudioSource {
    public:
     struct Config {

@@ -14,14 +14,12 @@
 #include "adapters/guidance/document_index.hpp"
 #include "adapters/guidance/ingest_host.hpp"
 #include "adapters/guidance/retriever.hpp"
+#include "adapters/system/recycle_bin.hpp"
 #include "ports/document_ingest.hpp"
 
 namespace ambient::guidance {
 
 inline constexpr const char* kReadMe = "Instructions.txt";
-
-// Sends a file to the Recycle Bin. Throws when it cannot
-void RecycleFile(const std::filesystem::path& path);
 
 // Watches the guidelines folder. A scan every few seconds takes new and
 // changed files by content, drops documents whose files went, and queues the
@@ -35,7 +33,7 @@ class DocumentIngest : public IDocumentIngest {
 
     DocumentIngest(Retriever& retriever, std::filesystem::path folder, std::filesystem::path root,
                    std::function<bool()> busy, std::filesystem::path host_exe = {},
-                   HostLimits host_limits = {}, Discard discard = RecycleFile,
+                   HostLimits host_limits = {}, Discard discard = system::RecycleFile,
                    std::chrono::milliseconds scan_every = std::chrono::seconds(3));
     ~DocumentIngest() override;
 
@@ -80,7 +78,7 @@ class DocumentIngest : public IDocumentIngest {
     Discard discard_;
     std::chrono::milliseconds scan_every_;
 
-    // store_mutex_ is taken before mutex_ or listener_mutex_, never after
+    // Lock order: store_mutex_ first, then mutex_ or listener_mutex_
     std::mutex store_mutex_;
     DocumentIndex index_;
     bool found_ = true;

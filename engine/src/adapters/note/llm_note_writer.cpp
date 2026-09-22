@@ -52,7 +52,7 @@ struct LlmNoteWriter::Impl {
     std::mutex swap_mutex;      // guards pipeline
     std::mutex state_mutex;     // guards loader, load_error, loading, on_load
     std::mutex generate_mutex;  // one generate at a time: a prefill never overlaps a note
-    std::string last_prefill;   // generate_mutex; the prompt the KV was last extended to
+    std::string last_prefill;   // under generate_mutex: the prompt the KV was last extended to
     std::shared_ptr<TextPipeline> pipeline;
     std::exception_ptr load_error;
     std::thread loader;
@@ -92,8 +92,8 @@ struct LlmNoteWriter::Impl {
         return report;
     }
 
-    // One discarded token parks the instruction block's KV; only the transcript
-    // prefills at stop (measured 2.1 -> 1.3 s). Notes equivalent, not byte-stable
+    // One discarded token parks the instruction block's KV, so only the transcript
+    // prefills at stop (measured 2.1 -> 1.3 s). Notes are equivalent rather than byte-stable
     void WarmPromptPrefix(TextPipeline& built) {
         try {
             const auto t0 = std::chrono::steady_clock::now();
@@ -149,7 +149,7 @@ void LlmNoteWriter::SetLoadListener(LoadListener listener) {
     impl_->on_load = std::move(listener);
 }
 
-// Starts the one background load; the ~14 s cost lands during capture, not
+// Starts the one background load. The ~14 s cost lands during capture, not
 // on the stop path. A failed attempt is retried on the next call.
 void LlmNoteWriter::Prepare() {
     std::thread finished;
@@ -252,7 +252,7 @@ std::string LlmNoteWriter::Generate(const std::string& prompt, const Progress& p
     impl_->cancel = false;
     Prepare();
     impl_->JoinLoader();
-    // Behind any prefill still running; the guess is then measured against the prompt
+    // Waits behind any prefill still running. The guess is then measured against the prompt
     std::lock_guard<std::mutex> generation(impl_->generate_mutex);
     // A strong reference for the whole generation: a swap or teardown can
     // never free the model under an in-flight call
@@ -279,7 +279,7 @@ std::string LlmNoteWriter::Generate(const std::string& prompt, const Progress& p
                      wrapped.size(), shared, 100.0 * shared / wrapped.size());
         impl_->last_prefill.clear();
     }
-    // The streamer carries both the partials out and the cancel in; on
+    // The streamer carries both the partials out and the cancel in. On
     // cancel the accumulated text is returned as-is
     std::string text;
     const TextPipeline::Streamer streamer = [this, &text, &progress](std::string piece) {
@@ -292,7 +292,7 @@ std::string LlmNoteWriter::Generate(const std::string& prompt, const Progress& p
         }
         return ov::genai::StreamingStatus::RUNNING;
     };
-    // Generation holds the GPU lease; a recording started meanwhile decodes
+    // Generation holds the GPU lease. A recording started meanwhile decodes
     // after it ends
     const system::AwakeRequest awake(L"Ambient: writing the note");
     const auto lease = system::GpuLease::Global().Acquire();

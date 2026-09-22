@@ -9,7 +9,7 @@
 
 namespace ambient::diar {
 
-// Diarisation behind a background load; callers already run off the audio threads
+// Diarisation behind a background load. Callers already run off the audio threads
 class DeferredDiariser : public IDiariser {
    public:
     explicit DeferredDiariser(std::function<std::unique_ptr<IDiariser>()> build,

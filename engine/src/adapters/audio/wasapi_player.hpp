@@ -9,7 +9,7 @@ namespace ambient::audio {
 // Write drops rather than waits, so playback never throttles the pipeline feed
 class WasapiPlayer {
    public:
-    // nullptr when there is no render endpoint; the caller stays silent
+    // nullptr when there is no render endpoint. The caller stays silent
     static std::unique_ptr<WasapiPlayer> Open();
     ~WasapiPlayer();
     WasapiPlayer(const WasapiPlayer&) = delete;

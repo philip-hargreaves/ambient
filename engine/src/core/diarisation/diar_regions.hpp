@@ -10,8 +10,7 @@
 
 namespace ambient::diar {
 
-// Batch Silero over the whole recording, cut finely;
-// validated configuration - do not retune
+// Batch Silero over the whole recording, cut finely. Validated, do not retune
 inline constexpr float kEnter = 0.40f;
 inline constexpr float kExit = 0.25f;
 inline constexpr std::uint64_t kMinSpeechFrames = 1600;   // 100 ms

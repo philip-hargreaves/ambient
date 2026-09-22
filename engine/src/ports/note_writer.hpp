@@ -16,7 +16,7 @@ struct NoteOptions {
     bool confirmed = false;           // the clinician says it is a consultation: no refusal
 };
 
-// Streams partials, returns the note, throws on failure; Cancel
+// Streams partials, returns the note, throws on failure. Cancel
 // interrupts from another thread
 class INoteWriter {
    public:
@@ -27,7 +27,7 @@ class INoteWriter {
     virtual std::string Write(const std::vector<asr::Turn>& transcript, const NoteOptions& options,
                               const Progress& progress) = 0;
 
-    // Patient information from the finished note, on the same model; a
+    // Patient information from the finished note, on the same model. A
     // writer that only writes notes returns false and is still valid
     virtual bool WritesPatient() const {
         return false;
@@ -37,21 +37,21 @@ class INoteWriter {
         return {};
     }
 
-    // Empty means no title - the shell shows the date - so failure is never an error
+    // Empty means no title and the shell shows the date, so failure is never an error
     virtual std::string WriteLabel(const std::string&) {
         return {};
     }
 
-    // Anonymised case summary from the note; throws on failure
+    // Anonymised case summary from the note. Throws on failure
     virtual std::string WriteSummary(const std::string&) {
         return {};
     }
 
-    // Starts the background model load; idempotent
+    // Starts the background model load. Idempotent
     virtual void Prepare() {}
 
     // Capture-phase guess at how the sealed transcript begins, so the stop
-    // path prefills only the tail; never blocks capture
+    // path prefills only the tail. Never blocks capture
     virtual void Prefill(const std::vector<asr::Turn>&, const NoteOptions&) {}
 
     virtual void Cancel() {}

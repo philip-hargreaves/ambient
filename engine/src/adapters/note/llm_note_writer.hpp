@@ -20,7 +20,7 @@ class Registry;
 namespace ambient::note {
 
 // Qwen behind the note port: one background load, resident pipeline,
-// prompts re-read per note. The tier is a role the store resolves; the
+// prompts re-read per note. The tier is a role the store resolves. The
 // manifest says which pipeline loads it
 class LlmNoteWriter : public INoteWriter {
    public:
@@ -53,10 +53,10 @@ class LlmNoteWriter : public INoteWriter {
     std::string WriteLabel(const std::string& note) override;
     std::string WriteSummary(const std::string& note) override;
 
-    // Loads the pipeline in the background; idempotent, retried on failure
+    // Loads the pipeline in the background. Idempotent, retried on failure
     void Prepare() override;
 
-    // One discarded token over the guessed prompt prefix; skipped while a
+    // One discarded token over the guessed prompt prefix. Skipped while a
     // generation runs, the model is still loading, or its pipeline does
     // not extend the KV
     void Prefill(const std::vector<asr::Turn>& transcript, const NoteOptions& options) override;

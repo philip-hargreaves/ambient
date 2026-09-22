@@ -109,7 +109,7 @@ ClusterResult ClusterSpeakers(const std::vector<std::vector<float>>& embeddings,
         }
     }
 
-    // Centroids from the fit set, renormalised - the held-out configuration
+    // Centroids from the fit set, renormalised, as in the held-out configuration
     std::vector<std::vector<double>> sums(static_cast<std::size_t>(k),
                                           std::vector<double>(dims, 0.0));
     std::vector<std::size_t> counts(static_cast<std::size_t>(k), 0);
@@ -132,7 +132,7 @@ ClusterResult ClusterSpeakers(const std::vector<std::vector<float>>& embeddings,
         for (float& x : result.centroids[c]) x = static_cast<float>(x / norm);
     }
 
-    // Every slice - short ones included - goes to its nearest centroid
+    // Every slice, short ones included, goes to its nearest centroid
     for (std::size_t i = 0; i < n; ++i) {
         double best_dot = -1e18;
         int best_c = 0;

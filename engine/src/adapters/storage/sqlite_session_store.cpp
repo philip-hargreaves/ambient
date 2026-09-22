@@ -8,19 +8,13 @@
 #include <stdexcept>
 #include <utility>
 
-#include "adapters/storage/schema.hpp"
+#include "adapters/storage/store_migrations.hpp"
 
 namespace ambient::store {
 
 namespace {
 
-// 1 was a catalog beside one file per session; 2 the single database;
-// 3 adds retain; 4 the summary and reflection kinds; 5 the demo flag;
-// 6 the document sequence and the guidance kind
-constexpr std::int64_t kSchemaVersion = 6;
-// "AMBC": the header mark of a clinical store
-constexpr std::int64_t kApplicationId = 0x414D4243;
-// Audio held in memory while the disk refuses commits; older frames are dropped and counted
+// Audio held in memory while the disk refuses commits. Older frames are dropped and counted
 constexpr std::chrono::seconds kPendingBound(30);
 constexpr std::int64_t kSqlitePageLimit = 1073741823;  // the default max_page_count
 
@@ -74,105 +68,6 @@ std::vector<std::uint8_t> ReadFileBytes(const std::filesystem::path& path) {
     return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
-bool TableExists(Db& db, const char* table) {
-    Db::Stmt exists = db.Prepare("SELECT count(*) FROM sqlite_master WHERE name = ?");
-    exists.BindText(1, table);
-    return exists.Step() && exists.ColumnInt64(0) != 0;
-}
-
-bool HasColumn(Db& db, const char* table, const char* column) {
-    Db::Stmt info = db.Prepare(("PRAGMA table_info(" + std::string(table) + ")").c_str());
-    while (info.Step()) {
-        if (info.ColumnText(1) == column) return true;
-    }
-    return false;
-}
-
-// A row per dangling reference, none when the rebuild kept every one
-void RequireForeignKeys(Db& db) {
-    Db::Stmt check = db.Prepare("PRAGMA foreign_key_check");
-    if (check.Step()) throw StoreError(StoreCode::kSchema, "migration left a dangling reference");
-}
-
-std::filesystem::path DatabasePath(const std::filesystem::path& root) {
-    std::filesystem::create_directories(root);
-    return root / "ambient.db";
-}
-
-// Foreign and newer files are refused. Each step stamps its version inside its transaction;
-// the column additions are skipped where an older build's half-stamped file already has them
-Db OpenDatabase(const std::filesystem::path& root) {
-    Db db(DatabasePath(root));
-    const std::int64_t application_id = db.ApplicationId();
-    std::int64_t version = db.UserVersion();
-    if (application_id != 0 && application_id != kApplicationId) {
-        throw StoreError(StoreCode::kSchema, "not an ambient store");
-    }
-    if (version == 0) {
-        if (db.QueryInt64("SELECT count(*) FROM sqlite_master") != 0) {
-            throw StoreError(StoreCode::kSchema, "not an ambient store");
-        }
-        // Incremental vacuum is creation-time; the WAL switch already wrote the
-        // header, so the empty file is rebuilt to take it
-        db.Exec("PRAGMA auto_vacuum=INCREMENTAL");
-        db.Exec("VACUUM");
-        Db::Transaction txn(db);
-        db.Exec(kSchemaSql);
-        db.SetApplicationId(kApplicationId);
-        db.SetUserVersion(kSchemaVersion);
-        txn.Commit();
-    } else if (version > kSchemaVersion) {
-        throw StoreError(StoreCode::kSchema, "store schema is newer than this build");
-    } else {
-        if (application_id == 0 && !TableExists(db, "sessions")) {
-            throw StoreError(StoreCode::kSchema, "not an ambient store");
-        }
-        if (version == 2) {
-            Db::Transaction txn(db);
-            if (!HasColumn(db, "sessions", "retain")) db.Exec(kMigrate2To3Sql);
-            db.SetUserVersion(3);
-            txn.Commit();
-            version = 3;
-        }
-        if (version == 3) {
-            // note_options references the dropped table: keys off, or the drop cascades. The pragma
-            // is a no-op inside a transaction
-            db.Exec("PRAGMA foreign_keys=OFF");
-            {
-                Db::Transaction txn(db);
-                db.Exec(kMigrate3To4Sql);
-                db.SetUserVersion(4);
-                txn.Commit();
-            }
-            db.Exec("PRAGMA foreign_keys=ON");
-            version = 4;
-        }
-        if (version == 4) {
-            Db::Transaction txn(db);
-            if (!HasColumn(db, "sessions", "demo")) db.Exec(kMigrate4To5Sql);
-            db.SetUserVersion(5);
-            txn.Commit();
-            version = 5;
-        }
-        if (version == 5) {
-            db.Exec("PRAGMA foreign_keys=OFF");
-            {
-                Db::Transaction txn(db);
-                if (!HasColumn(db, "documents", "seq")) db.Exec(kMigrate5To6Sql);
-                RequireForeignKeys(db);
-                db.SetUserVersion(6);
-                txn.Commit();
-            }
-            db.Exec("PRAGMA foreign_keys=ON");
-            // Every earlier rewrite resealed under one IV; the copies sit in freed pages
-            db.Exec("VACUUM");
-        }
-        // Stores from before the mark take it once
-        if (application_id == 0) db.SetApplicationId(kApplicationId);
-    }
-    return db;
-}
-
 }  // namespace
 
 SqliteSessionStore::SqliteSessionStore(const std::filesystem::path& root,
@@ -188,7 +83,7 @@ SqliteSessionStore::~SqliteSessionStore() {
     }
     cv_.notify_all();
     writer_.join();
-    // Destruction is not finalisation; an open session stays recoverable with what it buffered
+    // Destruction is not finalisation. An open session stays recoverable with what it buffered
     if (open_.has_value()) {
         try {
             CommitPending();
@@ -255,7 +150,7 @@ void SqliteSessionStore::ClosePending() {
     pending_ = {};
 }
 
-// Timing is queryable shape; speaker and text are content, so encrypted
+// Timing is queryable shape. Speaker and text are content, so encrypted
 void SqliteSessionStore::InsertTurn(const SessionId& id, std::int64_t seq,
                                     const ChunkCipher& cipher, const asr::Turn& turn) {
     const std::string content =
@@ -299,7 +194,7 @@ void SqliteSessionStore::ReplaceTurns(const SessionId& id, std::span<const asr::
     txn.Commit();
 }
 
-// The seal erases the audio: the transcript is the record; the recording
+// The seal erases the audio. The transcript is the record, and the recording
 // existed only to resume a crash
 void SqliteSessionStore::Finalise(const SessionId& id) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -378,13 +273,13 @@ std::vector<RecoverableSession> SqliteSessionStore::ScanRecoverable() {
     while (select.Step()) {
         RecoverableSession session{select.ColumnText(0), select.ColumnText(1),
                                    static_cast<int>(select.ColumnInt64(2))};
-        if (open_.has_value() && session.id == open_->id) continue;  // live, not crashed
+        if (open_.has_value() && session.id == open_->id) continue;  // the live session
         found.push_back(std::move(session));
     }
     return found;
 }
 
-// The label is content, so each row's is opened with its own key; the
+// The label is content, so each row's is opened with its own key. The
 // edit stamp is the latest over the session's documents
 std::vector<SessionSummary> SqliteSessionStore::ListSessions() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -404,7 +299,7 @@ std::vector<SessionSummary> SqliteSessionStore::ListSessions() {
         " FROM sessions s"
         " LEFT JOIN session_keys k ON k.session_id = s.id"
         " LEFT JOIN documents l ON l.session_id = s.id AND l.kind = 'label'"
-        // A keep-off session exists only until it is left; history never
+        // A keep-off session exists only until it is left. History never
         // shows what is not being kept. Crashed ones stay for recovery
         " WHERE NOT (s.retain = 0 AND s.state = 'finalised')"
         " ORDER BY s.started_at DESC, s.rowid DESC");
@@ -496,7 +391,7 @@ void SqliteSessionStore::InsertKey(const SessionId& id, std::span<const std::uin
     key.Step();
 }
 
-// Text is content, so sealed; the rest is shape. The options row follows
+// Text is content, so sealed. The rest is shape. The options row follows
 // the note row (cascade), so a kind is all or nothing
 void SqliteSessionStore::WriteDocument(const SessionId& id, DocumentKind kind,
                                        const Document& document) {
@@ -673,7 +568,7 @@ bool SqliteSessionStore::CommitPending() {
     return true;
 }
 
-// A failed commit keeps its audio for the next tick; past kPendingBound the oldest frames are
+// A failed commit keeps its audio for the next tick. Past kPendingBound the oldest frames are
 // dropped as lost and the stored timeline moves with them. The fault is announced once per episode
 void SqliteSessionStore::WriterLoop() {
     std::unique_lock<std::mutex> lock(mutex_);

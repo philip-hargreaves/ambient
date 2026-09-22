@@ -13,7 +13,7 @@
 namespace ambient::audio {
 
 // Replays a crashed session's stored audio at full speed, then hands the
-// sink to the live source; downstream sees one continuous capture stream
+// sink to the live source. Downstream sees one continuous capture stream
 class ResumeSource : public IAudioSource {
    public:
     ResumeSource(std::vector<float> stored, std::unique_ptr<IAudioSource> live)

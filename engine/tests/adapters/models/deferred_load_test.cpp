@@ -110,7 +110,7 @@ struct CountingDiariser : diar::IDiariser {
     }
 };
 
-// The engine only ever sees the wrapper; a method it does not forward is a
+// The engine only ever sees the wrapper. A method it does not forward is a
 // method the product does not have (this one was missed once)
 TEST(DeferredDiariser, ForwardsAnchorSimilarities) {
     std::atomic<int> discards{0};

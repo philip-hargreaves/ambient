@@ -133,7 +133,7 @@ SourceEnd WasapiCapture::RunToEnd(IAudioSink& sink) {
         return Fail("CoCreateInstance", hr);
     }
 
-    // Resolve once; from here the device is pinned for the whole stream
+    // Resolved once, then pinned for the whole stream
     ComPtr<IMMDevice> device;
     hr = endpoint_id_.empty()
              ? enumerator->GetDefaultAudioEndpoint(eCapture, eCommunications, &device)
@@ -149,13 +149,13 @@ SourceEnd WasapiCapture::RunToEnd(IAudioSink& sink) {
     }
 
     // Without the communications category Windows never wakes a Bluetooth mic
-    // link (measured: silence); other apps' audio ducks while recording
+    // link (measured: silence). Side effect: other apps' audio ducks while recording
     ComPtr<IAudioClient2> client2;
     if (SUCCEEDED(client.As(&client2))) {
         AudioClientProperties properties{};
         properties.cbSize = sizeof(properties);
         properties.eCategory = AudioCategory_Communications;
-        client2->SetClientProperties(&properties);  // best effort, never fatal
+        client2->SetClientProperties(&properties);  // best effort
     }
 
     WAVEFORMATEX* mix = nullptr;
@@ -270,7 +270,7 @@ SourceEnd WasapiCapture::RunToEnd(IAudioSink& sink) {
                 stream_peak = std::max(stream_peak, std::abs(packet[i]));
             }
 
-            // Release inside the buffer period; the sink runs after, on our copy
+            // Release inside the buffer period. The sink runs after, on the copy
             hr = capture->ReleaseBuffer(frames);
             if (FAILED(hr)) {
                 return Fail("ReleaseBuffer", hr);

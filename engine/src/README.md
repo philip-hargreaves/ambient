@@ -21,7 +21,8 @@ core/            a static library, one folder per stage; namespace = folder
 ports/           the seams of the hexagon, flat: eleven interfaces and the store error type
 adapters/        one folder per seam, matching core/ where a stage has one
   audio/ vad/ transcription/ diarisation/ note/ translate/ guidance/ storage/ ipc/ models/
-  system/        GPU lease, awake requests, process scan, executable paths
+  system/        GPU lease, awake requests, process scan, child processes, executable
+                 paths, the Recycle Bin
   demo/
 ```
 

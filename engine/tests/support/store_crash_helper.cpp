@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
         for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    // A second connection watches the committed count; the acked number is
+    // A second connection watches the committed count. The acked number is
     // what the test holds recovery to
     ambient::store::Db reader(root / "ambient.db");
     const std::string count_sql = "SELECT COUNT(*) FROM chunks WHERE session_id = '" + id + "'";

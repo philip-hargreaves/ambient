@@ -14,7 +14,7 @@
 namespace ambient::asr {
 namespace {
 
-// Not in the repo; the test skips without it
+// Not in the repo. The test skips without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 

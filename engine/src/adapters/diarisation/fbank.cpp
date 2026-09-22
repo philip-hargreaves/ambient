@@ -7,7 +7,7 @@
 namespace ambient::diar {
 
 // The blessed research contract (torchaudio kaldi defaults + ERes2NetV2
-// front-end); a mismatch fails embedder parity
+// front-end). A mismatch fails embedder parity
 FbankFeatures EmbedderFbank(std::span<const float> audio) {
     knf::FbankOptions opts;
     opts.frame_opts.samp_freq = 16000.0f;
@@ -39,7 +39,7 @@ FbankFeatures EmbedderFbank(std::span<const float> audio) {
         out.values.insert(out.values.end(), frame, frame + kMelBins);
     }
 
-    // Per-slice mean subtraction over time, per mel bin; no variance norm
+    // Per-slice mean subtraction over time, per mel bin, with no variance norm
     if (out.frames > 0) {
         for (std::size_t bin = 0; bin < kMelBins; ++bin) {
             double mean = 0.0;

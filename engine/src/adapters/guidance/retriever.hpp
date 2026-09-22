@@ -47,7 +47,7 @@ using EmbedderLoader = std::function<std::unique_ptr<IEmbedder>()>;
 // passes the load guards, exact scan, rank vote across the sub-queries, cosine
 // floor, population guard. A result's score is its best cosine and the order
 // is the vote. Prepare and Search run one at a time. Corpora and Status may be
-// read from any thread. A load failure is kept and rethrown, never retried,
+// read from any thread. A load failure is kept and rethrown without a retry,
 // since the model store does not change while the engine runs
 class Retriever : public IGuidanceRetriever {
    public:

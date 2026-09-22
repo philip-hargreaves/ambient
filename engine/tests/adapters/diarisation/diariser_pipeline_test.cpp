@@ -69,8 +69,8 @@ TEST(DiariserPipeline, ADoctorPatientConsultDiarisesToTwoSpeakers) {
     std::filesystem::remove_all(anchor_root, ec);
 }
 
-// The voiceprints moved off the Diarise path (they now overlap the GPU turn
-// decode) and DoctorVoiceprint reuses them: the numbers must be the ones the
+// The voiceprints are computed off the Diarise path, overlapping the GPU turn
+// decode, and DoctorVoiceprint reuses them: the numbers must be the ones the
 // reference method produces, and the reuse must actually skip the embed
 TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReusesThem) {
     if (!std::filesystem::exists(kWav)) {
@@ -108,7 +108,7 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
     }
     EXPECT_GT(similarity[0], similarity[1]) << "the taught cluster ranks nearer";
 
-    // Accrue reuses the voiceprint just computed: no second embed of the cluster
+    // Accrue reuses the voiceprint Diarise computed: no second embed of the cluster
     const auto start = std::chrono::steady_clock::now();
     diariser.AccrueVoiceprint(diariser.DoctorVoiceprint(audio, second.slices, 0));
     const auto took = std::chrono::duration<double>(std::chrono::steady_clock::now() - start);
@@ -133,7 +133,7 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
     AnchorStore fed_anchors(root / "b");
     SpeakerDiariser fed(store, runtime, fed_anchors);
 
-    // Synthetic reconciled turns, 6 s each; edges double as slice cuts
+    // Synthetic reconciled turns, 6 s each. Edges double as slice cuts
 
     const DecodeClipFn decode = [](std::span<const float> clip, std::uint64_t first) {
         asr::Turn chunk;

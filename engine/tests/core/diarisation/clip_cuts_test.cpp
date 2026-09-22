@@ -7,7 +7,7 @@
 namespace ambient::diar {
 namespace {
 
-// 32 ms hops; speech everywhere except a pause at hops 40-42 (1.28-1.34 s)
+// 32 ms hops. Speech everywhere except a pause at hops 40-42 (1.28-1.34 s)
 std::vector<float> Probabilities() {
     std::vector<float> p(200, 0.9f);
     p[40] = 0.3f;

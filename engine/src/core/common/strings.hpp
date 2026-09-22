@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-// ASCII text helpers shared by the stages; bytes above 127 pass through untouched
+// ASCII text helpers shared by the stages. Bytes above 127 pass through untouched
 namespace ambient::strings {
 
 inline std::string Lower(std::string_view s) {

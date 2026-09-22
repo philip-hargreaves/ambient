@@ -111,7 +111,7 @@ class ScriptedSource : public IAudioSource {
     std::atomic<bool> stop_{false};
 };
 
-// Written on the pipeline thread; read after the controller has joined capture
+// Written on the pipeline thread, read after the controller has joined capture
 struct RecordingEvents : ISessionEvents {
     std::mutex mutex;
     std::vector<float> levels;
@@ -281,8 +281,8 @@ struct RecordingEvents : ISessionEvents {
     }
 };
 
-// Records the call sequence; the tests assert which storage outcome each way
-// of ending a session produced
+// Records the call sequence so the tests can assert which storage outcome each
+// way of ending a session produced
 struct FakeSessionStore : store::ISessionStore {
     std::mutex mutex;
     std::vector<std::string> calls;
@@ -584,10 +584,10 @@ struct FakeDiariser : diar::IDiariser {
     std::vector<double> similarities;
     diar::DiariseTiming timing;
 
-    // Written on the diarisation thread; read after the controller joins it
+    // Written on the diarisation thread, read after the controller joins it
     int advances = 0;
 
-    std::vector<float> voiceprint{0.6f, 0.8f};  // what EmbedVoice answers; empty = too short
+    std::vector<float> voiceprint{0.6f, 0.8f};  // what EmbedVoice answers, empty means too short
     std::size_t embedded_frames = 0;
     std::vector<float> replaced;
     std::uint64_t replaced_at = 0;
@@ -719,7 +719,7 @@ TEST(SessionController, TheNoteFollowsTheTranscript) {
                                  &writer, nullptr, 0);
 
     ASSERT_TRUE(controller.Start());
-    // The warm-up rides the diarisation thread's first tick; a source that
+    // The warm-up rides the diarisation thread's first tick. A source that
     // completes at exactly the tick threshold races the stop, so stream
     // until the warm-up has been observed
     for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
@@ -1155,7 +1155,7 @@ TEST(SessionController, DestructionCancelsANoteStillWriting) {
                                      5 * kSampleRate, &writer, nullptr, 0);
         ASSERT_TRUE(controller.Start());
         controller.Stop();
-        // Destruction must catch the write in flight, not before it starts
+        // Destruction must catch the write in flight rather than before it starts
         for (int i = 0; i < 400; ++i) {
             {
                 const std::lock_guard<std::mutex> lock(events.mutex);
@@ -1280,8 +1280,8 @@ TEST(SessionController, StopFinalisesTheSession) {
     EXPECT_FALSE(store.frames.empty()) << "captured audio must reach the store";
 }
 
-// Streams until the store holds enough audio that each of two merged turns
-// clears the 0.3 s decode floor; wall-clock sleeps are too coarse on Windows
+// Waits until the store holds enough audio that each of two merged turns
+// clears the 0.3 s decode floor. Wall-clock sleeps are too coarse on Windows
 bool WaitForFrames(FakeSessionStore& store, std::size_t n) {
     for (int i = 0; i < 400; ++i) {
         {
@@ -2043,7 +2043,7 @@ TEST(SessionController, FinishEndsTheReadingEarlyAndKeepsThePrint) {
     FakeDiariser diariser;
     SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
                                  store, transcriber, vad, diariser, kTestSettle);
-    ASSERT_TRUE(controller.StartEnrolment(120.0, {}, 0.1));  // the cap, never reached
+    ASSERT_TRUE(controller.StartEnrolment(120.0, {}, 0.1));  // a cap far beyond the test
     for (int i = 0; i < 200 && diariser.embedded_frames == 0; ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         std::lock_guard<std::mutex> lock(events.mutex);

@@ -131,7 +131,7 @@ TEST(AnchorStore, EnrolmentSurvivesAReload) {
 }
 
 TEST(AnchorRecord, AVersionOneRecordStillParses) {
-    // version 1: version, dims, sessions, then the sum; no enrolment fields
+    // version 1: version, dims, sessions, then the sum. No enrolment fields
     std::vector<std::uint8_t> v1(16 + 8);
     const std::uint32_t version = 1, dims = 2;
     const std::uint64_t sessions = 5;

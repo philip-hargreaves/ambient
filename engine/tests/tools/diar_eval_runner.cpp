@@ -1,8 +1,8 @@
-// Dev evaluation tool. Default: production diarisation over
-// one wav, "start end cluster" per slice in seconds (the attribution
-// scorer's format). --roles runs the full finalise flow - per-turn ASR, text
-// assignment, cold-start naming - and prints roles, margin and per-cluster
-// voiceprints for the role-acceptance scorer
+// Dev evaluation tool. Default: production diarisation over one wav, printing
+// "start end cluster" per slice in seconds (the attribution scorer's format).
+// --roles runs the full finalise flow (per-turn ASR, text assignment, cold-start
+// naming) and prints roles, margin and per-cluster voiceprints for the
+// role-acceptance scorer
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -38,7 +38,7 @@ std::vector<float> LoadWav(const char* path) {
     return frames;
 }
 
-// The clip-decode contract hands back chunks; the probe's whole-clip text is one
+// The clip-decode contract hands back chunks. The probe's whole-clip text is one
 std::vector<ambient::asr::Turn> AsChunk(std::string text, std::span<const float> clip,
                                         std::uint64_t first_frame) {
     ambient::asr::Turn chunk;
@@ -53,10 +53,9 @@ std::string Decode(ambient::asr::WhisperTranscriber& transcriber, std::span<cons
     return transcriber.DecodeClip(clip, first_frame);
 }
 
-// --amortise-probe: drive the production capture path - a SpeakerDiariser
-// fed in five-second steps with the audio so far, exactly as the session
-// controller feeds it - then time what a stop pays and verify the output is
-// bit-identical to the batch pass
+// --amortise-probe: feeds a SpeakerDiariser the audio so far in five-second
+// steps, exactly as the session controller does, then times what a stop pays
+// and verifies the output is bit-identical to the batch pass
 void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
                    ambient::asr::WhisperTranscriber& whisper, const std::vector<float>& audio,
                    const ambient::diar::DiariseResult& batch) {
@@ -112,7 +111,6 @@ void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::Ov
     const double stop_s = seconds(stop_start, Clock::now());
     const std::size_t stop_decodes = decodes - capture_decodes;
 
-    // ---- verification against the batch pass
     std::ptrdiff_t mismatch = -1;
     if (result.slices.size() != batch.slices.size()) {
         std::fprintf(stderr, "amortise probe: SLICE COUNT differs (%zu vs batch %zu)\n",

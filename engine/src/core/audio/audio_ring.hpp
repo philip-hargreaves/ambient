@@ -10,8 +10,8 @@
 
 namespace ambient::audio {
 
-// SPSC Lamport ring; monotonic indices masked on access, capacity rounded
-// to a power of two
+// SPSC Lamport ring with monotonic indices masked on access. Capacity is
+// rounded to a power of two
 #pragma warning(push)
 #pragma warning(disable : 4324)  // Padding from alignas is the point
 class AudioRing {
@@ -23,7 +23,7 @@ class AudioRing {
         return capacity_;
     }
 
-    // Producer only. Returns the frames written; short of frames.size() means
+    // Producer only. Returns the frames written. Short of frames.size() means
     // the ring is full and the caller decides what an overrun means.
     std::size_t TryPush(std::span<const float> frames) {
         const std::size_t write = write_.load(std::memory_order_relaxed);

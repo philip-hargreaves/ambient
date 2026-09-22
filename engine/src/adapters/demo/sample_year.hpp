@@ -96,7 +96,7 @@ inline std::string Iso8601(std::chrono::sys_seconds when) {
     return std::format("{:%FT%T}Z", when);
 }
 
-// Writes each sample as a finalised session with its documents; returns the count
+// Writes each sample as a finalised session with its documents and returns the count
 inline std::size_t SeedSampleYear(store::ISessionStore& sessions,
                                   const std::vector<Sample>& samples,
                                   std::chrono::sys_seconds now) {

@@ -18,11 +18,11 @@ namespace ambient::session {
 
 // The documents written from a finished transcript on their own thread, after
 // finalise: the note, then the patient sheet, then the title. One write at a
-// time; a new write cancels one still running
+// time, and a new write cancels one still running
 class NoteLane {
    public:
-    // Below this the model writes from its prompt, not the consultation
-    // (measured on 14 s); refusing is the only safe output
+    // Below this the model writes from its prompt instead of the consultation
+    // (measured on 14 s). Refusing is the only safe output
     static constexpr std::size_t kMinNoteWords = 25;
 
     NoteLane(note::INoteWriter* writer, store::ISessionStore& store, ISessionEvents& events,
@@ -33,23 +33,23 @@ class NoteLane {
 
     bool Available() const;
     bool WritesPatient() const;
-    // True while a document is being written; callers never block on the lane
+    // True while a document is being written. Callers never block on the lane
     bool Busy() const;
     // The last note was refused (too thin, or not a consultation), so the
     // session it belongs to holds no note
     bool Refused() const;
     void ClearRefusal();
 
-    // Applied to the next note; the shell sets these ahead of the stop
+    // Applied to the next note. The shell sets these ahead of the stop
     void SetOptions(note::NoteOptions options);
     note::NoteOptions Options() const;
 
     // The note, then the sheet and the title. Too thin is refused without
-    // asking the model; the model's own refusal can be overridden.
+    // asking the model. The model's own refusal can be overridden.
     // `accepted` runs once the note is stored: the session was a consultation
     void WriteNote(store::SessionId id, std::vector<asr::Turn> transcript,
                    std::function<void()> accepted = {});
-    // The sheet rewritten from the stored note - clinician edits included -
+    // The sheet rewritten from the stored note, clinician edits included,
     // so an edited note can bring the sheet back into agreement
     void WritePatient(store::SessionId id, std::string note);
     // The appraisal case summary from the stored note, edits included

@@ -13,7 +13,7 @@ enum class SourceEndReason {
     kCompleted,   // The source ran out of audio
     kStopped,     // RequestStop was honoured
     kDeviceLost,  // The device vanished mid-capture
-    kFailed,      // The source broke; detail says how
+    kFailed,      // The source broke, and detail says how
 };
 
 struct SourceEnd {
@@ -27,14 +27,14 @@ class IAudioSink {
     virtual ~IAudioSink() = default;
 
     // lost_frames counts audio that belonged before this packet but never
-    // arrived and never will; a complete recording is all zeros
+    // arrived and never will. A complete recording is all zeros
     virtual void OnAudio(std::span<const float> frames, std::uint64_t lost_frames) = 0;
 
     // Always the last call, whatever the reason
     virtual void OnEnd(const SourceEnd& end) = 0;
 };
 
-// One capture stream. Run blocks until the stream ends; RequestStop may be
+// One capture stream. Run blocks until the stream ends. RequestStop may be
 // called from any thread and ends the stream as kStopped.
 class IAudioSource {
    public:
@@ -43,10 +43,10 @@ class IAudioSource {
     virtual void Run(IAudioSink& sink) = 0;
     virtual void RequestStop() = 0;
 
-    // Hold delivery without ending the stream; optional, any thread
+    // Holds delivery without ending the stream. Optional, any thread
     virtual void SetPaused(bool) {}
 
-    // Toggle audible monitoring mid-stream; optional, any thread
+    // Toggles audible monitoring mid-stream. Optional, any thread
     virtual void SetMonitor(bool) {}
 };
 

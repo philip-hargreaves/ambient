@@ -74,7 +74,7 @@ class IDocumentIngest {
     // Every document goes, and the count of them comes back
     virtual std::size_t RemoveAll() = 0;
     virtual PageRender Render(std::int64_t id, int page, std::int64_t chunk) = 0;
-    // Her file, for the PDF viewer
+    // The file in the guidelines folder, for the PDF viewer
     virtual std::filesystem::path Path(std::int64_t id) = 0;
     virtual void SetListener(std::function<void(const IngestProgress&)> progress,
                              std::function<void(const DocumentInfo&)> document) = 0;

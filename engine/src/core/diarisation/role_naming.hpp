@@ -7,7 +7,7 @@
 namespace ambient::diar {
 
 // Below this lexical margin no one is named. Chosen from the observed
-// margin range, not swept; revisit first if it abstains too often
+// margin range without a sweep. Revisit first if it abstains too often
 inline constexpr double kRoleMinMargin = 0.5;
 
 // Below this the stored print is someone else's and the content decides
@@ -26,16 +26,16 @@ struct RoleResult {
     int doctor_cluster = -1;                   // -1: abstained
     int patient_cluster = -1;
     double margin = 0.0;
-    bool from_anchor = false;  // the print decided; else the content did or abstained
+    bool from_anchor = false;  // the print decided, else the content did or abstained
 };
 
-// Cold-start scorer; no question features - they invert where the patient
+// Cold-start scorer without question features: they invert where the patient
 // asks the questions (measured 6/6 -> 0/6)
 double LexicalDoctorScore(const std::string& text);
 
-// The two dominant clusters are the candidates; anchor rank names the
-// doctor, else lexical score with abstention - a confident inversion is
-// the one failure that corrupts the record
+// The two dominant clusters are the candidates. Anchor rank names the
+// doctor, else lexical score with abstention, since a confident inversion
+// is the one failure that corrupts the record
 RoleResult NameRoles(const std::vector<RoleTurn>& turns, int cluster_count,
                      const std::vector<double>& anchor_similarity = {});
 

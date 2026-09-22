@@ -43,7 +43,7 @@ DecodeFn MakeWhisperDecode(const models::ModelStore& store, models::OvRuntime& r
     // rejected: it worsened WER even with register effects folded out
     return [pipeline, config](std::span<const float> frames, std::uint64_t first_frame) {
         const ov::genai::RawSpeechInput audio(frames.begin(), frames.end());
-        // Bound: the longest legitimate hold, a cold 35B load; past it the holder is wedged
+        // Bound: the longest legitimate hold, a cold 35B load. Past it the holder is wedged
         auto& gpu = system::GpuLease::Global();
         const bool was_broken = gpu.Broken();
         const auto lease = gpu.Acquire(std::chrono::minutes(10));
@@ -130,8 +130,6 @@ std::vector<Turn> WhisperTranscriber::DecodeClipChunks(std::span<const float> fr
     return chunks.get();
 }
 
-// Load off the hot path; a failed load drains windows without turns, so
-// nothing hangs
 void WhisperTranscriber::RecordDecode(std::size_t frames,
                                       std::chrono::steady_clock::time_point t0) {
     if (metrics_ != nullptr) {
@@ -141,6 +139,8 @@ void WhisperTranscriber::RecordDecode(std::size_t frames,
     }
 }
 
+// Load off the hot path. A failed load drains clips without turns, so
+// nothing hangs
 void WhisperTranscriber::LoadIfPending() {
     if (!loader_) {
         return;
@@ -177,8 +177,8 @@ void WhisperTranscriber::WorkerLoop() {
         lock.unlock();
         std::vector<Turn> chunks;
         std::vector<std::uint64_t> cuts;
-        // A failed decode loses this clip's text, never the session; the
-        // audio is already stored
+        // A failed decode loses only this clip's text. The audio is
+        // already stored
         try {
             if (decode_) {
                 const auto t0 = std::chrono::steady_clock::now();

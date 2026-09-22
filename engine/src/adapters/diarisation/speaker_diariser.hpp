@@ -31,10 +31,7 @@ class SpeakerDiariser : public IDiariser {
                                            const std::vector<LabelledSlice>& slices,
                                            int cluster_count) override;
 
-    // Reuses the voiceprint AnchorSimilarities computed for the cluster;
-    // embeds only when there is none
-
-    // Capture-phase work; Diarise then finalises from the accumulated state
+    // Capture-phase work. Diarise then finalises from the accumulated state
     void Advance(std::span<const float> audio, const DecodeClipFn& decode) override {
         worker_.Advance(audio, decode);
     }
@@ -57,6 +54,8 @@ class SpeakerDiariser : public IDiariser {
 
     std::vector<float> EmbedVoice(std::span<const float> audio) override;
 
+    // Reuses the voiceprint AnchorSimilarities computed for the cluster.
+    // Embeds only when there is none
     std::vector<float> DoctorVoiceprint(std::span<const float> audio,
                                         const std::vector<LabelledSlice>& slices,
                                         int doctor_cluster) override;

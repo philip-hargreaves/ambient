@@ -19,7 +19,7 @@ inline constexpr std::size_t kPerTurnMaxRepeat = 4;  // 5-gram degeneracy guard
 // Finalise and speculation must merge identically or cache keys stop matching
 std::vector<LabelledSlice> MergeByCluster(const std::vector<LabelledSlice>& slices);
 
-// Spans double as cache keys; heads clamp past the previous end, a nested
+// Spans double as cache keys. Heads clamp past the previous end, a nested
 // overlap turn clamps to nothing
 std::vector<Region> DecodeSpans(const std::vector<LabelledSlice>& turns,
                                 std::uint64_t audio_frames);
@@ -31,7 +31,7 @@ inline constexpr std::uint64_t kAssembleTolFrames = 5600;  // 0.35 s: snap windo
 std::optional<std::vector<asr::Turn>> AssembleFromChunks(const TurnChunks& cache, std::uint64_t a,
                                                          std::uint64_t b);
 
-// Each merged turn gets the text of its own audio; empty means dropped.
+// Each merged turn gets the text of its own audio. Empty means dropped.
 // Cached texts are used only on an exact key match, so any hit rate is safe
 std::vector<std::string> DecodeTurnTexts(const std::vector<LabelledSlice>& turns,
                                          std::span<const float> audio, const DecodeClipFn& decode,
@@ -46,7 +46,7 @@ std::vector<LabelledSlice> SpeculatedTurns(const std::vector<LabelledSlice>& mer
                                            std::uint64_t audio_frames, const TurnTexts& cache,
                                            std::vector<std::string>* texts);
 
-// Most-repeated 5-gram, sliding; legitimate speech peaks at 2
+// Most-repeated 5-gram, sliding. Legitimate speech peaks at 2
 std::size_t MaxRepeatedNgram(const std::string& text);
 
 }  // namespace ambient::diar

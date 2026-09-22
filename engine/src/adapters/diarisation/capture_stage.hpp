@@ -14,7 +14,7 @@
 
 namespace ambient::diar {
 
-// Decodes per speculation pass; small so a long pass cannot stall the
+// Decodes per speculation pass, small so a long pass cannot stall the
 // causal stages that keep the settled frontier fresh
 inline constexpr int kSpeculateBudget = 4;
 inline constexpr int kEdgeEmbedBudget = 2;  // edge chunks embedded per capture tick
@@ -24,7 +24,7 @@ struct CaptureDiarisation {
     std::vector<float> vad_probabilities;  // one per hop
     SegResult seg;                         // absolute frames
     std::uint64_t seg_done = 0;            // frames fully segmented
-    // Slice span -> embedding; empty means too short to embed
+    // Slice span -> embedding. Empty means too short to embed
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<float>> embeddings;
     TurnTexts turn_texts;    // the speculation cache, keyed on exact decode spans
     TurnChunks turn_chunks;  // the chunks behind it, same keys
@@ -41,13 +41,13 @@ struct Speculation {
     int cluster_count = 0;
 };
 
-// The capture-phase diarisation behind the settled frontier; finalise stays
+// The capture-phase diarisation behind the settled frontier. Finalise stays
 // bit-identical and pays only the tail
 class CaptureStage {
    public:
     CaptureStage(audio::SileroVad& vad, Segmenter& segmenter, SpeakerEmbedder& embedder);
 
-    // The audio so far; decode re-transcribes a clip, at most budget spans
+    // Takes the audio so far. decode re-transcribes a clip, at most budget spans
     // per call so a stop never waits long behind speculation
     void Advance(std::span<const float> audio, const DecodeClipFn& decode,
                  int budget = kSpeculateBudget);

@@ -8,7 +8,7 @@
 namespace ambient::note {
 
 // The note model's first line when the transcript is not a healthcare
-// consultation; the engine reports a refusal instead of saving a note
+// consultation. The engine reports a refusal instead of saving a note
 inline constexpr std::string_view kNotAConsultation = "NOT A CONSULTATION:";
 
 inline std::string_view TrimmedView(std::string_view text) {

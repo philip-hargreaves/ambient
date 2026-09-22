@@ -23,13 +23,13 @@
 namespace ambient::asr {
 namespace {
 
-// Not in the repo; the test skips without it
+// Not in the repo. The test skips without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 constexpr const char* kRef =
     "C:/dev/intelliscribe/bench/transcription/references/day1_consultation01.json";
 
-// Long-form parity on this consult is 21.28%; the shipped per-turn decode
+// Long-form parity on this consult is 21.28%. The shipped per-turn decode
 // (each diarised turn from its own audio) measured under it on the
 // 57-consult sweep, so the gate holds the baseline
 constexpr double kMaxWer = 0.22;
@@ -133,7 +133,7 @@ TEST(AsrWer, ProductionPathHoldsTheBaseline) {
     std::printf("per-turn WER %.2f%% (baseline 21.28%%), %.1fx realtime, load %lld ms, %zu turns\n",
                 wer * 100, speed, static_cast<long long>(load_ms.count()), turns.size());
     EXPECT_LE(wer, kMaxWer);
-    // Release measures well past realtime; the floor tolerates the Debug harness
+    // Release measures well past realtime. The floor tolerates the Debug harness
     // and the diarisation inside the timed span
     EXPECT_GT(speed, 3.0) << "decode must stay well past realtime";
     std::error_code ec;

@@ -12,7 +12,7 @@
 namespace ambient::diar {
 namespace {
 
-// The full stage against the research reference: our fbank + our runtime on
+// The full stage against the research reference: the engine fbank and runtime on
 // raw audio must reproduce the fixture embeddings (research fbank + research
 // runtime). A failure here with fbank parity green points at the glue
 constexpr const char* kFixtureDir = AMBIENT_DIAR_FIXTURE_DIR;

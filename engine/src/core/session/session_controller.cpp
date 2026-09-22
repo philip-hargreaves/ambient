@@ -121,7 +121,7 @@ bool SessionController::Start(std::optional<ReplaySpec> replay, const store::Ses
 }
 
 void SessionController::Stop() {
-    // Re-warm in parallel with finalise; a long session may have evicted
+    // Re-warm in parallel with finalise, since a long session may have evicted
     if (note_writer_ != nullptr && Running()) {
         note_writer_->Prepare();
     }
@@ -333,7 +333,7 @@ void SessionController::PipelineSink::OnEnd(const audio::SourceEnd& end) {
                        end.reason == audio::SourceEndReason::kFailed);
     }
     controller.cv_.notify_all();
-    // Only an interruption decides its own outcome; a stopped source leaves
+    // Only an interruption decides its own outcome. A stopped source leaves
     // keep-or-discard to Stop or Cancel
     if (interrupted) {
         controller.FinishSession(Outcome::kAbandon);
@@ -341,7 +341,7 @@ void SessionController::PipelineSink::OnEnd(const audio::SourceEnd& end) {
     }
 }
 
-// The source's thread only fills the ring; the pipeline runs behind it. An
+// The source's thread only fills the ring and the pipeline runs behind it. An
 // escape from a thread function is std::terminate, so nothing escapes
 void SessionController::GuardedRun() {
     PipelineSink sink(*this);
@@ -356,10 +356,10 @@ void SessionController::GuardedRun() {
     }
 }
 
-// Diarisation's causal work, spread over the recording; the heavy Advance
+// Diarisation's causal work, spread over the recording. The heavy Advance
 // runs outside the lock, off the pipeline thread
 void SessionController::DiarLoop() {
-    // Accelerated replay delivers audio faster than real time; a wall floor
+    // Accelerated replay delivers audio faster than real time. A wall floor
     // keeps the tick rate sane at any speed
     constexpr auto kMinTickGap = std::chrono::seconds(1);
     std::vector<float> audio;
@@ -375,7 +375,7 @@ void SessionController::DiarLoop() {
         ++diar_ticks_;
         lock.unlock();
         // Deferred until whisper is decoding so the GPU never compiles two
-        // models at once; still minutes ahead of any real stop
+        // models at once, still minutes ahead of any real stop
         if (!note_prepared_ && note_writer_ != nullptr) {
             note_prepared_ = true;
             note_writer_->Prepare();
@@ -391,7 +391,7 @@ void SessionController::DiarLoop() {
                 return transcriber_.DecodeClipChunks(clip, first);
             };
             diariser_.Advance(audio, decode);
-            // This tick's chunk edges re-slice the audio; the pieces decode in
+            // This tick's chunk edges re-slice the audio. The pieces decode in
             // the same tick, so a stop never waits for them
             const auto cuts = transcriber_.TakeClipCuts();
             if (!cuts.empty()) {
@@ -399,7 +399,7 @@ void SessionController::DiarLoop() {
                 diariser_.Advance(audio, decode);
             }
             // The note host extends its KV over the settled opening between
-            // whisper decodes; the finalise tidies its turns, so the prefix
+            // whisper decodes. The finalise tidies its turns, so the prefix
             // must read the same
             if (note_writer_ != nullptr) {
                 auto guess = diar::TidyTranscript(diariser_.SpeculativeTranscript());
@@ -443,7 +443,7 @@ void SessionController::EndCapture() {
     running_ = false;
 }
 
-// Stop, cancel and abandon all end here; the store outcome always holds even
+// Stop, cancel and abandon all end here. The store outcome always holds even
 // if the bookkeeping around it fails
 void SessionController::FinishSession(Outcome outcome) {
     {
@@ -452,7 +452,7 @@ void SessionController::FinishSession(Outcome outcome) {
             return;
         }
     }
-    // No capture work may run once finalise starts; stage timings let a slow
+    // No capture work may run once finalise starts. Stage timings let a slow
     // finalise name its stage
     const auto finalise_start = std::chrono::steady_clock::now();
     const auto stage = [this, &finalise_start](const char* name) {
@@ -472,7 +472,7 @@ void SessionController::FinishSession(Outcome outcome) {
         metrics_->RecordSession(static_cast<double>(session_audio_.size()) / audio::kSampleRate,
                                 lost_frames_, diar_ticks_);
     }
-    // Capture decodes a few spans per tick and can lag; the rest decodes now,
+    // Capture decodes a few spans per tick and can lag. The rest decodes now,
     // so the cuts reach the diariser at every replay speed
     if (outcome == Outcome::kFinalise) {
         try {
@@ -500,7 +500,7 @@ void SessionController::FinishSession(Outcome outcome) {
     if (id.empty()) {
         return;
     }
-    // The note lane's input is the attributed transcript; a diarisation
+    // The note lane's input is the attributed transcript. A diarisation
     // failure leaves it empty, so the note is refused as too thin and the
     // session is never lost
     std::vector<asr::Turn> note_input;
@@ -514,8 +514,8 @@ void SessionController::FinishSession(Outcome outcome) {
                 note_input = std::move(transcript.turns);
             }
             stage("transcript sealed");
-            // The print learns only from named sessions, never a guess, and
-            // only once the note lane agrees this was a consultation
+            // The print learns only from named sessions, and only once the
+            // note lane agrees this was a consultation
             if (transcript.doctor_cluster >= 0 && learn_anchor_) {
                 doctor_voiceprint = diariser_.DoctorVoiceprint(
                     session_audio_, transcript.diarised.slices, transcript.doctor_cluster);

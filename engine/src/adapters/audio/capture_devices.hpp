@@ -18,8 +18,8 @@ struct CaptureDevice {
 // Enumerated fresh per call: a headset plugged in after launch must appear
 std::vector<CaptureDevice> ListCaptureDevices();
 
-// A gone choice resolves to the default (caller logs it); an empty list to
-// nothing, so capture fails loudly
+// A gone choice resolves to the default (caller logs it). An empty list
+// resolves to nothing, so capture fails loudly
 CaptureDevice ResolveMicrophone(const std::vector<CaptureDevice>& devices,
                                 const std::string& requested);
 

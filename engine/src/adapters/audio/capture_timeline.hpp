@@ -11,7 +11,7 @@ class CaptureTimeline {
     explicit CaptureTimeline(std::uint32_t native_rate, std::uint32_t target_rate = 16000)
         : native_rate_(native_rate), target_rate_(target_rate) {}
 
-    // Frames lost before this packet; the first packet anchors the origin and
+    // Frames lost before this packet. The first packet anchors the origin and
     // never reports loss
     std::uint64_t OnPacket(std::uint64_t device_position, std::uint32_t frames,
                            bool discontinuity) {
@@ -31,8 +31,8 @@ class CaptureTimeline {
                 native_delta * static_cast<std::int64_t>(target_rate_) -
                 static_cast<std::int64_t>(delivered_) * static_cast<std::int64_t>(native_rate_);
 
-            // Round to the nearest target frame; sub-frame wobble from a
-            // non-integral rate ratio must never read as loss
+            // Round to the nearest target frame so sub-frame wobble from a
+            // non-integral rate ratio never reads as loss
             const std::int64_t half = static_cast<std::int64_t>(native_rate_) / 2;
             const std::int64_t cumulative =
                 (scaled + (scaled >= 0 ? half : -half)) / static_cast<std::int64_t>(native_rate_);

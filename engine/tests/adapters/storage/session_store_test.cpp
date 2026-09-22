@@ -843,7 +843,7 @@ TEST(SessionStore, LossAccountingReachesTheChunkAndTheCatalog) {
 
         id = store.Begin({16000, "", ""});
         store.Append(id, Ramp(8000), 320);
-        store.Finalise(id);  // the audio goes; the count does not
+        store.Finalise(id);  // the audio goes but the count stays
     }
 
     Db catalog(root.DbPath());
@@ -1106,8 +1106,8 @@ TEST(SessionStore, ErasedKeysLeaveNoRemnantInTheFileOrWal) {
     EXPECT_FALSE(FileHolds(wal, needle));
 }
 
-// Listing unwraps one key per labelled session, so a long list holds the database lock;
-// the capture thread's append must not queue behind it
+// Listing unwraps one key per labelled session, so a long list holds the database lock.
+// The capture thread's append must not queue behind it
 TEST(SessionStore, AppendNeverWaitsOnTheDatabase) {
     TempRoot root;
     SqliteSessionStore store(root.path, kNever);

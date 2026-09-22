@@ -18,7 +18,7 @@ struct CorpusSpec {
     std::string attribution;
     std::string label;      // the chip's name for the publisher, optional
     std::string source;     // the importer, "nice" or "text"
-    bool research = false;  // a demo or evaluation corpus, never shipped
+    bool research = false;  // a demo or evaluation corpus, kept out of the package
     EmbedderIdentity embedder;
     std::string built_at;  // ISO 8601 UTC
     std::string builder;

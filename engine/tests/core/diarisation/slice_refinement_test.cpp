@@ -21,7 +21,7 @@ TEST(RefineRegions, ACutWithinTheEdgeMarginIsTheEdge) {
     const std::vector<Region> regions{{10000, 50000}};
     EXPECT_EQ(RefineRegions(regions, {10500})[0].first_frame, 10000u);
     EXPECT_EQ(RefineRegions(regions, {49500})[0].end_frame, 50000u);
-    // Just past the margin the cut registers; its sub-minimum left fragment drops
+    // Past the margin the cut registers and its sub-minimum left fragment drops
     EXPECT_EQ(RefineRegions(regions, {10801})[0].first_frame, 10801u);
 }
 

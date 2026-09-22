@@ -28,8 +28,8 @@ struct EnrolCapture {
     SourceEnd end;
 };
 
-// An enrolment with less clear speech than this is refused: the print would
-// be a poor one and the clinician is better told to try again
+// An enrolment with less clear speech than this is refused. The print would
+// be poor, so the clinician is asked to try again
 inline constexpr double kEnrolMinSpeechSeconds = 20.0;
 
 // The sink for an enrolment: meters the level, keeps the hops the VAD hears
@@ -50,7 +50,7 @@ class EnrolmentSink : public IAudioSink {
         std::size_t consumed = 0;
         while (pending_.size() - consumed >= kVadHopFrames) {
             const std::span<const float> hop(pending_.data() + consumed, kVadHopFrames);
-            // Until the VAD has loaded every hop counts; the level still shows
+            // Until the VAD has loaded, every hop counts. The level still shows
             if (!vad_.Ready() || vad_.SpeechProbability(hop) >= diar::kEnter) {
                 capture_.speech.insert(capture_.speech.end(), hop.begin(), hop.end());
             }

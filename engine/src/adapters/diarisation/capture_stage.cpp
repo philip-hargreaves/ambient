@@ -50,7 +50,7 @@ const std::vector<float>& CaptureStage::EmbedSlice(std::span<const float> audio,
 void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& decode, int budget) {
     auto& s = state_;
 
-    // Whole hops only; finalise pads the final partial one
+    // Whole hops only. Finalise pads the final partial one
     AppendVadHops(vad_, audio, s.vad_probabilities, false);
 
     while (s.seg_done + kSegWindowFrames <= audio.size()) {
@@ -66,7 +66,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     const auto settled =
         SegSettledFrontier(s.seg_done, s.vad_probabilities.size() * audio::kVadHopFrames);
     if (settled == 0) return;
-    // Without a budget this is finalise's catch-up; its phases are logged
+    // Without a budget the pass is finalise's catch-up, which logs its phases
     const bool catch_up = budget == std::numeric_limits<int>::max();
     using Clock = std::chrono::steady_clock;
     const auto t_start = Clock::now();
@@ -99,8 +99,8 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     }
     if (kept.size() < 2) return;
 
-    // Provisional labels, built exactly as finalise builds them; a span
-    // that final clustering changes is simply never looked up
+    // Provisional labels, built exactly as finalise builds them. A span
+    // that final clustering changes is never looked up
     const auto t_cluster = Clock::now();
     const auto clusters = ClusterSpeakers(embeddings, durations);
     std::vector<LabelledSlice> labelled;
@@ -126,7 +126,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     }
 
     // Decode settled turns into the cache. The last turn may still grow unless
-    // closed; the catch-up decodes everything
+    // closed. The catch-up decodes everything
     auto merged = MergeByCluster(labelled);
     if (merged.size() < 2) return;
     // A last turn closes on silence after it, or once the frontier is
@@ -212,8 +212,8 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     speculation_.turns = SpeculatedTurns(merged, audio.size(), s.turn_texts, &speculation_.texts);
     speculation_.centroids = clusters.centroids;
     speculation_.cluster_count = clusters.count;
-    // The prefill reads this transcript; it must re-split as the finalise does or
-    // the prompt diverges at the first move
+    // The prefill reads this transcript, so it must re-split as the finalise does
+    // or the prompt diverges at the first move
     if (clusters.count >= 2 && !speculation_.turns.empty()) {
         const auto spec_spans = DecodeSpans(speculation_.turns, audio.size());
         std::vector<std::vector<asr::Turn>> chunks(speculation_.turns.size());

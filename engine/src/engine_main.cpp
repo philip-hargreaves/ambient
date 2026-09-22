@@ -64,7 +64,7 @@ std::filesystem::path StoreRoot(const std::vector<std::string>& args) {
     return root;
 }
 
-// Added documents live in her Documents folder unless a run says otherwise
+// Added documents live in the user's Documents folder unless a run says otherwise
 std::filesystem::path GuidelinesFolder(const std::string& override) {
     if (!override.empty()) return override;
     PWSTR documents = nullptr;
@@ -82,7 +82,7 @@ bool Uncompiled(const ambient::models::ModelStore& store, const std::string& rol
     return !std::filesystem::exists(store.Resolve(role, "default").dir / ".cache");
 }
 
-// A replay request plays a wav through the same port; a launch-time wav path
+// A replay request plays a wav through the same port. A launch-time wav path
 // (CI, scripts) forces every session to replay that file
 ambient::session::SourceFactory MakeSourceFactory(std::string forced) {
     return [forced = std::move(forced)](
@@ -111,7 +111,7 @@ std::unique_ptr<ambient::asr::ITranscriber> BuildTranscriber(
     }
 }
 
-// Compiles behind the serve loop; session/start waits on it, hello does not
+// Compiles behind the serve loop. session/start waits on it, hello does not
 std::unique_ptr<ambient::audio::IStreamingVad> BuildVad(const ambient::models::ModelStore& store,
                                                         ambient::models::OvRuntime& runtime,
                                                         ambient::metrics::Registry& metrics) {
@@ -128,7 +128,7 @@ std::unique_ptr<ambient::audio::IStreamingVad> BuildVad(const ambient::models::M
     }
 }
 
-// Diarisation needs both its models; scripted otherwise (CI)
+// Diarisation needs both its models, scripted otherwise (CI)
 std::unique_ptr<ambient::diar::IDiariser> BuildDiariser(const ambient::models::ModelStore& store,
                                                         ambient::models::OvRuntime& runtime,
                                                         ambient::diar::AnchorStore& anchors,
@@ -148,7 +148,7 @@ std::unique_ptr<ambient::diar::IDiariser> BuildDiariser(const ambient::models::M
 }
 
 // Generation runs in its own supervised process: a GPU driver fault there
-// costs a respawn, never the engine. Null when nothing can write
+// costs a respawn and leaves the engine standing. Null when nothing can write
 std::unique_ptr<ambient::note::WorkerNoteWriter> BuildNoteWriter(
     ambient::models::ModelStore& store, const std::filesystem::path& models_root,
     ambient::ipc::PipeServer& server, bool& first_use) {
@@ -163,12 +163,12 @@ std::unique_ptr<ambient::note::WorkerNoteWriter> BuildNoteWriter(
         }
         auto worker = std::make_unique<ambient::note::WorkerNoteWriter>(
             host, models_root, models_root.parent_path() / "prompts", &store);
-        // The shell configures the tier on connect; a non-default tier's
+        // The shell configures the tier on connect. A non-default tier's
         // first compile runs then
         worker->SetListener([&server](const ambient::note::NoteModelState& state) {
             server.PushNotification("note/model", ambient::ipc::NoteModelJson(state));
         });
-        // First use only: the one-off compile runs on an idle GPU, never inside a recording
+        // First use only: the one-off compile runs on an idle GPU, ahead of any recording
         if (Uncompiled(store, "note")) {
             first_use = true;
             std::fprintf(stderr, "ambient-engine: first use, compiling the note model\n");
@@ -220,11 +220,11 @@ int main(int argc, char* argv[]) {
         const std::string asr_device = ambient::TakeFlag(args, "--asr-device");
         const std::string corpora_override = ambient::TakeFlag(args, "--corpora");
         const std::string guidelines_override = ambient::TakeFlag(args, "--guidelines");
-        // Dev builds only: a demo corpus marked research is searched when this is set
+        // Dev builds only: a demo corpus marked research is searched when set
         const bool include_research = ambient::TakeSwitch(args, "--include-research");
         // Evaluation only: a held-out run must not teach the voiceprint
         const bool freeze_anchor = ambient::TakeSwitch(args, "--freeze-anchor");
-        // Whisper and the note host take turns on the GPU; with whisper on the
+        // Whisper and the note host take turns on the GPU. With whisper on the
         // NPU there is nothing to share
         if (asr_device != "NPU") {
             const std::string lease = "Local\\ambient-gpu-" + std::to_string(GetCurrentProcessId());
@@ -261,7 +261,7 @@ int main(int argc, char* argv[]) {
             BuildTranscriber(model_store, ov_runtime, asr_device, metrics, first_use);
         auto vad = BuildVad(model_store, ov_runtime, metrics);
         auto diariser = BuildDiariser(model_store, ov_runtime, anchors, metrics);
-        // A host from the engine that just died takes a moment to leave. One
+        // A host from an engine that has died takes a moment to leave. One
         // still here after that is wedged in the driver, and only a reboot ends it
         const bool stray_note_host =
             !ambient::system::WaitUntilGone(L"ambient_note_host.exe", std::chrono::seconds(5));
@@ -296,8 +296,8 @@ int main(int argc, char* argv[]) {
         events.SetGuidance(&guidance_lane);
         guidance_lane.Prepare();
 
-        // 10 s, not 3: a Bluetooth microphone link waking measured 1.6-8.8 s
-        // before first audio; wired mics answer in well under a second either way
+        // 10 s rather than 3: a Bluetooth microphone link waking measured 1.6-8.8 s
+        // before first audio. Wired mics answer in well under a second either way
         ambient::session::SessionController controller(
             MakeSourceFactory(args.size() > 3 ? args[3] : std::string()), events, session_store,
             *transcriber, *vad, *diariser, std::chrono::seconds(10),
@@ -336,9 +336,19 @@ int main(int argc, char* argv[]) {
                          }));
                  }});
         ambient::ipc::RegisterMethods(
-            server, controller, model_store, session_store, &metrics, &ov_runtime, translator.get(),
-            translate_lane.get(), first_use, &anchors, note_writer.get(), stray_note_host,
-            models_root.parent_path() / "demo" / "reflections", &playback);
+            server, {.controller = controller,
+                     .models = model_store,
+                     .sessions = session_store,
+                     .metrics = &metrics,
+                     .runtime = &ov_runtime,
+                     .translator = translator.get(),
+                     .translate_lane = translate_lane.get(),
+                     .first_use = first_use,
+                     .anchors = &anchors,
+                     .note_lane = note_writer.get(),
+                     .stray_note_host = stray_note_host,
+                     .demo_dir = models_root.parent_path() / "demo" / "reflections",
+                     .playback = &playback});
         ambient::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
                                               guidance_lane, ingest);
         server.ServeOneClient();

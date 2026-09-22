@@ -122,7 +122,7 @@ struct Fixture {
         EXPECT_FALSE(playback.Active());
     }
 
-    // Sleeps are coarse on Windows, so the clock is awaited, not timed
+    // Sleeps are coarse on Windows, so the clock is awaited rather than timed
     void AwaitClockEnd(double audio_seconds) {
         for (int i = 0; i < 500; ++i) {
             {

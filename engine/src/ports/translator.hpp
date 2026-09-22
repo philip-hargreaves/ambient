@@ -6,7 +6,7 @@
 
 namespace ambient::translate {
 
-// Streams partials, returns the translation, throws on failure; Cancel
+// Streams partials, returns the translation, throws on failure. Cancel
 // interrupts from another thread
 class ITranslator {
    public:
@@ -17,7 +17,7 @@ class ITranslator {
     virtual std::vector<std::string> Languages() = 0;
 
     // Starts any slow loading in the background so the first Translate is
-    // warm; safe to call repeatedly
+    // warm. Safe to call repeatedly
     virtual void Prepare() {}
 
     virtual std::string Translate(const std::string& text, const std::string& language,

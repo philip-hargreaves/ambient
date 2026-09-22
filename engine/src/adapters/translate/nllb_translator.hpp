@@ -13,8 +13,8 @@ class OvRuntime;
 
 namespace ambient::translate {
 
-// NLLB-200 on the manifest CPU: encoder once, greedy stateful decode;
-// loads on Prepare, else on first use
+// NLLB-200 on the manifest CPU: encoder once, greedy stateful decode.
+// Loads on Prepare, else on first use
 class NllbTranslator : public ITranslator {
    public:
     NllbTranslator(const models::ModelStore& store, models::OvRuntime& runtime);

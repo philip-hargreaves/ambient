@@ -17,7 +17,7 @@
 namespace ambient::session {
 
 struct Transcript {
-    std::vector<asr::Turn> turns;  // attributed and tidied; empty when nothing was heard
+    std::vector<asr::Turn> turns;  // attributed and tidied, empty when nothing was heard
     diar::DiariseResult diarised;
     int doctor_cluster = -1;  // -1: no speaker was named the doctor
 };

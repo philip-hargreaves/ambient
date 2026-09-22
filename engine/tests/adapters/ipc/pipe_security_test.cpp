@@ -176,7 +176,7 @@ TEST(PipeSecurity, TrusteesAreThisLogonSessionAndSystem) {
         if (EqualSid(ace.sid, logon_sid)) has_logon = true;
         if (EqualSid(ace.sid, system.sid)) has_system = true;
     }
-    // The logon SID scopes the pipe to this login, not merely to this user
+    // The logon SID scopes the pipe to this login rather than the whole user
     EXPECT_TRUE(has_logon);
     EXPECT_TRUE(has_system);
 }
