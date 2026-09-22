@@ -1,12 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "core/transcription/turn_assembly.hpp"
+#include "ports/audio_source.hpp"
 #include "ports/transcriber.hpp"
 
 namespace ambient::diar {
@@ -19,9 +20,33 @@ namespace ambient::diar {
 //      words) is dropped; yes, no, ok and any content word never are
 //   3. every turn starts with a capital and ends with terminal punctuation;
 //      a standalone "i" is "I"
-inline constexpr std::uint64_t kTidyMergeGapFrames = 16000;  // 1 s
+inline constexpr std::uint64_t kTidyMergeGapFrames = audio::kSampleRate;  // 1 s
 
 namespace detail {
+
+inline std::string NormalisedWord(const std::string& word) {
+    std::string out;
+    for (const char c : word) {
+        const auto u = static_cast<unsigned char>(c);
+        if (std::isalnum(u) != 0 || c == '\'') out.push_back(static_cast<char>(std::tolower(u)));
+    }
+    return out;
+}
+
+inline std::vector<std::string> SplitWords(const std::string& text) {
+    std::vector<std::string> words;
+    std::string word;
+    for (const char c : text) {
+        if (std::isspace(static_cast<unsigned char>(c)) != 0) {
+            if (!word.empty()) words.push_back(std::move(word));
+            word.clear();
+        } else {
+            word.push_back(c);
+        }
+    }
+    if (!word.empty()) words.push_back(std::move(word));
+    return words;
+}
 
 inline bool IsDisfluency(const std::string& w) {
     static const char* const kWords[] = {"um", "uh",  "er",  "erm", "hm", "hmm",
@@ -45,8 +70,8 @@ inline bool IsFunctionWord(const std::string& w) {
 inline bool NoContent(const std::string& text) {
     std::size_t function_words = 0;
     std::size_t words = 0;
-    for (const auto& raw : asr::detail::SplitWords(text)) {
-        const auto w = asr::detail::NormalisedWord(raw);
+    for (const auto& raw : SplitWords(text)) {
+        const auto w = NormalisedWord(raw);
         if (w.empty()) continue;
         ++words;
         if (IsDisfluency(w)) continue;

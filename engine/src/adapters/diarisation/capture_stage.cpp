@@ -1,4 +1,4 @@
-#include "adapters/diarisation/diar_worker.hpp"
+#include "adapters/diarisation/capture_stage.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -9,20 +9,20 @@
 
 #include "adapters/diarisation/speaker_clustering.hpp"
 #include "core/diarisation/clip_cuts.hpp"
-#include "core/diarisation/diar_capture.hpp"
 #include "core/diarisation/diar_regions.hpp"
-#include "core/diarisation/per_turn.hpp"
+#include "core/diarisation/frontier.hpp"
 #include "core/diarisation/resplit.hpp"
 #include "core/diarisation/slice_refinement.hpp"
+#include "core/diarisation/turn_decode.hpp"
 
 namespace ambient::diar {
 
-DiarWorker::DiarWorker(audio::SileroVad& vad, Segmenter& segmenter, SpeakerEmbedder& embedder)
+CaptureStage::CaptureStage(audio::SileroVad& vad, Segmenter& segmenter, SpeakerEmbedder& embedder)
     : vad_(vad), segmenter_(segmenter), embedder_(embedder) {
     vad_.Reset();
 }
 
-void DiarWorker::Finish(std::span<const float> audio) {
+void CaptureStage::Finish(std::span<const float> audio) {
     auto& s = state_;
     std::vector<float> hop(audio::kVadHopFrames, 0.0f);
     while (s.vad_probabilities.size() * audio::kVadHopFrames < audio.size()) {
@@ -43,8 +43,8 @@ void DiarWorker::Finish(std::span<const float> audio) {
     }
 }
 
-const std::vector<float>& DiarWorker::EmbedSlice(std::span<const float> audio,
-                                                 const Region& slice) {
+const std::vector<float>& CaptureStage::EmbedSlice(std::span<const float> audio,
+                                                   const Region& slice) {
     auto& slot = state_.embeddings[{slice.first_frame, slice.end_frame}];
     if (slot.empty()) {
         const auto ranges = EmbeddingRanges(slice, state_.seg.overlap_spans);
@@ -60,8 +60,7 @@ const std::vector<float>& DiarWorker::EmbedSlice(std::span<const float> audio,
     return slot;
 }
 
-void DiarWorker::Advance(std::span<const float> audio, std::span<const asr::Turn> /*turns*/,
-                         const DecodeClipFn& decode, int budget) {
+void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& decode, int budget) {
     auto& s = state_;
 
     // Whole hops only; finalise pads the final partial one

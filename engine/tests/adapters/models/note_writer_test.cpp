@@ -5,7 +5,7 @@
 
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
-#include "adapters/note/qwen_note_writer.hpp"
+#include "adapters/note/llm_note_writer.hpp"
 
 namespace ambient::note {
 namespace {
@@ -24,13 +24,13 @@ std::vector<asr::Turn> ElbowTranscript() {
              "twice a day after food, and we will arrange blood tests."}};
 }
 
-TEST(QwenNoteWriter, WritesAStreamedNoteFromTheTranscript) {
+TEST(LlmNoteWriter, WritesAStreamedNoteFromTheTranscript) {
     if (!std::filesystem::exists(kModels / "qwen3.5-9b-int4")) {
         GTEST_SKIP() << "note model not staged";
     }
     models::ModelStore store(kModels);
     models::OvRuntime runtime;
-    QwenNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
+    LlmNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
 
     std::vector<std::string> partials;
     const std::string text =
@@ -43,13 +43,13 @@ TEST(QwenNoteWriter, WritesAStreamedNoteFromTheTranscript) {
     EXPECT_EQ(text.find("doctor"), std::string::npos) << "the register bans the word";
 }
 
-TEST(QwenNoteWriter, WritesASoapNoteWithinTheConciseLimit) {
+TEST(LlmNoteWriter, WritesASoapNoteWithinTheConciseLimit) {
     if (!std::filesystem::exists(kModels / "qwen3.5-9b-int4")) {
         GTEST_SKIP() << "note model not staged";
     }
     models::ModelStore store(kModels);
     models::OvRuntime runtime;
-    QwenNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
+    LlmNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
 
     const std::string text = writer.Write(ElbowTranscript(), {"soap", "concise"}, nullptr);
 
@@ -70,13 +70,13 @@ TEST(QwenNoteWriter, WritesASoapNoteWithinTheConciseLimit) {
     EXPECT_LE(words, 140u);
 }
 
-TEST(QwenNoteWriter, CancelInterruptsAGeneration) {
+TEST(LlmNoteWriter, CancelInterruptsAGeneration) {
     if (!std::filesystem::exists(kModels / "qwen3.5-9b-int4")) {
         GTEST_SKIP() << "note model not staged";
     }
     models::ModelStore store(kModels);
     models::OvRuntime runtime;
-    QwenNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
+    LlmNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
 
     int seen = 0;
     const std::string text =
@@ -88,13 +88,13 @@ TEST(QwenNoteWriter, CancelInterruptsAGeneration) {
     EXPECT_LT(seen, 40) << "cancel must stop generation promptly";
 }
 
-TEST(QwenNoteWriter, WritesThePatientSheetFromANote) {
+TEST(LlmNoteWriter, WritesThePatientSheetFromANote) {
     if (!std::filesystem::exists(kModels / "qwen3.5-9b-int4")) {
         GTEST_SKIP() << "note model not staged";
     }
     models::ModelStore store(kModels);
     models::OvRuntime runtime;
-    QwenNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
+    LlmNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
 
     int partials = 0;
     const std::string sheet = writer.WritePatient(
@@ -113,7 +113,7 @@ TEST(QwenNoteWriter, WritesThePatientSheetFromANote) {
 
 // The production path: the patient sheet is a second generation on the
 // same resident pipeline, straight after the note
-TEST(QwenNoteWriter, ThePatientSheetFollowsTheNoteOnTheSamePipeline) {
+TEST(LlmNoteWriter, ThePatientSheetFollowsTheNoteOnTheSamePipeline) {
     if (!std::filesystem::exists(kModels / "qwen3.5-9b-int4")) {
         GTEST_SKIP() << "note model not staged";
     }
@@ -127,7 +127,7 @@ TEST(QwenNoteWriter, ThePatientSheetFollowsTheNoteOnTheSamePipeline) {
     }
     models::ModelStore store(kModels);
     models::OvRuntime runtime;
-    QwenNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
+    LlmNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
 
     const std::string note = writer.Write(ElbowTranscript(), {}, nullptr);
     ASSERT_FALSE(note.empty());
@@ -136,10 +136,10 @@ TEST(QwenNoteWriter, ThePatientSheetFollowsTheNoteOnTheSamePipeline) {
     EXPECT_NE(sheet.find("Your appointment today"), std::string::npos);
 }
 
-TEST(QwenNoteWriter, AnEmptyTranscriptRefusesToWrite) {
+TEST(LlmNoteWriter, AnEmptyTranscriptRefusesToWrite) {
     models::ModelStore store(kModels);
     models::OvRuntime runtime;
-    QwenNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
+    LlmNoteWriter writer(store, runtime, kModels.parent_path() / "prompts");
     EXPECT_THROW(writer.Write({}, {}, nullptr), std::runtime_error);
 }
 

@@ -11,18 +11,11 @@
 #include <string>
 #include <vector>
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/guidance/embedder.hpp"
-#include "adapters/guidance/indexer.hpp"
 #include "adapters/models/model_store.hpp"
+#include "adapters/system/exe_paths.hpp"
+#include "tools/corpus/indexer.hpp"
 
 namespace {
 
@@ -37,22 +30,11 @@ std::string NowUtc() {
     return out;
 }
 
-// Beside the executable, as the engine finds its models. One level up for
-// packaged debug layouts
-std::filesystem::path DefaultModelsRoot() {
-    wchar_t exe_path[MAX_PATH];
-    GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
-    const auto exe_dir = std::filesystem::path(exe_path).parent_path();
-    auto root = exe_dir / "models";
-    if (!std::filesystem::exists(root)) root = exe_dir.parent_path() / "models";
-    return root;
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    std::filesystem::path models_root = DefaultModelsRoot();
+    std::filesystem::path models_root = ambient::system::DefaultModelsRoot();
     bool verify = false;
     std::vector<std::string> positional;
     for (std::size_t i = 0; i < args.size(); ++i) {

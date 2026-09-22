@@ -18,7 +18,7 @@
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
-#include "adapters/note/qwen_note_writer.hpp"
+#include "adapters/note/llm_note_writer.hpp"
 #include "adapters/system/power_throttling.hpp"
 #include "ports/transcriber.hpp"
 
@@ -116,14 +116,14 @@ int main(int argc, char* argv[]) {
         ambient::ipc::PipeServer server(pipe_name);
         ambient::models::ModelStore store(models_root);
         ambient::models::OvRuntime runtime;
-        ambient::note::QwenNoteWriter writer(store, runtime, prompt_path, nullptr, tier);
+        ambient::note::LlmNoteWriter writer(store, runtime, prompt_path, nullptr, tier);
         GenerationLane lane(server);
 
         using ambient::ipc::Error;
         using ambient::ipc::json;
         using ambient::ipc::kSessionError;
         // The engine supervises the load through these two, never by polling
-        writer.SetLoadListener([&server](const ambient::note::QwenNoteWriter::LoadReport& r) {
+        writer.SetLoadListener([&server](const ambient::note::LlmNoteWriter::LoadReport& r) {
             if (r.ok) {
                 server.PushNotification("loaded", {{"id", r.id},
                                                    {"name", r.name},

@@ -1,4 +1,4 @@
-#include "core/diarisation/diar_capture.hpp"
+#include "core/diarisation/frontier.hpp"
 
 #include <gtest/gtest.h>
 

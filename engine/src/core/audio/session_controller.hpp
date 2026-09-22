@@ -16,15 +16,13 @@
 #include <utility>
 
 #include "core/audio/buffered_sink.hpp"
-#include "core/audio/endpointer.hpp"
 #include "core/audio/level_meter.hpp"
 #include "core/audio/resume_source.hpp"
 #include "core/audio/voice_enrolment.hpp"
-#include "core/diarisation/per_turn.hpp"
 #include "core/diarisation/resplit.hpp"
 #include "core/diarisation/role_naming.hpp"
 #include "core/diarisation/tidy_transcript.hpp"
-#include "core/diarisation/turn_reconcile.hpp"
+#include "core/diarisation/turn_decode.hpp"
 #include "core/metrics/metrics.hpp"
 #include "core/note/note_gate.hpp"
 #include "core/note/note_label.hpp"
@@ -46,8 +44,6 @@ class ISessionEvents {
 
     // Demo playback: the reading plus the position its clock has reached
     virtual void OnPlaybackLevel(const LevelReading&, double /*seconds*/) {}
-
-    virtual void OnTurn(const asr::Turn& turn) = 0;
 
     virtual void OnInterrupted(SourceEndReason reason, const std::string& detail) = 0;
 
@@ -112,9 +108,8 @@ class SessionController {
     static constexpr std::size_t kCaptureBufferFrames = 30 * kSampleRate;
 
     SessionController(SourceFactory factory, ISessionEvents& events, store::ISessionStore& store,
-                      asr::ITranscriber& transcriber, IStreamingVad& vad,
+                      asr::ITranscriber& transcriber, IStreamingVad& vad, diar::IDiariser& diariser,
                       std::chrono::milliseconds settle_timeout = std::chrono::seconds(3),
-                      diar::IDiariser* diariser = nullptr,
                       std::uint64_t diar_advance_frames = 5 * kSampleRate,
                       note::INoteWriter* note_writer = nullptr,
                       metrics::Registry* metrics = nullptr,
@@ -184,12 +179,7 @@ class SessionController {
             session_id_ = id;
             resumed_from_ = resume_from;
             note_prepared_ = false;
-            vad_.Reset();
-            endpointer_.emplace(vad_);
-            vad_backlog_.clear();
             session_audio_.clear();
-            session_turns_.clear();
-            transcriber_.Begin(turn_sink_);
         } catch (const std::exception& e) {
             std::fprintf(stderr, "ambient-engine: session start failed: %s\n", e.what());
             std::lock_guard<std::mutex> lock(mutex_);
@@ -210,9 +200,7 @@ class SessionController {
             }
         }
         worker_ = std::thread([this] { GuardedRun(); });
-        if (diariser_ != nullptr) {
-            diar_thread_ = std::thread([this] { DiarLoop(); });
-        }
+        diar_thread_ = std::thread([this] { DiarLoop(); });
         if (metrics_ != nullptr) {
             metrics_->BeginSession(replay.has_value(), replay.has_value() ? replay->speed : 0.0);
         }
@@ -268,12 +256,6 @@ class SessionController {
     // Evaluation only: the print never learns, so a held-out run is reproducible
     void FreezeAnchor() {
         learn_anchor_ = false;
-    }
-
-    // One decode per turn needs a diariser to find the turns; without one the
-    // live windows are the transcript
-    bool SingleDecode() const {
-        return diariser_ != nullptr;
     }
 
     // Voice enrolment: the microphone until Finish (or `seconds` as a cap), the
@@ -524,36 +506,7 @@ class SessionController {
    private:
     enum class Outcome { kFinalise, kCancel, kAbandon };
 
-    // Turns may arrive on the transcriber's own thread; a turn after the
-    // session closed is dropped, and one the store refuses is not announced
-    struct TurnSink : asr::ITurnSink {
-        SessionController& controller;
-
-        explicit TurnSink(SessionController& owner) : controller(owner) {}
-
-        void OnTurn(const asr::Turn& turn) override {
-            store::SessionId id;
-            {
-                std::lock_guard<std::mutex> lock(controller.mutex_);
-                id = controller.session_id_;
-            }
-            if (id.empty()) {
-                return;
-            }
-            try {
-                controller.store_.AppendTurn(id, turn);
-                {
-                    std::lock_guard<std::mutex> lock(controller.mutex_);
-                    controller.session_turns_.push_back(turn);
-                }
-                controller.events_.OnTurn(turn);
-            } catch (const std::exception& e) {
-                controller.StoreFailed("turn", e);
-            }
-        }
-    };
-
-    // The pipeline thread: store, VAD, endpointer, meter, off the capture thread
+    // The pipeline thread: the store, the diariser's audio, the meter
     struct PipelineSink : IAudioSink {
         SessionController& controller;
 
@@ -567,7 +520,7 @@ class SessionController {
                 controller.got_audio_ = true;
                 id = controller.session_id_;
                 // Under the lock: the diarisation thread snapshots this
-                if (controller.diariser_ != nullptr && !id.empty()) {
+                if (!id.empty()) {
                     controller.session_audio_.insert(controller.session_audio_.end(),
                                                      frames.begin(), frames.end());
                 }
@@ -575,20 +528,6 @@ class SessionController {
             controller.cv_.notify_all();
             if (!id.empty()) {
                 controller.store_.Append(id, frames, lost_frames);
-                // Hops buffer while the VAD loads; storage never waits
-                if (!controller.vad_.Ready()) {
-                    controller.vad_backlog_.insert(controller.vad_backlog_.end(), frames.begin(),
-                                                   frames.end());
-                } else {
-                    controller.DrainVadBacklog();
-                    // With a diariser the endpointer still runs but its windows are
-                    // never decoded: per-turn clips are the only ASR
-                    for (const auto& window : controller.endpointer_->Push(frames)) {
-                        if (controller.SingleDecode()) continue;
-                        controller.transcriber_.Submit(window.frames, window.first_frame,
-                                                       window.first_new_frame);
-                    }
-                }
             }
             for (const auto& reading : controller.meter_.Push(frames)) {
                 controller.events_.OnLevel(reading);
@@ -637,7 +576,6 @@ class SessionController {
         // floor keeps the tick rate sane at any speed
         constexpr auto kMinTickGap = std::chrono::seconds(1);
         std::vector<float> audio;
-        std::vector<asr::Turn> turns;
         std::unique_lock<std::mutex> lock(mutex_);
         for (;;) {
             cv_.wait(lock, [this, &audio] {
@@ -647,7 +585,6 @@ class SessionController {
                 return;
             }
             audio = session_audio_;
-            turns = session_turns_;
             ++diar_ticks_;
             lock.unlock();
             // Deferred until whisper is decoding so the GPU never compiles
@@ -656,8 +593,6 @@ class SessionController {
                 note_prepared_ = true;
                 note_writer_->Prepare();
             }
-            // The same reconcile finalise runs, so turn spans agree
-            diar::ReconcileTurns(turns);
             try {
                 const auto decode = [this](std::span<const float> clip,
                                            std::uint64_t first) -> std::vector<asr::Turn> {
@@ -668,19 +603,19 @@ class SessionController {
                     }
                     return transcriber_.DecodeClipChunks(clip, first);
                 };
-                diariser_->Advance(audio, turns, decode);
+                diariser_.Advance(audio, decode);
                 // This tick's chunk edges re-slice the audio; the pieces decode
                 // in the same tick, so a stop never waits for them
                 const auto cuts = transcriber_.TakeClipCuts();
                 if (!cuts.empty()) {
-                    diariser_->AddCutPoints(cuts);
-                    diariser_->Advance(audio, turns, decode);
+                    diariser_.AddCutPoints(cuts);
+                    diariser_.Advance(audio, decode);
                 }
                 // The note host extends its KV over the settled opening between
                 // whisper decodes; the seal tidies its turns, so the prefix must
                 // read the same
                 if (note_writer_ != nullptr) {
-                    auto guess = diar::TidyTranscript(diariser_->SpeculativeTranscript());
+                    auto guess = diar::TidyTranscript(diariser_.SpeculativeTranscript());
                     if (!guess.empty()) note_writer_->Prefill(guess, CurrentNoteOptions());
                 }
             } catch (...) {  // NOLINT(bugprone-empty-catch)
@@ -703,18 +638,6 @@ class SessionController {
         cv_.notify_all();
         if (diar.joinable()) {
             diar.join();
-        }
-    }
-
-    // Pipeline thread while running, finalise after capture joins; never both
-    void DrainVadBacklog() {
-        if (vad_backlog_.empty()) {
-            return;
-        }
-        std::vector<float> backlog = std::exchange(vad_backlog_, {});
-        for (const auto& window : endpointer_->Push(backlog)) {
-            if (SingleDecode()) continue;
-            transcriber_.Submit(window.frames, window.first_frame, window.first_new_frame);
         }
     }
 
@@ -748,18 +671,14 @@ class SessionController {
             }
             why = EnrolRejection(capture, cancelled, min_speech_s);
             if (why.empty()) {
-                if (diariser_ == nullptr) {
-                    why = "speaker models not available";
+                const auto voiceprint = diariser_.EmbedVoice(capture.speech);
+                if (voiceprint.empty()) {
+                    why = "could not build a voiceprint from the recording";
                 } else {
-                    const auto voiceprint = diariser_->EmbedVoice(capture.speech);
-                    if (voiceprint.empty()) {
-                        why = "could not build a voiceprint from the recording";
-                    } else {
-                        const auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                                             std::chrono::system_clock::now().time_since_epoch())
-                                             .count();
-                        diariser_->ReplaceAnchor(voiceprint, static_cast<std::uint64_t>(now));
-                    }
+                    const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                                         std::chrono::system_clock::now().time_since_epoch())
+                                         .count();
+                    diariser_.ReplaceAnchor(voiceprint, static_cast<std::uint64_t>(now));
                 }
             }
         } catch (const std::exception& e) {
@@ -812,45 +731,28 @@ class SessionController {
         JoinDiarThread();
         stage("capture joined");
         std::fprintf(stderr, "ambient-engine: session audio %.1f s, %d capture ticks\n",
-                     session_audio_.size() / 16000.0, diar_ticks_);
+                     static_cast<double>(session_audio_.size()) / kSampleRate, diar_ticks_);
         if (metrics_ != nullptr) {
-            metrics_->RecordSession(session_audio_.size() / 16000.0, lost_frames_, diar_ticks_);
+            metrics_->RecordSession(static_cast<double>(session_audio_.size()) / kSampleRate,
+                                    lost_frames_, diar_ticks_);
         }
         // Capture decodes a few spans per tick and can lag; the rest decodes
         // now, so the cuts reach the diariser at every replay speed
-        if (outcome == Outcome::kFinalise && diariser_ != nullptr) {
-            std::vector<asr::Turn> turns;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                turns = session_turns_;
-            }
-            diar::ReconcileTurns(turns);
+        if (outcome == Outcome::kFinalise) {
             try {
-                diariser_->Settle(session_audio_, turns,
-                                  [this](std::span<const float> clip, std::uint64_t first) {
-                                      return transcriber_.DecodeClipChunks(clip, first);
-                                  });
+                diariser_.Settle(session_audio_,
+                                 [this](std::span<const float> clip, std::uint64_t first) {
+                                     return transcriber_.DecodeClipChunks(clip, first);
+                                 });
                 const auto cuts = transcriber_.TakeClipCuts();
-                if (!cuts.empty()) diariser_->AddCutPoints(cuts);
+                if (!cuts.empty()) diariser_.AddCutPoints(cuts);
             } catch (...) {  // NOLINT(bugprone-empty-catch)
             }
             stage("capture settled");
         }
-        // The tail window is transcribed unless discarding; every turn stores
-        // before the outcome below
         if (outcome == Outcome::kFinalise) {
             events_.OnProgress("transcript");
         }
-        if (outcome != Outcome::kCancel && endpointer_.has_value()) {
-            DrainVadBacklog();  // a stop can land before the VAD does
-            if (const auto tail = endpointer_->Flush()) {
-                if (!SingleDecode()) {
-                    transcriber_.Submit(tail->frames, tail->first_frame, tail->first_new_frame);
-                }
-            }
-        }
-        transcriber_.Finish();
-        stage("transcriber drained");
 
         store::SessionId id;
         {
@@ -864,22 +766,14 @@ class SessionController {
         if (id.empty()) {
             return;
         }
-        // The note lane's input: attributed turns when diarisation succeeds,
-        // the reconciled transcript otherwise
+        // The note lane's input is the attributed transcript; a diarisation
+        // failure leaves it empty, so the note is refused as too thin and the
+        // session is never lost
         std::vector<asr::Turn> note_input;
-        if (outcome == Outcome::kFinalise && note_writer_ != nullptr) {
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                note_input = session_turns_;
-            }
-            diar::ReconcileTurns(note_input);
-        }
-        // The attributed transcript supersedes live turns; a diarisation failure
-        // keeps the transcript, never loses the session
-        if (outcome == Outcome::kFinalise && diariser_ != nullptr && !session_audio_.empty()) {
+        if (outcome == Outcome::kFinalise && !session_audio_.empty()) {
             try {
                 events_.OnProgress("speakers");
-                const auto result = diariser_->Diarise(session_audio_, {});
+                const auto result = diariser_.Diarise(session_audio_);
                 stage("diarised");
                 {
                     const auto& t = result.timing;
@@ -905,7 +799,7 @@ class SessionController {
                 auto anchor_similarity =
                     std::async(std::launch::async, [this, &result, &voiceprint_seconds] {
                         const auto started = std::chrono::steady_clock::now();
-                        auto similarity = diariser_->AnchorSimilarities(
+                        auto similarity = diariser_.AnchorSimilarities(
                             session_audio_, result.slices, result.cluster_count);
                         voiceprint_seconds = std::chrono::duration<double>(
                                                  std::chrono::steady_clock::now() - started)
@@ -915,8 +809,8 @@ class SessionController {
                 // Each merged turn gets the text of its own audio; the
                 // speculation cache means this mostly decodes only the tail
                 auto turns = diar::MergeByCluster(result.slices);
-                const auto cache = diariser_->TakeTurnTexts();
-                const auto chunk_cache = diariser_->TakeTurnChunks();
+                const auto cache = diariser_.TakeTurnTexts();
+                const auto chunk_cache = diariser_.TakeTurnChunks();
                 std::vector<std::vector<asr::Turn>> turn_chunks;
                 auto turn_texts = diar::DecodeTurnTexts(
                     turns, session_audio_,
@@ -931,11 +825,11 @@ class SessionController {
                 // speaker's turns. After the voiceprints join: the embedder is
                 // single-threaded
                 {
-                    const auto centroids = diariser_->ClusterCentroids();
+                    const auto centroids = diariser_.ClusterCentroids();
                     const auto pieces = diar::ResplitByEmbedding(
                         turns, turn_texts, turn_chunks,
                         [this](std::uint64_t first, std::uint64_t end) {
-                            return diariser_->EmbedSpan(session_audio_, first, end);
+                            return diariser_.EmbedSpan(session_audio_, first, end);
                         },
                         centroids);
                     turns.clear();
@@ -959,8 +853,8 @@ class SessionController {
                     std::fprintf(stderr,
                                  "ambient-engine: %zu turns, %zu with text, %zu cached, longest "
                                  "%.1f s, %d clusters\n",
-                                 turns.size(), with_text, cache.size(), longest / 16000.0,
-                                 result.cluster_count);
+                                 turns.size(), with_text, cache.size(),
+                                 static_cast<double>(longest) / kSampleRate, result.cluster_count);
                     if (metrics_ != nullptr) {
                         metrics_->RecordTranscript(static_cast<int>(with_text),
                                                    result.cluster_count);
@@ -1010,13 +904,13 @@ class SessionController {
                 // The print learns only from named sessions, never a guess, and
                 // only once the note lane agrees this was a consultation
                 if (roles.doctor_cluster >= 0 && learn_anchor_) {
-                    auto voiceprint = diariser_->DoctorVoiceprint(session_audio_, result.slices,
-                                                                  roles.doctor_cluster);
+                    auto voiceprint = diariser_.DoctorVoiceprint(session_audio_, result.slices,
+                                                                 roles.doctor_cluster);
                     if (note_writer_ != nullptr) {
                         std::lock_guard<std::mutex> lock(mutex_);
                         pending_voiceprint_ = std::move(voiceprint);
                     } else {
-                        diariser_->AccrueVoiceprint(voiceprint);
+                        diariser_.AccrueVoiceprint(voiceprint);
                     }
                 }
                 stage("anchor accrued");
@@ -1025,15 +919,9 @@ class SessionController {
         }
         // Capture state a finalise did not consume must not leak into the
         // next session (cancel, abandon, a diarisation failure)
-        if (diariser_ != nullptr) {
-            diariser_->DiscardCapture();
-        }
+        diariser_.DiscardCapture();
         session_audio_.clear();
         session_audio_.shrink_to_fit();
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            session_turns_.clear();
-        }
         try {
             switch (outcome) {
                 case Outcome::kFinalise:
@@ -1217,8 +1105,8 @@ class SessionController {
                     refused_ = false;
                 }
                 events_.OnNoteReady(note);
-                if (!pending.empty() && diariser_ != nullptr) {
-                    diariser_->AccrueVoiceprint(pending);
+                if (!pending.empty()) {
+                    diariser_.AccrueVoiceprint(pending);
                 }
             } catch (const std::exception& e) {
                 events_.OnNoteFailed(e.what());
@@ -1270,7 +1158,7 @@ class SessionController {
     store::ISessionStore& store_;
     asr::ITranscriber& transcriber_;
     IStreamingVad& vad_;
-    diar::IDiariser* diariser_;
+    diar::IDiariser& diariser_;
     note::INoteWriter* note_writer_;
     metrics::Registry* metrics_;
     std::uint64_t diar_advance_frames_;
@@ -1289,10 +1177,7 @@ class SessionController {
     bool diar_stop_ = false;     // under mutex_
     int diar_ticks_ = 0;         // under mutex_; diagnostics
     LevelMeter meter_;
-    std::optional<Endpointer> endpointer_;
-    std::vector<float> vad_backlog_;  // pipeline thread, then finalise
-    bool learn_anchor_ = true;        // set before Start
-    TurnSink turn_sink_{*this};
+    bool learn_anchor_ = true;  // set before Start
     mutable std::mutex mutex_;
     std::condition_variable cv_;
     bool running_ = false;
@@ -1312,7 +1197,6 @@ class SessionController {
     // Appended under mutex_ (the diarisation thread snapshots it); finalise
     // reads it after every other thread has joined
     std::vector<float> session_audio_;
-    std::vector<asr::Turn> session_turns_;  // under mutex_: turns arrive on the ASR thread
     SourceEnd end_{};
 };
 

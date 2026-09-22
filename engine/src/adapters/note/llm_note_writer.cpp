@@ -1,4 +1,4 @@
-#include "adapters/note/qwen_note_writer.hpp"
+#include "adapters/note/llm_note_writer.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -13,8 +13,8 @@
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/note/note_prompt.hpp"
 #include "adapters/note/text_pipeline.hpp"
+#include "adapters/system/awake_request.hpp"
 #include "adapters/system/gpu_lease.hpp"
-#include "adapters/system/power_request.hpp"
 #include "core/metrics/metrics.hpp"
 
 namespace ambient::note {
@@ -43,7 +43,7 @@ double Seconds(std::chrono::steady_clock::time_point since) {
 
 }  // namespace
 
-struct QwenNoteWriter::Impl {
+struct LlmNoteWriter::Impl {
     const models::ModelStore& store;
     models::OvRuntime& runtime;
     std::filesystem::path prompt_dir;
@@ -135,23 +135,23 @@ struct QwenNoteWriter::Impl {
     }
 };
 
-QwenNoteWriter::QwenNoteWriter(const models::ModelStore& store, models::OvRuntime& runtime,
-                               std::filesystem::path prompt_dir, metrics::Registry* metrics,
-                               std::string tier)
+LlmNoteWriter::LlmNoteWriter(const models::ModelStore& store, models::OvRuntime& runtime,
+                             std::filesystem::path prompt_dir, metrics::Registry* metrics,
+                             std::string tier)
     : impl_(new Impl{store, runtime, std::move(prompt_dir), metrics, std::move(tier)}) {}
 
-QwenNoteWriter::~QwenNoteWriter() {
+LlmNoteWriter::~LlmNoteWriter() {
     impl_->JoinLoader();
 }
 
-void QwenNoteWriter::SetLoadListener(LoadListener listener) {
+void LlmNoteWriter::SetLoadListener(LoadListener listener) {
     std::lock_guard<std::mutex> lock(impl_->state_mutex);
     impl_->on_load = std::move(listener);
 }
 
 // Starts the one background load; the ~14 s cost lands during capture, not
 // on the stop path. A failed attempt is retried on the next call.
-void QwenNoteWriter::Prepare() {
+void LlmNoteWriter::Prepare() {
     std::thread finished;
     {
         std::lock_guard<std::mutex> lock(impl_->state_mutex);
@@ -183,8 +183,8 @@ void QwenNoteWriter::Prepare() {
     }
 }
 
-std::string QwenNoteWriter::Write(const std::vector<asr::Turn>& transcript,
-                                  const NoteOptions& options, const Progress& progress) {
+std::string LlmNoteWriter::Write(const std::vector<asr::Turn>& transcript,
+                                 const NoteOptions& options, const Progress& progress) {
     if (transcript.empty()) {
         throw std::runtime_error("nothing to write: the transcript is empty");
     }
@@ -196,28 +196,28 @@ std::string QwenNoteWriter::Write(const std::vector<asr::Turn>& transcript,
                     progress);
 }
 
-std::string QwenNoteWriter::WritePatient(const std::string& note, const Progress& progress) {
+std::string LlmNoteWriter::WritePatient(const std::string& note, const Progress& progress) {
     if (note.empty()) {
         throw std::runtime_error("nothing to write: the note is empty");
     }
     return Generate(LoadPrompt(impl_->prompt_dir / "patient-info.md") + note + "\n", progress);
 }
 
-std::string QwenNoteWriter::WriteLabel(const std::string& note) {
+std::string LlmNoteWriter::WriteLabel(const std::string& note) {
     if (note.empty()) {
         return {};
     }
     return Generate(LoadPrompt(impl_->prompt_dir / "label.md") + note + "\n", nullptr, 16);
 }
 
-std::string QwenNoteWriter::WriteSummary(const std::string& note) {
+std::string LlmNoteWriter::WriteSummary(const std::string& note) {
     if (note.empty()) {
         throw std::runtime_error("nothing to summarise: the note is empty");
     }
     return Generate(LoadPrompt(impl_->prompt_dir / "case-summary.md") + note + "\n", nullptr, 160);
 }
 
-void QwenNoteWriter::Prefill(const std::vector<asr::Turn>& transcript, const NoteOptions& options) {
+void LlmNoteWriter::Prefill(const std::vector<asr::Turn>& transcript, const NoteOptions& options) {
     if (transcript.empty()) return;
     const auto pipeline = impl_->Pipeline();
     if (pipeline == nullptr) return;
@@ -247,8 +247,8 @@ void QwenNoteWriter::Prefill(const std::vector<asr::Turn>& transcript, const Not
     }
 }
 
-std::string QwenNoteWriter::Generate(const std::string& prompt, const Progress& progress,
-                                     std::size_t max_new_tokens) {
+std::string LlmNoteWriter::Generate(const std::string& prompt, const Progress& progress,
+                                    std::size_t max_new_tokens) {
     impl_->cancel = false;
     Prepare();
     impl_->JoinLoader();
@@ -304,7 +304,7 @@ std::string QwenNoteWriter::Generate(const std::string& prompt, const Progress& 
     return Trimmed(text);
 }
 
-void QwenNoteWriter::Cancel() {
+void LlmNoteWriter::Cancel() {
     impl_->cancel = true;
 }
 

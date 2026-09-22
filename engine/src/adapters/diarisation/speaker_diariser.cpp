@@ -35,8 +35,7 @@ SpeakerDiariser::SpeakerDiariser(const models::ModelStore& store, models::OvRunt
       anchors_(anchors),
       worker_(vad_, segmenter_, embedder_) {}
 
-DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio,
-                                       std::span<const std::uint64_t> turn_boundaries) {
+DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
     DiariseResult result;
     if (audio.empty()) return result;
     // Stage laps for the finalise breakdown; measurement only
@@ -76,8 +75,6 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio,
 
     result.timing.finish_s = lap();
     const auto regions = SpeechRegions(probabilities, audio.size());
-    seg.change_points.insert(seg.change_points.end(), turn_boundaries.begin(),
-                             turn_boundaries.end());
     {
         const auto cuts = SnapClipCuts(capture.clip_cuts, probabilities, seg.change_points);
         seg.change_points.insert(seg.change_points.end(), cuts.begin(), cuts.end());

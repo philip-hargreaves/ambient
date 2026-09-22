@@ -7,7 +7,6 @@
 #include <functional>
 #include <future>
 #include <mutex>
-#include <optional>
 #include <span>
 #include <string>
 #include <thread>
@@ -31,8 +30,8 @@ using DecodeFn = std::function<std::vector<Turn>(std::span<const float>, std::ui
 
 using DecodeLoader = std::function<DecodeFn()>;
 
-// Whisper behind the transcriber port: one worker thread loads then
-// decodes, so capture never waits on the GPU; Finish drains the backlog
+// Whisper behind the transcriber port: one worker thread loads then decodes
+// clips in order, so the load never blocks a caller
 class WhisperTranscriber : public ITranscriber {
    public:
     // device_override: the device every decode runs on, else the manifest's
@@ -43,24 +42,13 @@ class WhisperTranscriber : public ITranscriber {
                                 metrics::Registry* metrics = nullptr);  // Tests pace the load
     ~WhisperTranscriber() override;
 
-    void Begin(ITurnSink& sink) override;
-    void Submit(std::span<const float> frames, std::uint64_t first_frame,
-                std::uint64_t first_new_frame = 0) override;
-    void Finish() override;
-
-    // Same worker queue, after pending windows; blocks until decoded and never
-    // touches the sink
+    // Blocks until the worker has decoded the clip
     std::vector<Turn> DecodeClipChunks(std::span<const float> frames,
                                        std::uint64_t first_frame) override;
 
     std::vector<std::uint64_t> TakeClipCuts() override;
 
    private:
-    struct Window {
-        std::vector<float> frames;
-        std::uint64_t first_frame;
-        std::uint64_t first_new_frame;
-    };
     struct Clip {
         std::vector<float> frames;
         std::uint64_t first_frame;
@@ -76,12 +64,8 @@ class WhisperTranscriber : public ITranscriber {
     metrics::Registry* metrics_ = nullptr;
     std::mutex mutex_;
     std::condition_variable cv_;
-    std::deque<Window> queue_;
     std::deque<Clip> clips_;
-    ITurnSink* sink_ = nullptr;
-    std::optional<Turn> previous_turn_;     // for the boundary dedup backstop
     std::vector<std::uint64_t> clip_cuts_;  // segment edges inside decoded clips
-    bool busy_ = false;
     bool stopping_ = false;
     std::thread worker_;
 };

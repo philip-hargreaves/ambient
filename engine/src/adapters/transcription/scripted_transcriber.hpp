@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -8,33 +10,17 @@
 
 namespace ambient::asr {
 
-// CI stand-in when no ASR model is staged
+// CI stand-in when no ASR model is staged: one chunk per clip, numbered in
+// decode order
 class ScriptedTranscriber : public ITranscriber {
    public:
-    void Begin(ITurnSink& sink) override {
-        sink_ = &sink;
-        turns_ = 0;
-    }
-
-    void Submit(std::span<const float> frames, std::uint64_t first_frame,
-                std::uint64_t /*first_new_frame*/ = 0) override {
-        Turn turn;
-        turn.first_frame = first_frame;
-        turn.frame_count = frames.size();
-        turn.text = "scripted turn " + std::to_string(turns_++) + ", " +
-                    std::to_string(frames.size()) + " frames";
-        sink_->OnTurn(turn);
-    }
-
-    void Finish() override {}
-
     std::vector<Turn> DecodeClipChunks(std::span<const float> frames,
                                        std::uint64_t first_frame) override {
         Turn turn;
         turn.first_frame = first_frame;
         turn.frame_count = frames.size();
-        turn.text = "re-decoded " + std::to_string(frames.size()) + " frames at " +
-                    std::to_string(first_frame);
+        turn.text = "scripted turn " + std::to_string(decodes_++) + ", " +
+                    std::to_string(frames.size()) + " frames";
         return {turn};
     }
 
@@ -46,8 +32,7 @@ class ScriptedTranscriber : public ITranscriber {
     }
 
    private:
-    ITurnSink* sink_ = nullptr;
-    int turns_ = 0;
+    int decodes_ = 0;
 };
 
 }  // namespace ambient::asr

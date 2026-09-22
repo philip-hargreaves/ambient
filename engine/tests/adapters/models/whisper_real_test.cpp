@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <mutex>
 #include <vector>
 
 #include "adapters/models/model_store.hpp"
@@ -32,17 +31,7 @@ std::vector<float> First30Seconds(const std::filesystem::path& path) {
     return frames;
 }
 
-struct RecordingSink : ITurnSink {
-    std::mutex mutex;
-    std::vector<Turn> turns;
-
-    void OnTurn(const Turn& turn) override {
-        const std::lock_guard<std::mutex> lock(mutex);
-        turns.push_back(turn);
-    }
-};
-
-TEST(WhisperReal, TranscribesRealSpeechWithTimingsInsideTheWindow) {
+TEST(WhisperReal, TranscribesRealSpeechWithTimingsInsideTheClip) {
     if (!std::filesystem::exists(kWav)) {
         GTEST_SKIP() << "research corpus not mounted";
     }
@@ -51,21 +40,18 @@ TEST(WhisperReal, TranscribesRealSpeechWithTimingsInsideTheWindow) {
     models::OvRuntime runtime;
 
     WhisperTranscriber transcriber(store, runtime);
-    RecordingSink sink;
-    transcriber.Begin(sink);
 
     const auto start = std::chrono::steady_clock::now();
-    transcriber.Submit(frames, 0);
-    transcriber.Finish();
+    const auto chunks = transcriber.DecodeClipChunks(frames, 0);
     const auto took = std::chrono::duration<double>(std::chrono::steady_clock::now() - start);
 
-    ASSERT_FALSE(sink.turns.empty());
-    for (const auto& turn : sink.turns) {
-        EXPECT_FALSE(turn.text.empty());
-        EXPECT_LE(turn.first_frame + turn.frame_count, frames.size() + audio::kSampleRate);
+    ASSERT_FALSE(chunks.empty());
+    for (const auto& chunk : chunks) {
+        EXPECT_FALSE(chunk.text.empty());
+        EXPECT_LE(chunk.first_frame + chunk.frame_count, frames.size() + audio::kSampleRate);
     }
-    std::printf("turns: %zu, %.1fx realtime, first: \"%s\"\n", sink.turns.size(),
-                30.0 / took.count(), sink.turns[0].text.c_str());
+    std::printf("chunks: %zu, %.1fx realtime, first: \"%s\"\n", chunks.size(), 30.0 / took.count(),
+                chunks[0].text.c_str());
 }
 
 }  // namespace

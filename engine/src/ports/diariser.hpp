@@ -45,14 +45,13 @@ struct DiariseResult {
     DiariseTiming timing;
 };
 
-// Slices with anonymous labels plus anchor similarities; turn_boundaries
-// measured +0.41 pt attribution. Naming is the caller's decision
+// Slices with anonymous labels plus anchor similarities; naming is the
+// caller's decision
 class IDiariser {
    public:
     virtual ~IDiariser() = default;
 
-    virtual DiariseResult Diarise(std::span<const float> audio,
-                                  std::span<const std::uint64_t> turn_boundaries = {}) = 0;
+    virtual DiariseResult Diarise(std::span<const float> audio) = 0;
 
     // Separate from Diarise so the voiceprint embeds can overlap other work;
     // DoctorVoiceprint reuses them so the doctor's is embedded once
@@ -60,13 +59,13 @@ class IDiariser {
                                                    const std::vector<LabelledSlice>& slices,
                                                    int cluster_count) = 0;
 
-    // Capture-phase work with the audio and reconciled turns so far;
-    // optional - without it Diarise processes the whole recording
-    virtual void Advance(std::span<const float>, std::span<const asr::Turn>, const DecodeClipFn&) {}
+    // Capture-phase work with the audio so far; optional - without it Diarise
+    // processes the whole recording
+    virtual void Advance(std::span<const float>, const DecodeClipFn&) {}
 
     // Finalise's catch-up: Advance without a budget, so every settled span is
     // decoded and cut before Diarise, however far capture lagged
-    virtual void Settle(std::span<const float>, std::span<const asr::Turn>, const DecodeClipFn&) {}
+    virtual void Settle(std::span<const float>, const DecodeClipFn&) {}
 
     // Turn texts speculated by Advance, keyed on exact decode spans; valid
     // after Diarise

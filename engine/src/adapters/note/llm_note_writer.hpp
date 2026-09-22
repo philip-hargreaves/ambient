@@ -22,7 +22,7 @@ namespace ambient::note {
 // Qwen behind the note port: one background load, resident pipeline,
 // prompts re-read per note. The tier is a role the store resolves; the
 // manifest says which pipeline loads it
-class QwenNoteWriter : public INoteWriter {
+class LlmNoteWriter : public INoteWriter {
    public:
     // Outcome of one load, reported to the supervising process
     struct LoadReport {
@@ -36,10 +36,10 @@ class QwenNoteWriter : public INoteWriter {
 
     using LoadListener = std::function<void(const LoadReport&)>;
 
-    QwenNoteWriter(const models::ModelStore& store, models::OvRuntime& runtime,
-                   std::filesystem::path prompt_dir, metrics::Registry* metrics = nullptr,
-                   std::string tier = "default");
-    ~QwenNoteWriter() override;
+    LlmNoteWriter(const models::ModelStore& store, models::OvRuntime& runtime,
+                  std::filesystem::path prompt_dir, metrics::Registry* metrics = nullptr,
+                  std::string tier = "default");
+    ~LlmNoteWriter() override;
 
     std::string Write(const std::vector<asr::Turn>& transcript, const NoteOptions& options,
                       const Progress& progress) override;

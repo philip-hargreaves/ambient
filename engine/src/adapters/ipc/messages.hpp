@@ -13,7 +13,6 @@ namespace ambient::ipc {
 using nlohmann::json;
 
 // JSON-RPC 2.0 reserved codes, plus the engine range -32000..-32099.
-inline constexpr int kParseError = -32700;
 inline constexpr int kInvalidRequest = -32600;
 inline constexpr int kMethodNotFound = -32601;
 inline constexpr int kInvalidParams = -32602;

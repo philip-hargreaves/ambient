@@ -46,7 +46,8 @@ public class SessionReadbackContractTest
                 "session/transcript", new { id }, Timeout);
             var turns = transcript.GetProperty("turns");
             Assert.Equal(1, turns.GetArrayLength());
-            Assert.StartsWith("scripted turn 0", turns[0].GetProperty("text").GetString());
+            // The sealed transcript is tidied, so the scripted text starts with a capital
+            Assert.StartsWith("Scripted turn 0", turns[0].GetProperty("text").GetString());
             Assert.Equal(0, turns[0].GetProperty("firstFrame").GetInt64());
             // Stop may land before the fast replay finishes, so the tail holds
             // whatever had arrived; two seconds of audio is the ceiling

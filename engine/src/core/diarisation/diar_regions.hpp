@@ -10,7 +10,7 @@
 
 namespace ambient::diar {
 
-// Batch Silero over the whole recording, cut finer than the endpointer;
+// Batch Silero over the whole recording, cut finely;
 // validated configuration - do not retune
 inline constexpr float kEnter = 0.40f;
 inline constexpr float kExit = 0.25f;

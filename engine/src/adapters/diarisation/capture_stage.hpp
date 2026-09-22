@@ -41,16 +41,16 @@ struct Speculation {
     int cluster_count = 0;
 };
 
-// Capture-phase stages behind the settled frontier; finalise stays
+// The capture-phase diarisation behind the settled frontier; finalise stays
 // bit-identical and pays only the tail
-class DiarWorker {
+class CaptureStage {
    public:
-    DiarWorker(audio::SileroVad& vad, Segmenter& segmenter, SpeakerEmbedder& embedder);
+    CaptureStage(audio::SileroVad& vad, Segmenter& segmenter, SpeakerEmbedder& embedder);
 
-    // audio and reconciled turns so far; decode re-transcribes a clip, at most
-    // budget spans per call so a stop never waits long behind speculation
-    void Advance(std::span<const float> audio, std::span<const asr::Turn> turns,
-                 const DecodeClipFn& decode, int budget = kSpeculateBudget);
+    // The audio so far; decode re-transcribes a clip, at most budget spans
+    // per call so a stop never waits long behind speculation
+    void Advance(std::span<const float> audio, const DecodeClipFn& decode,
+                 int budget = kSpeculateBudget);
 
     // The audio has ended: pad the final hop and segment the tail
     void Finish(std::span<const float> audio);

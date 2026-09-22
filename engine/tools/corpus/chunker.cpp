@@ -1,4 +1,4 @@
-#include "adapters/guidance/chunker.hpp"
+#include "tools/corpus/chunker.hpp"
 
 #include <cctype>
 #include <string_view>

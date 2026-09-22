@@ -12,12 +12,12 @@ namespace ambient::diar {
 // Diarisation behind a background load; callers already run off the audio threads
 class DeferredDiariser : public IDiariser {
    public:
-    explicit DeferredDiariser(std::function<std::unique_ptr<IDiariser>()> build)
-        : inner_("diarisation", std::move(build)) {}
+    explicit DeferredDiariser(std::function<std::unique_ptr<IDiariser>()> build,
+                              metrics::Registry* metrics = nullptr)
+        : inner_("diarisation", std::move(build), metrics) {}
 
-    DiariseResult Diarise(std::span<const float> audio,
-                          std::span<const std::uint64_t> turn_boundaries = {}) override {
-        return inner_.Get().Diarise(audio, turn_boundaries);
+    DiariseResult Diarise(std::span<const float> audio) override {
+        return inner_.Get().Diarise(audio);
     }
 
     std::vector<double> AnchorSimilarities(std::span<const float> audio,
@@ -26,14 +26,12 @@ class DeferredDiariser : public IDiariser {
         return inner_.Get().AnchorSimilarities(audio, slices, cluster_count);
     }
 
-    void Advance(std::span<const float> audio, std::span<const asr::Turn> turns,
-                 const DecodeClipFn& decode) override {
-        inner_.Get().Advance(audio, turns, decode);
+    void Advance(std::span<const float> audio, const DecodeClipFn& decode) override {
+        inner_.Get().Advance(audio, decode);
     }
 
-    void Settle(std::span<const float> audio, std::span<const asr::Turn> turns,
-                const DecodeClipFn& decode) override {
-        inner_.Get().Settle(audio, turns, decode);
+    void Settle(std::span<const float> audio, const DecodeClipFn& decode) override {
+        inner_.Get().Settle(audio, decode);
     }
 
     TurnTexts TakeTurnTexts() override {

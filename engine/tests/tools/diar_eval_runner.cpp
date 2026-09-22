@@ -1,7 +1,6 @@
 // Dev evaluation tool. Default: production diarisation over
 // one wav, "start end cluster" per slice in seconds (the attribution
-// scorer's format). --turn-cuts also splits slices at transcribed-turn
-// boundaries (the A/B). --roles runs the full finalise flow - ASR, text
+// scorer's format). --roles runs the full finalise flow - per-turn ASR, text
 // assignment, cold-start naming - and prints roles, margin and per-cluster
 // voiceprints for the role-acceptance scorer
 #include <algorithm>
@@ -14,7 +13,6 @@
 #include <fstream>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -22,11 +20,8 @@
 #include "adapters/diarisation/cluster_voiceprint.hpp"
 #include "adapters/diarisation/speaker_diariser.hpp"
 #include "adapters/transcription/whisper_transcriber.hpp"
-#include "adapters/vad/silero_vad.hpp"
-#include "core/audio/endpointer.hpp"
-#include "core/diarisation/per_turn.hpp"
 #include "core/diarisation/role_naming.hpp"
-#include "core/diarisation/turn_reconcile.hpp"
+#include "core/diarisation/turn_decode.hpp"
 
 namespace {
 
@@ -43,34 +38,6 @@ std::vector<float> LoadWav(const char* path) {
     return frames;
 }
 
-struct CollectingSink : ambient::asr::ITurnSink {
-    std::mutex mutex;
-    std::vector<ambient::asr::Turn> turns;
-
-    void OnTurn(const ambient::asr::Turn& turn) override {
-        const std::lock_guard<std::mutex> lock(mutex);
-        turns.push_back(turn);
-    }
-};
-
-std::vector<ambient::asr::Turn> Transcribe(const ambient::models::ModelStore& store,
-                                           ambient::models::OvRuntime& runtime,
-                                           ambient::asr::WhisperTranscriber& transcriber,
-                                           const std::vector<float>& audio) {
-    ambient::audio::SileroVad vad(store, runtime);
-    ambient::audio::Endpointer endpointer(vad);
-    CollectingSink sink;
-    transcriber.Begin(sink);
-    for (const auto& window : endpointer.Push(audio)) {
-        transcriber.Submit(window.frames, window.first_frame, window.first_new_frame);
-    }
-    if (const auto tail = endpointer.Flush()) {
-        transcriber.Submit(tail->frames, tail->first_frame, tail->first_new_frame);
-    }
-    transcriber.Finish();
-    return sink.turns;
-}
-
 // The clip-decode contract hands back chunks; the probe's whole-clip text is one
 std::vector<ambient::asr::Turn> AsChunk(std::string text, std::span<const float> clip,
                                         std::uint64_t first_frame) {
@@ -83,27 +50,15 @@ std::vector<ambient::asr::Turn> AsChunk(std::string text, std::span<const float>
 
 std::string Decode(ambient::asr::WhisperTranscriber& transcriber, std::span<const float> clip,
                    std::uint64_t first_frame) {
-    CollectingSink sink;
-    transcriber.Begin(sink);
-    transcriber.Submit(clip, first_frame);
-    transcriber.Finish();
-    std::string text;
-    for (const auto& turn : sink.turns) {
-        if (turn.text.empty()) continue;
-        if (!text.empty()) text += ' ';
-        text += turn.text;
-    }
-    return text;
+    return transcriber.DecodeClip(clip, first_frame);
 }
 
 // --amortise-probe: drive the production capture path - a SpeakerDiariser
-// fed in five-second steps with the audio and completed turns so far,
-// exactly as the session controller feeds it - then time what a stop pays
-// and verify the output is bit-identical to the batch pass
+// fed in five-second steps with the audio so far, exactly as the session
+// controller feeds it - then time what a stop pays and verify the output is
+// bit-identical to the batch pass
 void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
                    ambient::asr::WhisperTranscriber& whisper, const std::vector<float>& audio,
-                   const std::vector<ambient::asr::Turn>& reconciled,
-                   const std::vector<std::uint64_t>& cuts,
                    const ambient::diar::DiariseResult& batch) {
     using Clock = std::chrono::steady_clock;
     const auto seconds = [](Clock::time_point a, Clock::time_point b) {
@@ -121,16 +76,12 @@ void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::Ov
         return AsChunk(Decode(whisper, clip, first), clip, first);
     };
 
-    // Capture: the controller's cadence, completed turns only
+    // Capture: the controller's cadence
     double capture_s = 0.0;
     std::size_t ticks = 0;
     for (std::uint64_t upto = kStepFrames; upto < audio.size(); upto += kStepFrames) {
-        std::vector<ambient::asr::Turn> so_far;
-        for (const auto& turn : reconciled) {
-            if (turn.first_frame + turn.frame_count <= upto) so_far.push_back(turn);
-        }
         const auto t0 = Clock::now();
-        fed.Advance(std::span<const float>(audio).first(upto), so_far, decode);
+        fed.Advance(std::span<const float>(audio).first(upto), decode);
         capture_s += seconds(t0, Clock::now());
         ++ticks;
     }
@@ -139,7 +90,7 @@ void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::Ov
     // Stop: everything production's finalise pays, including the pair's
     // voiceprints for anchor ranking and accrual
     const auto stop_start = Clock::now();
-    const auto result = fed.Diarise(audio, cuts);
+    const auto result = fed.Diarise(audio);
     const auto cache = fed.TakeTurnTexts();
     const auto turns = ambient::diar::MergeByCluster(result.slices);
     std::size_t hits = 0;
@@ -215,14 +166,14 @@ void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::Ov
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::fprintf(stderr,
-                     "usage: diar_eval_runner <models-dir> <audio.wav> [--roles] [--turn-cuts]\n");
+        std::fprintf(
+            stderr,
+            "usage: diar_eval_runner <models-dir> <audio.wav> [--roles] [--amortise-probe]\n");
         return 2;
     }
-    bool roles = false, turn_cuts = false, amortise = false;
+    bool roles = false, amortise = false;
     for (int i = 3; i < argc; ++i) {
         if (std::strcmp(argv[i], "--roles") == 0) roles = true;
-        if (std::strcmp(argv[i], "--turn-cuts") == 0) turn_cuts = true;
         if (std::strcmp(argv[i], "--amortise-probe") == 0) {
             roles = true;
             amortise = true;
@@ -238,26 +189,14 @@ int main(int argc, char** argv) {
         ambient::diar::SpeakerDiariser diariser(store, runtime, diariser_anchors);
         const auto audio = LoadWav(argv[2]);
 
-        std::vector<ambient::asr::Turn> turns;
         std::unique_ptr<ambient::asr::WhisperTranscriber> whisper;
-        if (roles || turn_cuts) {
+        if (roles) {
             whisper = std::make_unique<ambient::asr::WhisperTranscriber>(store, runtime);
-            turns = Transcribe(store, runtime, *whisper, audio);
         }
-
-        ambient::diar::ReconcileTurns(turns);
-        std::vector<std::uint64_t> cuts;
-        if (turn_cuts || roles) {
-            for (const auto& turn : turns) {
-                cuts.push_back(turn.first_frame);
-                cuts.push_back(turn.first_frame + turn.frame_count);
-            }
-        }
-        const std::vector<ambient::asr::Turn> reconciled = turns;
-        const auto result = diariser.Diarise(audio, cuts);
+        const auto result = diariser.Diarise(audio);
 
         if (amortise) {
-            AmortiseProbe(store, runtime, *whisper, audio, reconciled, cuts, result);
+            AmortiseProbe(store, runtime, *whisper, audio, result);
             return 0;
         }
 

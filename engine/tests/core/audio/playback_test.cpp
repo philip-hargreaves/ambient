@@ -35,9 +35,6 @@ struct RecordingEvents : ISessionEvents {
         seconds.push_back(at);
         EXPECT_GT(reading.level, 0.0F);
     }
-    void OnTurn(const asr::Turn&) override {
-        Add("turn");
-    }
     void OnInterrupted(SourceEndReason, const std::string&) override {
         Add("interrupted");
     }

@@ -14,8 +14,8 @@
 #include <system_error>
 #include <vector>
 
-#include "adapters/guidance/corpus_builder.hpp"
 #include "adapters/guidance/embedder.hpp"
+#include "tools/corpus/corpus_builder.hpp"
 
 // The invented fixture corpus and notes, and a corpus directory built from
 // them with any embedder

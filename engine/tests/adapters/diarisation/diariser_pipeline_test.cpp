@@ -134,17 +134,7 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
     SpeakerDiariser fed(store, runtime, fed_anchors);
 
     // Synthetic reconciled turns, 6 s each; edges double as slice cuts
-    std::vector<asr::Turn> turns;
-    std::vector<std::uint64_t> boundaries;
-    for (std::uint64_t f = 0; f + 96000 <= audio.size(); f += 96000) {
-        asr::Turn turn;
-        turn.first_frame = f;
-        turn.frame_count = 96000;
-        turn.text = "spoken words";
-        turns.push_back(std::move(turn));
-        boundaries.push_back(f);
-        boundaries.push_back(f + 96000);
-    }
+
     const DecodeClipFn decode = [](std::span<const float> clip, std::uint64_t first) {
         asr::Turn chunk;
         chunk.first_frame = first;
@@ -153,11 +143,11 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
         return std::vector<asr::Turn>{chunk};
     };
     for (std::uint64_t fed_to = 80000; fed_to < audio.size(); fed_to += 80000) {  // 5 s steps
-        fed.Advance(std::span(audio).first(fed_to), turns, decode);
+        fed.Advance(std::span(audio).first(fed_to), decode);
     }
 
-    const auto want = batch.Diarise(audio, boundaries);
-    const auto got = fed.Diarise(audio, boundaries);
+    const auto want = batch.Diarise(audio);
+    const auto got = fed.Diarise(audio);
 
     ASSERT_EQ(got.slices.size(), want.slices.size());
     for (std::size_t i = 0; i < got.slices.size(); ++i) {

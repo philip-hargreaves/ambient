@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-#include "adapters/guidance/chunker.hpp"
-#include "adapters/guidance/corpus_builder.hpp"
 #include "adapters/guidance/embedder.hpp"
+#include "tools/corpus/chunker.hpp"
+#include "tools/corpus/corpus_builder.hpp"
 
 namespace ambient::guidance {
 

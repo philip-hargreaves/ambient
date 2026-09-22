@@ -14,8 +14,9 @@ namespace ambient::audio {
 // probability, loud rather than silent
 class DeferredVad : public IStreamingVad {
    public:
-    explicit DeferredVad(std::function<std::unique_ptr<IStreamingVad>()> build)
-        : inner_("vad", std::move(build)) {}
+    explicit DeferredVad(std::function<std::unique_ptr<IStreamingVad>()> build,
+                         metrics::Registry* metrics = nullptr)
+        : inner_("vad", std::move(build), metrics) {}
 
     float SpeechProbability(std::span<const float> hop) override {
         return inner_.Get().SpeechProbability(hop);

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "adapters/guidance/chunker.hpp"
+#include "tools/corpus/chunker.hpp"
 
 namespace ambient::guidance {
 namespace {

@@ -1,4 +1,4 @@
-#include "adapters/guidance/indexer.hpp"
+#include "tools/corpus/indexer.hpp"
 
 #include <algorithm>
 #include <fstream>

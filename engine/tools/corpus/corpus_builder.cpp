@@ -1,4 +1,4 @@
-#include "adapters/guidance/corpus_builder.hpp"
+#include "tools/corpus/corpus_builder.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -11,11 +11,11 @@
 
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/guidance/embedder.hpp"
-#include "adapters/guidance/indexer.hpp"
 #include "adapters/guidance/retriever.hpp"
 #include "adapters/models/model_store.hpp"
 #include "core/guidance/guidance_scan.hpp"
 #include "guidance_fixture.hpp"
+#include "tools/corpus/indexer.hpp"
 
 namespace ambient::guidance {
 namespace {
