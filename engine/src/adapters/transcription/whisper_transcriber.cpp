@@ -94,27 +94,14 @@ WhisperTranscriber::WhisperTranscriber(const models::ModelStore& store, models::
     : WhisperTranscriber(DecodeLoader([&store, &runtime, device = device_override, metrics] {
                              return MakeWhisperDecode(store, runtime, device, metrics);
                          }),
-                         metrics,
-                         // One Whisper on the chosen device; the low-power mode pays
-                         // the finalise burst at NPU speed rather than load a GPU copy
-                         DecodeLoader{}) {}
+                         metrics) {}
 
 WhisperTranscriber::WhisperTranscriber(DecodeFn decode) : decode_(std::move(decode)) {
     worker_ = std::thread([this] { WorkerLoop(); });
 }
 
-WhisperTranscriber::WhisperTranscriber(DecodeFn decode, DecodeFn clip_decode)
-    : decode_(std::move(decode)), clip_decode_(std::move(clip_decode)) {
-    worker_ = std::thread([this] { WorkerLoop(); });
-}
-
-WhisperTranscriber::WhisperTranscriber(DecodeLoader loader, metrics::Registry* metrics,
-                                       DecodeLoader clip_loader)
-    : factory_(loader),
-      loader_(std::move(loader)),
-      clip_factory_(clip_loader),
-      clip_loader_(std::move(clip_loader)),
-      metrics_(metrics) {
+WhisperTranscriber::WhisperTranscriber(DecodeLoader loader, metrics::Registry* metrics)
+    : loader_(std::move(loader)), metrics_(metrics) {
     worker_ = std::thread([this] { WorkerLoop(); });
 }
 
@@ -148,24 +135,9 @@ void WhisperTranscriber::Finish() {
     cv_.wait(lock, [this] { return (queue_.empty() && !busy_) || stopping_; });
 }
 
-void WhisperTranscriber::Release() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (!factory_) {
-        return;  // an injected decode has nothing to reload from
-    }
-    release_requested_ = true;
-    cv_.notify_all();
-    cv_.wait(lock, [this] { return !release_requested_ || stopping_; });
-}
-
 std::vector<std::uint64_t> WhisperTranscriber::TakeClipCuts() {
     std::lock_guard<std::mutex> lock(mutex_);
     return std::exchange(clip_cuts_, {});
-}
-
-std::string WhisperTranscriber::DecodeClip(std::span<const float> frames,
-                                           std::uint64_t first_frame) {
-    return diar::JoinedText(DecodeClipChunks(frames, first_frame));
 }
 
 std::vector<Turn> WhisperTranscriber::DecodeClipChunks(std::span<const float> frames,
@@ -208,17 +180,6 @@ void WhisperTranscriber::LoadIfPending() {
         std::fprintf(stderr, "ambient-engine: transcription unavailable (%s)\n", e.what());
     }
     loader_ = {};
-
-    if (clip_loader_) {
-        try {
-            clip_decode_ = clip_loader_();
-        } catch (const std::exception& e) {
-            // Clips then share the live pipeline: slower, never wrong
-            std::fprintf(stderr, "ambient-engine: finalise stays on the live device (%s)\n",
-                         e.what());
-        }
-        clip_loader_ = {};
-    }
 }
 
 void WhisperTranscriber::WorkerLoop() {
@@ -229,21 +190,9 @@ void WhisperTranscriber::WorkerLoop() {
     // windows keeps speculation alive under an accelerated-replay backlog
     int windows_since_clip = 0;
     while (!stopping_) {
-        cv_.wait(lock, [this] {
-            return !queue_.empty() || !clips_.empty() || release_requested_ || stopping_;
-        });
+        cv_.wait(lock, [this] { return !queue_.empty() || !clips_.empty() || stopping_; });
         if (stopping_) break;
 
-        // Release only once drained; the next work item reloads
-        if (release_requested_ && queue_.empty() && clips_.empty()) {
-            decode_ = {};
-            clip_decode_ = {};
-            loader_ = factory_;
-            clip_loader_ = clip_factory_;
-            release_requested_ = false;
-            cv_.notify_all();
-            continue;
-        }
         if (loader_ && (!queue_.empty() || !clips_.empty())) {
             lock.unlock();
             LoadIfPending();
@@ -259,12 +208,10 @@ void WhisperTranscriber::WorkerLoop() {
             std::vector<Turn> chunks;
             std::vector<std::uint64_t> cuts;
             try {
-                // The burst pipeline when the live device is the slow one
-                const DecodeFn& decode = clip_decode_ ? clip_decode_ : decode_;
-                if (decode) {
+                if (decode_) {
                     const auto t0 = std::chrono::steady_clock::now();
                     const std::uint64_t clip_end = clip.first_frame + clip.frames.size();
-                    for (const Turn& turn : decode(clip.frames, clip.first_frame)) {
+                    for (const Turn& turn : decode_(clip.frames, clip.first_frame)) {
                         if (turn.text.empty()) continue;
                         chunks.push_back(turn);
                         // Chunk edges: where a short answer inside a long clip

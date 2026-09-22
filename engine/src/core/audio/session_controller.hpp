@@ -1183,9 +1183,6 @@ class SessionController {
             }
             // An in-process note model needs whisper off the GPU first
             // (measured: KV-cache corruption); a worker-process model does not
-            if (note_writer_->WantsTranscriberReleased()) {
-                transcriber_.Release();
-            }
             std::string note;
             try {
                 // A refusal never streams as if it were the note

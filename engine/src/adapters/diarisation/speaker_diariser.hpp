@@ -33,8 +33,6 @@ class SpeakerDiariser : public IDiariser {
 
     // Reuses the voiceprint AnchorSimilarities computed for the cluster;
     // embeds only when there is none
-    void AccrueDoctor(std::span<const float> audio, const std::vector<LabelledSlice>& slices,
-                      int doctor_cluster) override;
 
     // Capture-phase work; Diarise then finalises from the accumulated state
     void Advance(std::span<const float> audio, std::span<const asr::Turn> turns,

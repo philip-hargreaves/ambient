@@ -16,15 +16,7 @@ namespace ambient::diar {
 // text is their join
 using DecodeClipFn = std::function<std::vector<asr::Turn>(std::span<const float>, std::uint64_t)>;
 
-inline std::string JoinedText(const std::vector<asr::Turn>& chunks) {
-    std::string text;
-    for (const auto& chunk : chunks) {
-        if (chunk.text.empty()) continue;
-        if (!text.empty()) text += ' ';
-        text += chunk.text;
-    }
-    return text;
-}
+using asr::JoinedText;
 
 // Exact decode span -> speculated text
 using TurnTexts = std::map<std::pair<std::uint64_t, std::uint64_t>, std::string>;
@@ -63,13 +55,10 @@ class IDiariser {
                                   std::span<const std::uint64_t> turn_boundaries = {}) = 0;
 
     // Separate from Diarise so the voiceprint embeds can overlap other work;
-    // kept for AccrueDoctor so the doctor's is embedded once
+    // DoctorVoiceprint reuses them so the doctor's is embedded once
     virtual std::vector<double> AnchorSimilarities(std::span<const float> audio,
                                                    const std::vector<LabelledSlice>& slices,
                                                    int cluster_count) = 0;
-
-    virtual void AccrueDoctor(std::span<const float> audio,
-                              const std::vector<LabelledSlice>& slices, int doctor_cluster) = 0;
 
     // Capture-phase work with the audio and reconciled turns so far;
     // optional - without it Diarise processes the whole recording

@@ -576,11 +576,6 @@ struct RecordingTranscriber : asr::ITranscriber {
     std::vector<std::pair<std::uint64_t, std::size_t>> windows;  // first_frame, count
     int begins = 0;
     int finishes = 0;
-    std::atomic<int> releases{0};
-
-    void Release() override {
-        ++releases;
-    }
 
     void Begin(asr::ITurnSink&) override {
         ++begins;
@@ -1074,7 +1069,6 @@ TEST(SessionController, TheNoteLaneFreesTheTranscriberFirst) {
     controller.Stop();
 
     ASSERT_TRUE(events.WaitForNote());
-    EXPECT_EQ(transcriber.releases.load(), 1) << "the GPU is freed before the note writes";
 }
 
 TEST(SessionController, PatientInformationFollowsTheNote) {
@@ -1345,12 +1339,6 @@ struct FakeDiariser : diar::IDiariser {
                                            const std::vector<diar::LabelledSlice>&, int) override {
         ++similarity_calls;
         return similarities;
-    }
-
-    void AccrueDoctor(std::span<const float>, const std::vector<diar::LabelledSlice>&,
-                      int doctor_cluster) override {
-        ++accruals;
-        accrued_cluster = doctor_cluster;
     }
 
     int voiceprint_cluster = -1;

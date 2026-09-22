@@ -86,7 +86,6 @@ class SqliteSessionStore : public ISessionStore {
     void ClosePending();                      // no session accepts audio
     bool CommitPending();                     // seals held as one chunk; false when empty
     void WriterLoop();
-    void ImportPerSessionFiles(const std::filesystem::path& root);
 
     std::chrono::milliseconds commit_interval_;
     Db db_;

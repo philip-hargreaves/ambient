@@ -178,7 +178,6 @@ Db OpenDatabase(const std::filesystem::path& root) {
 SqliteSessionStore::SqliteSessionStore(const std::filesystem::path& root,
                                        std::chrono::milliseconds commit_interval)
     : commit_interval_(commit_interval), db_(OpenDatabase(root)) {
-    ImportPerSessionFiles(root);
     writer_ = std::thread([this] { WriterLoop(); });
 }
 
@@ -725,115 +724,6 @@ void SqliteSessionStore::SetMaxPageCount(std::int64_t pages) {
 void SqliteSessionStore::Checkpoint() {
     if (!db_.CheckpointTruncate()) {
         std::fprintf(stderr, "ambient-engine: store log kept, a reader holds it\n");
-    }
-}
-
-// Layout 1 import (pre ambient #35): rows move unchanged; a session that
-// fails to import keeps its files
-void SqliteSessionStore::ImportPerSessionFiles(const std::filesystem::path& root) {
-    const std::filesystem::path catalog_path = root / "main.db";
-    if (!std::filesystem::exists(catalog_path)) return;
-
-    struct Legacy {
-        std::string id, started_at, ended_at, state, device_id, device_name;
-        std::int64_t sample_rate = 0, lost_frames = 0;
-    };
-    std::vector<Legacy> rows;
-    {
-        Db catalog(catalog_path);
-        Db::Stmt select = catalog.Prepare(
-            "SELECT id, started_at, ended_at, state, sample_rate, device_id, device_name,"
-            " lost_frames FROM sessions");
-        while (select.Step()) {
-            rows.push_back({select.ColumnText(0), select.ColumnText(1), select.ColumnText(2),
-                            select.ColumnText(3), select.ColumnText(5), select.ColumnText(6),
-                            select.ColumnInt64(4), select.ColumnInt64(7)});
-        }
-    }
-
-    bool all_imported = true;
-    for (const Legacy& row : rows) {
-        const std::filesystem::path base = root / "sessions" / row.id;
-        const std::filesystem::path db_path = base.string() + ".db";
-        const std::filesystem::path key_path = base.string() + ".key";
-        try {
-            if (!std::filesystem::exists(db_path) || !std::filesystem::exists(key_path)) {
-                throw StoreError(StoreCode::kIo, "session files missing");
-            }
-            Db::Transaction txn(db_);
-            Db::Stmt insert = db_.Prepare(
-                "INSERT INTO sessions(id, started_at, ended_at, state, sample_rate, device_id,"
-                " device_name, lost_frames) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
-            insert.BindText(1, row.id);
-            insert.BindText(2, row.started_at);
-            insert.BindTextOrNull(3, row.ended_at);
-            insert.BindText(4, row.state);
-            insert.BindInt64(5, row.sample_rate);
-            insert.BindTextOrNull(6, row.device_id);
-            insert.BindTextOrNull(7, row.device_name);
-            insert.BindInt64(8, row.lost_frames);
-            insert.Step();
-            InsertKey(row.id, ReadFileBytes(key_path));
-            {
-                Db session(db_path);
-                // Audio crosses only for a session still to be recovered; a
-                // finalised one is held to the seal-erases-audio rule
-                Db::Stmt chunks = session.Prepare(
-                    "SELECT seq, first_frame, frame_count, lost_before, payload FROM chunks");
-                while (row.state == "recording" && chunks.Step()) {
-                    Db::Stmt copy = db_.Prepare(
-                        "INSERT INTO chunks(session_id, seq, first_frame, frame_count,"
-                        " lost_before, payload) VALUES(?, ?, ?, ?, ?, ?)");
-                    copy.BindText(1, row.id);
-                    for (int i = 0; i < 4; ++i) copy.BindInt64(i + 2, chunks.ColumnInt64(i));
-                    copy.BindBlob(6, chunks.ColumnBlob(4));
-                    copy.Step();
-                }
-                Db::Stmt turns =
-                    session.Prepare("SELECT seq, first_frame, frame_count, payload FROM turns");
-                while (turns.Step()) {
-                    Db::Stmt copy = db_.Prepare(
-                        "INSERT INTO turns(session_id, seq, first_frame, frame_count, payload)"
-                        " VALUES(?, ?, ?, ?, ?)");
-                    copy.BindText(1, row.id);
-                    for (int i = 0; i < 3; ++i) copy.BindInt64(i + 2, turns.ColumnInt64(i));
-                    copy.BindBlob(5, turns.ColumnBlob(3));
-                    copy.Step();
-                }
-                // The first layout kept the note and sheet in tables of their own
-                for (const char* kind : {"note", "patient"}) {
-                    if (!TableExists(session, kind)) continue;
-                    Db::Stmt text = session.Prepare(
-                        (std::string("SELECT payload FROM ") + kind + " WHERE seq = 0").c_str());
-                    if (!text.Step()) continue;
-                    Db::Stmt copy = db_.Prepare(
-                        "INSERT INTO documents(session_id, kind, language, payload)"
-                        " VALUES(?, ?, 'en', ?)");
-                    copy.BindText(1, row.id);
-                    copy.BindText(2, kind);
-                    copy.BindBlob(3, text.ColumnBlob(0));
-                    copy.Step();
-                }
-            }
-            txn.Commit();
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: session %s not imported (%s)\n", row.id.c_str(),
-                         e.what());
-            all_imported = false;
-            continue;
-        }
-        std::error_code ignored;
-        for (const char* suffix : {".key", ".db", ".db-wal", ".db-shm"}) {
-            std::filesystem::remove(base.string() + suffix, ignored);
-        }
-    }
-
-    if (all_imported) {
-        std::error_code ignored;
-        for (const char* suffix : {"", "-wal", "-shm"}) {
-            std::filesystem::remove(catalog_path.string() + suffix, ignored);
-        }
-        std::filesystem::remove(root / "sessions", ignored);  // only when empty
     }
 }
 

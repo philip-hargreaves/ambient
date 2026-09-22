@@ -74,9 +74,6 @@ struct CountingDiariser : diar::IDiariser {
         return {};
     }
 
-    void AccrueDoctor(std::span<const float>, const std::vector<diar::LabelledSlice>&,
-                      int) override {}
-
     std::vector<double> AnchorSimilarities(std::span<const float>,
                                            const std::vector<diar::LabelledSlice>&,
                                            int cluster_count) override {

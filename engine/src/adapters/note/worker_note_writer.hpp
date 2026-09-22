@@ -35,10 +35,6 @@ class WorkerNoteWriter : public INoteWriter, public INoteLane {
         return true;
     }
 
-    bool WantsTranscriberReleased() const override {
-        return false;
-    }
-
     std::string Write(const std::vector<asr::Turn>& transcript, const NoteOptions& options,
                       const Progress& progress) override;
 

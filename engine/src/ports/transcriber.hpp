@@ -14,6 +14,17 @@ struct Turn {
     std::string text;
 };
 
+// The text of a decode: its chunks joined
+inline std::string JoinedText(const std::vector<Turn>& chunks) {
+    std::string text;
+    for (const auto& chunk : chunks) {
+        if (chunk.text.empty()) continue;
+        if (!text.empty()) text += ' ';
+        text += chunk.text;
+    }
+    return text;
+}
+
 // Receives finalised turns, in order, possibly on the transcriber's thread
 class ITurnSink {
    public:
@@ -35,20 +46,16 @@ class ITranscriber {
 
     virtual void Finish() = 0;
 
-    // Decode one clip off the live turn stream, safe mid-session; empty when
-    // unsupported (a re-split then keeps the original turn)
-    virtual std::string DecodeClip(std::span<const float>, std::uint64_t) {
+    // Decode one clip off the live turn stream, safe mid-session, as Whisper's
+    // chunks with absolute frames; empty when unsupported (a re-split then
+    // keeps the original turn)
+    virtual std::vector<Turn> DecodeClipChunks(std::span<const float>, std::uint64_t) {
         return {};
     }
 
-    // The same decode as chunks with absolute frames; one chunk by default
-    virtual std::vector<Turn> DecodeClipChunks(std::span<const float> frames,
-                                               std::uint64_t first_frame) {
-        Turn turn;
-        turn.first_frame = first_frame;
-        turn.frame_count = frames.size();
-        turn.text = DecodeClip(frames, first_frame);
-        return {turn};
+    // The same decode as one text
+    std::string DecodeClip(std::span<const float> frames, std::uint64_t first_frame) {
+        return JoinedText(DecodeClipChunks(frames, first_frame));
     }
 
     // Chunk edges (absolute frames, inside the clip) from every decode since
@@ -57,9 +64,6 @@ class ITranscriber {
     virtual std::vector<std::uint64_t> TakeClipCuts() {
         return {};
     }
-
-    // Free the model's device memory; the next use reloads it
-    virtual void Release() {}
 };
 
 }  // namespace ambient::asr

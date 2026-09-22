@@ -70,7 +70,7 @@ TEST(DiariserPipeline, ADoctorPatientConsultDiarisesToTwoSpeakers) {
 }
 
 // The voiceprints moved off the Diarise path (they now overlap the GPU turn
-// decode) and AccrueDoctor reuses them: the numbers must be the ones the
+// decode) and DoctorVoiceprint reuses them: the numbers must be the ones the
 // reference method produces, and the reuse must actually skip the embed
 TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReusesThem) {
     if (!std::filesystem::exists(kWav)) {
@@ -88,7 +88,7 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
     // Session one teaches the anchor from cluster 0
     const auto first = diariser.Diarise(audio);
     ASSERT_EQ(first.cluster_count, 2);
-    diariser.AccrueDoctor(audio, first.slices, 0);
+    diariser.AccrueVoiceprint(diariser.DoctorVoiceprint(audio, first.slices, 0));
 
     // Session two: similarities equal the reference voiceprint against the anchor
     const auto second = diariser.Diarise(audio);
@@ -110,7 +110,7 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
 
     // Accrue reuses the voiceprint just computed: no second embed of the cluster
     const auto start = std::chrono::steady_clock::now();
-    diariser.AccrueDoctor(audio, second.slices, 0);
+    diariser.AccrueVoiceprint(diariser.DoctorVoiceprint(audio, second.slices, 0));
     const auto took = std::chrono::duration<double>(std::chrono::steady_clock::now() - start);
     EXPECT_LT(took.count(), 0.05) << "a re-embed of the cluster takes hundreds of ms";
     std::error_code ec;

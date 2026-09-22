@@ -31,32 +31,6 @@ Turn Labelled(std::uint64_t first_frame, std::size_t count) {
     return turn;
 }
 
-TEST(WhisperWorker, ClipsBurstOnTheirOwnDecoderWhenGiven) {
-    std::atomic<int> live_calls{0};
-    std::atomic<int> clip_calls{0};
-    RecordingSink sink;
-    WhisperTranscriber transcriber(
-        [&live_calls](std::span<const float> f, std::uint64_t first) {
-            ++live_calls;
-            return std::vector<Turn>{Labelled(first, f.size())};
-        },
-        [&clip_calls](std::span<const float>, std::uint64_t) {
-            ++clip_calls;
-            Turn turn;
-            turn.text = "from the burst device";
-            return std::vector<Turn>{turn};
-        });
-    transcriber.Begin(sink);
-
-    std::vector<float> frames(1600);
-    transcriber.Submit(frames, 0);
-    transcriber.Finish();
-    EXPECT_EQ(transcriber.DecodeClip(frames, 0), "from the burst device");
-
-    EXPECT_EQ(live_calls.load(), 1) << "windows stay on the live device";
-    EXPECT_EQ(clip_calls.load(), 1) << "clips go to the burst device";
-}
-
 TEST(WhisperWorker, ClipSegmentEdgesInsideTheClipAreTakenAsCuts) {
     // Two segments in a 3 s clip starting at frame 16000: the interior edge at
     // 1.2 s (and the segment end short of the clip end) are cuts; the clip's own
@@ -132,43 +106,6 @@ TEST(WhisperWorker, DecodesAccumulateIntoTheMetrics) {
     const auto s = registry.Take();
     EXPECT_EQ(s.decoded_audio_seconds, 2.0);
     EXPECT_GE(s.decode_busy_seconds, 0.0);
-}
-
-TEST(WhisperWorker, ReleaseFreesAndTheNextSubmitReloads) {
-    std::atomic<int> loads{0};
-    RecordingSink sink;
-    WhisperTranscriber transcriber(DecodeLoader([&loads] {
-        ++loads;
-        return DecodeFn([](std::span<const float> f, std::uint64_t first) {
-            return std::vector<Turn>{Labelled(first, f.size())};
-        });
-    }));
-    transcriber.Begin(sink);
-
-    const std::vector<float> window(10);
-    transcriber.Submit(window, 0);
-    transcriber.Finish();
-    EXPECT_EQ(loads.load(), 1);
-
-    transcriber.Release();
-    transcriber.Submit(window, 10);
-    transcriber.Finish();
-    EXPECT_EQ(loads.load(), 2) << "a released pipeline reloads on demand";
-    EXPECT_EQ(sink.turns.size(), 2u);
-}
-
-TEST(WhisperWorker, ReleaseIsANoOpForAnInjectedDecode) {
-    RecordingSink sink;
-    WhisperTranscriber transcriber([](std::span<const float> f, std::uint64_t first) {
-        return std::vector<Turn>{Labelled(first, f.size())};
-    });
-    transcriber.Begin(sink);
-    transcriber.Release();
-
-    const std::vector<float> window(10);
-    transcriber.Submit(window, 0);
-    transcriber.Finish();
-    EXPECT_EQ(sink.turns.size(), 1u);
 }
 
 TEST(WhisperWorker, FinishWaitsForTheLastDecode) {

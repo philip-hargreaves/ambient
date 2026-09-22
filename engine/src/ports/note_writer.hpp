@@ -54,12 +54,6 @@ class INoteWriter {
     // path prefills only the tail; never blocks capture
     virtual void Prefill(const std::vector<asr::Turn>&, const NoteOptions&) {}
 
-    // An in-process writer needs the transcriber off the GPU first
-    // (measured KV corruption); an out-of-process writer does not
-    virtual bool WantsTranscriberReleased() const {
-        return true;
-    }
-
     virtual void Cancel() {}
 };
 

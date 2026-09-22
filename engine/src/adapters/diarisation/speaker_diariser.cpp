@@ -222,11 +222,6 @@ std::vector<float> SpeakerDiariser::DoctorVoiceprint(std::span<const float> audi
                : ClusterVoiceprint(embedder_, audio, slices, doctor_cluster);
 }
 
-void SpeakerDiariser::AccrueDoctor(std::span<const float> audio,
-                                   const std::vector<LabelledSlice>& slices, int doctor_cluster) {
-    AccrueVoiceprint(DoctorVoiceprint(audio, slices, doctor_cluster));
-}
-
 std::vector<float> SpeakerDiariser::EmbedVoice(std::span<const float> audio) {
     if (audio.size() < kVoiceprintMinFrames) return {};
     // One long exposure, capped as a consultation's voiceprint is

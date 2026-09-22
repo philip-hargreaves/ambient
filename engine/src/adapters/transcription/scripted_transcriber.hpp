@@ -28,9 +28,14 @@ class ScriptedTranscriber : public ITranscriber {
 
     void Finish() override {}
 
-    std::string DecodeClip(std::span<const float> frames, std::uint64_t first_frame) override {
-        return "re-decoded " + std::to_string(frames.size()) + " frames at " +
-               std::to_string(first_frame);
+    std::vector<Turn> DecodeClipChunks(std::span<const float> frames,
+                                       std::uint64_t first_frame) override {
+        Turn turn;
+        turn.first_frame = first_frame;
+        turn.frame_count = frames.size();
+        turn.text = "re-decoded " + std::to_string(frames.size()) + " frames at " +
+                    std::to_string(first_frame);
+        return {turn};
     }
 
     // Clip cuts a test scripts, handed over once like the worker's
