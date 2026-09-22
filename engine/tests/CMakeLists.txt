@@ -26,6 +26,7 @@ add_executable(engine_tests
     core/diarisation/resplit_test.cpp
     core/diarisation/frontier_test.cpp
     core/diarisation/diar_regions_test.cpp
+    core/diarisation/embeddings_test.cpp
     ports/guidance_port_test.cpp
     core/guidance/guidance_query_test.cpp
     core/guidance/guidance_rank_test.cpp

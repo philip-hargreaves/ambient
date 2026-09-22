@@ -12,6 +12,7 @@
 #include "adapters/diarisation/segmenter.hpp"
 #include "adapters/diarisation/speaker_embedder.hpp"
 #include "adapters/vad/silero_vad.hpp"
+#include "core/diarisation/embeddings.hpp"
 #include "ports/diariser.hpp"
 
 namespace ambient::diar {
@@ -72,7 +73,7 @@ class SpeakerDiariser : public IDiariser {
                                  std::uint64_t end) override {
         const auto it = chunk_embeddings_.find({first, end});
         if (it != chunk_embeddings_.end()) return it->second;
-        if (end <= first || end - first < 400 || end > audio.size()) return {};
+        if (end <= first || end - first < kEmbedMinFrames || end > audio.size()) return {};
         return embedder_.Embed(audio.subspan(first, end - first));
     }
 

@@ -7,25 +7,11 @@
 #include "adapters/diarisation/speaker_clustering.hpp"
 #include "core/diarisation/clip_cuts.hpp"
 #include "core/diarisation/diar_regions.hpp"
+#include "core/diarisation/embeddings.hpp"
 #include "core/diarisation/role_naming.hpp"
 #include "core/diarisation/slice_refinement.hpp"
 
 namespace ambient::diar {
-
-namespace {
-
-std::vector<float> Gather(std::span<const float> audio, const std::vector<Region>& ranges) {
-    std::vector<float> clip;
-    for (const Region& range : ranges) {
-        const auto first = static_cast<std::size_t>(range.first_frame);
-        const auto end =
-            std::min<std::size_t>(static_cast<std::size_t>(range.end_frame), audio.size());
-        if (end > first) clip.insert(clip.end(), audio.begin() + first, audio.begin() + end);
-    }
-    return clip;
-}
-
-}  // namespace
 
 SpeakerDiariser::SpeakerDiariser(const models::ModelStore& store, models::OvRuntime& runtime,
                                  AnchorStore& anchors)
@@ -62,14 +48,7 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
         chunk_embeddings_ = std::move(capture.chunk_embeddings);
     } else {
         vad_.Reset();
-        std::vector<float> hop(audio::kVadHopFrames, 0.0f);
-        for (std::size_t offset = 0; offset < audio.size(); offset += audio::kVadHopFrames) {
-            const std::size_t have =
-                std::min<std::size_t>(audio::kVadHopFrames, audio.size() - offset);
-            std::copy_n(audio.begin() + static_cast<std::ptrdiff_t>(offset), have, hop.begin());
-            std::fill(hop.begin() + static_cast<std::ptrdiff_t>(have), hop.end(), 0.0f);
-            probabilities.push_back(vad_.SpeechProbability(hop));
-        }
+        AppendVadHops(vad_, audio, probabilities, true);
         seg = segmenter_.Run(audio);
     }
 
@@ -95,7 +74,7 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
             const auto ranges = EmbeddingRanges(slice, seg.overlap_spans);
             if (ranges.empty()) continue;
             const auto clip = Gather(audio, ranges);
-            if (clip.size() < 400) continue;  // below one fbank frame
+            if (clip.size() < kEmbedMinFrames) continue;
             embeddings.push_back(embedder_.Embed(clip));
             ++result.timing.embed_misses;
         }
@@ -112,37 +91,11 @@ DiariseResult SpeakerDiariser::Diarise(std::span<const float> audio) {
         out.push_back({kept[i].first_frame, kept[i].end_frame, clusters.labels[i]});
     }
 
-    // A long-enough overlap span inside a slice becomes a second turn on
-    // the best non-primary centroid
-    if (clusters.count >= 2) {
-        for (std::size_t i = 0; i < kept.size(); ++i) {
-            for (const Region& span : seg.overlap_spans) {
-                const auto first = std::max(span.first_frame, kept[i].first_frame);
-                const auto end = std::min(span.end_frame, kept[i].end_frame);
-                if (end <= first || end - first < kOverlapTurnMinFrames) continue;
-                const auto clip = Gather(audio, {{first, end}});
-                const auto embedding = embedder_.Embed(clip);
-
-                const int primary = clusters.labels[i];
-                int second = -1;
-                double best = -1e18;
-                for (int c = 0; c < clusters.count; ++c) {
-                    if (c == primary) continue;
-                    double dot = 0.0;
-                    for (std::size_t d = 0; d < embedding.size(); ++d) {
-                        dot += static_cast<double>(embedding[d]) *
-                               clusters.centroids[static_cast<std::size_t>(c)][d];
-                    }
-                    if (dot > best) {
-                        best = dot;
-                        second = c;
-                    }
-                }
-                if (second >= 0) out.push_back({first, end, second});
-            }
-        }
-    }
-
+    const auto overlaps = OverlapTurns(kept, clusters.labels, clusters.centroids, seg.overlap_spans,
+                                       [&](std::uint64_t first, std::uint64_t end) {
+                                           return embedder_.Embed(Gather(audio, {{first, end}}));
+                                       });
+    out.insert(out.end(), overlaps.begin(), overlaps.end());
     result.timing.overlap_s = lap();
     std::sort(out.begin(), out.end(), [](const LabelledSlice& a, const LabelledSlice& b) {
         return a.first_frame < b.first_frame;
@@ -166,11 +119,7 @@ std::vector<double> SpeakerDiariser::AnchorSimilarities(std::span<const float> a
     for (int c = 0; c < cluster_count; ++c) {
         auto voiceprint = ClusterVoiceprint(embedder_, audio, slices, c);
         if (voiceprint.empty()) continue;
-        double dot = 0.0;
-        for (std::size_t d = 0; d < voiceprint.size(); ++d) {
-            dot += static_cast<double>(voiceprint[d]) * (*anchor)[d];
-        }
-        similarity[static_cast<std::size_t>(c)] = dot;
+        similarity[static_cast<std::size_t>(c)] = Dot(voiceprint, *anchor);
         voiceprints_[static_cast<std::size_t>(c)] = std::move(voiceprint);
     }
     return similarity;
@@ -182,13 +131,7 @@ std::vector<asr::Turn> SpeakerDiariser::SpeculativeTranscript() {
     std::vector<double> similarity;
     const auto anchor = anchors_.Anchor();
     if (anchor && spec.centroids.size() == static_cast<std::size_t>(spec.cluster_count)) {
-        for (const auto& centroid : spec.centroids) {
-            double dot = 0.0;
-            for (std::size_t d = 0; d < centroid.size() && d < anchor->size(); ++d) {
-                dot += static_cast<double>(centroid[d]) * (*anchor)[d];
-            }
-            similarity.push_back(dot);
-        }
+        for (const auto& centroid : spec.centroids) similarity.push_back(Dot(centroid, *anchor));
     }
     std::vector<RoleTurn> role_turns;
     for (std::size_t i = 0; i < spec.turns.size(); ++i) {

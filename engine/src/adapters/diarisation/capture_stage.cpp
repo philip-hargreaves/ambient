@@ -10,6 +10,7 @@
 #include "adapters/diarisation/speaker_clustering.hpp"
 #include "core/diarisation/clip_cuts.hpp"
 #include "core/diarisation/diar_regions.hpp"
+#include "core/diarisation/embeddings.hpp"
 #include "core/diarisation/frontier.hpp"
 #include "core/diarisation/resplit.hpp"
 #include "core/diarisation/slice_refinement.hpp"
@@ -24,14 +25,7 @@ CaptureStage::CaptureStage(audio::SileroVad& vad, Segmenter& segmenter, SpeakerE
 
 void CaptureStage::Finish(std::span<const float> audio) {
     auto& s = state_;
-    std::vector<float> hop(audio::kVadHopFrames, 0.0f);
-    while (s.vad_probabilities.size() * audio::kVadHopFrames < audio.size()) {
-        const auto at = s.vad_probabilities.size() * audio::kVadHopFrames;
-        const auto have = std::min<std::size_t>(audio::kVadHopFrames, audio.size() - at);
-        std::copy_n(audio.begin() + static_cast<std::ptrdiff_t>(at), have, hop.begin());
-        std::fill(hop.begin() + static_cast<std::ptrdiff_t>(have), hop.end(), 0.0f);
-        s.vad_probabilities.push_back(vad_.SpeechProbability(hop));
-    }
+    AppendVadHops(vad_, audio, s.vad_probabilities, true);
     if (s.seg_done < audio.size()) {
         const auto part = segmenter_.Run(audio.subspan(s.seg_done));
         for (const auto c : part.change_points) s.seg.change_points.push_back(c + s.seg_done);
@@ -47,15 +41,8 @@ const std::vector<float>& CaptureStage::EmbedSlice(std::span<const float> audio,
                                                    const Region& slice) {
     auto& slot = state_.embeddings[{slice.first_frame, slice.end_frame}];
     if (slot.empty()) {
-        const auto ranges = EmbeddingRanges(slice, state_.seg.overlap_spans);
-        std::vector<float> clip;
-        for (const auto& range : ranges) {
-            const auto first = static_cast<std::size_t>(range.first_frame);
-            const auto end =
-                std::min<std::size_t>(static_cast<std::size_t>(range.end_frame), audio.size());
-            if (end > first) clip.insert(clip.end(), audio.begin() + first, audio.begin() + end);
-        }
-        if (clip.size() >= 400) slot = embedder_.Embed(clip);  // below one fbank frame
+        const auto clip = Gather(audio, EmbeddingRanges(slice, state_.seg.overlap_spans));
+        if (clip.size() >= kEmbedMinFrames) slot = embedder_.Embed(clip);
     }
     return slot;
 }
@@ -64,11 +51,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     auto& s = state_;
 
     // Whole hops only; finalise pads the final partial one
-    while ((s.vad_probabilities.size() + 1) * audio::kVadHopFrames <= audio.size()) {
-        const auto at = s.vad_probabilities.size() * audio::kVadHopFrames;
-        s.vad_probabilities.push_back(
-            vad_.SpeechProbability(audio.subspan(at, audio::kVadHopFrames)));
-    }
+    AppendVadHops(vad_, audio, s.vad_probabilities, false);
 
     while (s.seg_done + kSegWindowFrames <= audio.size()) {
         const auto part = segmenter_.Run(audio.subspan(s.seg_done, kSegWindowFrames));
@@ -124,37 +107,18 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     for (std::size_t i = 0; i < kept.size(); ++i) {
         labelled.push_back({kept[i].first_frame, kept[i].end_frame, clusters.labels[i]});
     }
-    if (clusters.count >= 2) {
-        for (std::size_t i = 0; i < kept.size(); ++i) {
-            for (const Region& span : s.seg.overlap_spans) {
-                const auto first = std::max(span.first_frame, kept[i].first_frame);
-                const auto end = std::min(span.end_frame, kept[i].end_frame);
-                if (end <= first || end - first < kOverlapTurnMinFrames) continue;
-                // Memoised separately from slice embeddings (same span, raw
-                // audio); this runs every tick over all settled overlaps
-                auto& embedding = overlap_cache_[{first, end}];
-                if (embedding.empty()) {
-                    embedding = embedder_.Embed(
-                        audio.subspan(first, static_cast<std::size_t>(end - first)));
-                }
-                const int primary = clusters.labels[i];
-                int second = -1;
-                double best = -1e18;
-                for (int c = 0; c < clusters.count; ++c) {
-                    if (c == primary) continue;
-                    double dot = 0.0;
-                    for (std::size_t d = 0; d < embedding.size(); ++d) {
-                        dot += static_cast<double>(embedding[d]) *
-                               clusters.centroids[static_cast<std::size_t>(c)][d];
-                    }
-                    if (dot > best) {
-                        best = dot;
-                        second = c;
-                    }
-                }
-                if (second >= 0) labelled.push_back({first, end, second});
-            }
-        }
+    // Overlap embeddings are memoised separately from slice embeddings (same
+    // span, raw audio): this runs every tick over all settled overlaps
+    const auto overlaps =
+        OverlapTurns(kept, clusters.labels, clusters.centroids, s.seg.overlap_spans,
+                     [&](std::uint64_t first, std::uint64_t end) {
+                         auto& embedding = overlap_cache_[{first, end}];
+                         if (embedding.empty())
+                             embedding = embedder_.Embed(Gather(audio, {{first, end}}));
+                         return embedding;
+                     });
+    if (!overlaps.empty()) {
+        labelled.insert(labelled.end(), overlaps.begin(), overlaps.end());
         std::sort(labelled.begin(), labelled.end(),
                   [](const LabelledSlice& a, const LabelledSlice& b) {
                       return a.first_frame < b.first_frame;

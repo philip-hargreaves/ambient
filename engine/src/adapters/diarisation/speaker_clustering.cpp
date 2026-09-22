@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 
+#include "core/diarisation/embeddings.hpp"
 #include "fastcluster.h"
 
 namespace ambient::diar {
@@ -82,10 +83,7 @@ ClusterResult ClusterSpeakers(const std::vector<std::vector<float>>& embeddings,
     std::size_t next = 0;
     for (std::size_t i = 0; i < m; ++i) {
         for (std::size_t j = i + 1; j < m; ++j) {
-            double dot = 0.0;
-            for (std::size_t d = 0; d < dims; ++d) {
-                dot += static_cast<double>(normalised[fit[i]][d]) * normalised[fit[j]][d];
-            }
+            const double dot = Dot(normalised[fit[i]], normalised[fit[j]]);
             dist[i][j] = dist[j][i] = 1.0 - dot;
             condensed[next++] = 1.0 - dot;
         }
@@ -139,11 +137,7 @@ ClusterResult ClusterSpeakers(const std::vector<std::vector<float>>& embeddings,
         double best_dot = -1e18;
         int best_c = 0;
         for (int c = 0; c < k; ++c) {
-            double dot = 0.0;
-            for (std::size_t d = 0; d < dims; ++d) {
-                dot += static_cast<double>(normalised[i][d]) *
-                       result.centroids[static_cast<std::size_t>(c)][d];
-            }
+            const double dot = Dot(normalised[i], result.centroids[static_cast<std::size_t>(c)]);
             if (dot > best_dot) {
                 best_dot = dot;
                 best_c = c;
