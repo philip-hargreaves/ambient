@@ -9,7 +9,7 @@
 
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/guidance/embedder.hpp"
-#include "core/guidance_rank.hpp"
+#include "core/guidance/guidance_rank.hpp"
 #include "ports/guidance_retriever.hpp"
 
 namespace ambient::guidance {

@@ -5,7 +5,7 @@
 #include <utility>
 
 #include "adapters/models/model_store.hpp"
-#include "core/env_flag.hpp"
+#include "core/common/env_flag.hpp"
 
 namespace ambient::note {
 

@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "core/page_text.hpp"
+#include "core/guidance/page_text.hpp"
 
 namespace ambient::guidance {
 

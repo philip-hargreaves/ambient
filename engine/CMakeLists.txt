@@ -223,7 +223,7 @@ target_link_libraries(ambient_audio
     PUBLIC ambient_core
     PRIVATE ambient_warnings ole32 advapi32)
 
-add_executable(ambient_engine src/main.cpp)
+add_executable(ambient_engine src/engine_main.cpp)
 target_link_libraries(ambient_engine PRIVATE
     ambient_ipc ambient_audio ambient_diarisation ambient_guidance ambient_note ambient_storage
     ambient_transcription ambient_translate ambient_vad ambient_warnings ole32 shell32)
@@ -240,7 +240,7 @@ add_dependencies(ambient_engine ambient_note_host)
 # Reads PDFs in a process of its own, so a parser fault costs one document
 add_executable(ambient_ingest_host src/ingest_host_main.cpp)
 target_link_libraries(ambient_ingest_host PRIVATE
-    ambient_core pdfium nlohmann_json::nlohmann_json wer ambient_warnings)
+    ambient_core pdfium nlohmann_json::nlohmann_json wer ambient_warnings)  # wer: Windows Error Reporting, for WerAddExcludedApplication
 add_custom_command(TARGET ambient_ingest_host POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_pdfium_root}/bin/pdfium.dll"
             "$<TARGET_FILE_DIR:ambient_ingest_host>"

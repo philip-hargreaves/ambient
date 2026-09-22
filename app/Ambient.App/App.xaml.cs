@@ -1,11 +1,26 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.Storage;
-using Ambient.App.Core;
+using Ambient.App.Core.Features.Appraisal;
+using Ambient.App.Core.Features.Consultation;
+using Ambient.App.Core.Features.Demo;
+using Ambient.App.Core.Features.Documents;
+using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Features.Sessions;
+using Ambient.App.Core.Features.Settings;
 using Ambient.App.Core.Hosting;
-using Ambient.App.Core.ViewModels;
-using Ambient.App.Services;
-using Ambient.App.Views;
+using Ambient.App.Core.Ports;
+using Ambient.App.Core.Preferences;
+using Ambient.App.Core.Shell;
+using Ambient.App.Features.Appraisal;
+using Ambient.App.Features.Consultation;
+using Ambient.App.Features.Demo;
+using Ambient.App.Features.Documents;
+using Ambient.App.Features.Guidance;
+using Ambient.App.Features.Sessions;
+using Ambient.App.Features.Settings;
+using Ambient.App.Platform;
+using Ambient.App.Shell;
 using Ambient.Client;
 
 namespace Ambient.App;
@@ -96,7 +111,7 @@ public partial class App : Application
         services.AddSingleton<GuidanceViewModel>();
         services.AddSingleton<StatusBarViewModel>();
         services.AddSingleton<MicViewModel>();
-        services.AddSingleton(sp => new Core.Demo.DemoMode(
+        services.AddSingleton(sp => new DemoMode(
             sp.GetRequiredService<AppPreferences>(), Path.Combine(localState, "masters.json")));
         services.AddSingleton<ConsultationViewModel>();
         services.AddSingleton<SessionControlsViewModel>();

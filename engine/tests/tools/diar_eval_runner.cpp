@@ -23,10 +23,10 @@
 #include "adapters/diarisation/speaker_diariser.hpp"
 #include "adapters/transcription/whisper_transcriber.hpp"
 #include "adapters/vad/silero_vad.hpp"
-#include "core/endpointer.hpp"
-#include "core/per_turn.hpp"
-#include "core/role_naming.hpp"
-#include "core/turn_reconcile.hpp"
+#include "core/audio/endpointer.hpp"
+#include "core/diarisation/per_turn.hpp"
+#include "core/diarisation/role_naming.hpp"
+#include "core/diarisation/turn_reconcile.hpp"
 
 namespace {
 

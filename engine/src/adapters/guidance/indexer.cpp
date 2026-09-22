@@ -5,7 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
-#include "core/guidance_query.hpp"
+#include "core/guidance/guidance_query.hpp"
 
 namespace ambient::guidance {
 namespace {

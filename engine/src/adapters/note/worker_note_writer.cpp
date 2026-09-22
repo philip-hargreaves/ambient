@@ -17,10 +17,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include "adapters/host/gpu_lease.hpp"
-#include "adapters/host/power_throttling.hpp"
 #include "adapters/ipc/framing.hpp"
 #include "adapters/models/model_store.hpp"
+#include "adapters/system/gpu_lease.hpp"
+#include "adapters/system/power_throttling.hpp"
 
 namespace ambient::note {
 
@@ -140,7 +140,7 @@ struct WorkerNoteWriter::Impl {
                                     sizeof(limits));
             AssignProcessToJobObject(job, info.hProcess);
         }
-        host::DisableThrottling(info.hProcess);  // the host repeats this on itself
+        system::DisableThrottling(info.hProcess);  // the host repeats this on itself
         ResumeThread(info.hThread);
         CloseHandle(info.hThread);
         process = info.hProcess;
@@ -394,7 +394,7 @@ struct WorkerNoteWriter::Impl {
     // True, and the lane marked failed, once Whisper's bounded lease wait
     // has found the host wedged
     bool Wedged() {
-        if (!host::GpuLease::Global().Broken()) return false;
+        if (!system::GpuLease::Global().Broken()) return false;
         Transition([](NoteModelState& s) {
             if (s.phase == NoteModelState::Phase::kFailed && s.detail == kWedged) return;
             s.phase = NoteModelState::Phase::kFailed;

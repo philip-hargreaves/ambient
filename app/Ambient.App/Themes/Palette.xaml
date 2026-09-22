@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        The light-theme primitives the semantic layer in Tokens.xaml is built on,
+        and the two brushes a view uses directly. Everything else comes from WinUI.
+    -->
+    <Color x:Key="BrandNhs">#FF005EB8</Color>
+    <Color x:Key="ColorAccent">#FF0067C0</Color>
+    <Color x:Key="ColorAccentSoft">#FFEEF5FC</Color>
+    <Color x:Key="ColorAccentBorder">#FFD4E6F7</Color>
+    <Color x:Key="SpeakerDoctor">#FF0067C0</Color>
+    <Color x:Key="SpeakerPatient">#FF7A4DDB</Color>
+    <Color x:Key="StatusSecure">#FF0F7B3F</Color>
+    <Color x:Key="StatusSecureSoft">#FFE8F4EC</Color>
+    <Color x:Key="StatusSecureBorder">#FFCFE6D8</Color>
+    <Color x:Key="StatusCaution">#FFB54708</Color>
+    <Color x:Key="StatusCautionSoft">#FFFDF1E7</Color>
+
+    <SolidColorBrush x:Key="ColorAccentBrush" Color="{StaticResource ColorAccent}" />
+    <SolidColorBrush x:Key="WhiteBrush" Color="#FFFFFFFF" />
+
+</ResourceDictionary>

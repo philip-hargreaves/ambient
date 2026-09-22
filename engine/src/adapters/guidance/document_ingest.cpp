@@ -21,8 +21,8 @@
 #include <shobjidl_core.h>
 // clang-format on
 
-#include "core/document_units.hpp"
-#include "core/patient_screen.hpp"
+#include "core/guidance/document_units.hpp"
+#include "core/guidance/patient_screen.hpp"
 #include "ports/store_error.hpp"
 
 namespace ambient::guidance {

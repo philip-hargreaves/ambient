@@ -1,0 +1,25 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Ports;
+
+namespace Ambient.App.Core.Shell;
+
+/// <summary>Window-level commands: the routes between the app's surfaces.</summary>
+public sealed partial class ShellViewModel : ObservableObject
+{
+    private readonly INavigationService _navigation;
+
+    public ShellViewModel(INavigationService navigation) => _navigation = navigation;
+
+    [RelayCommand]
+    private void ShowSettings() => _navigation.NavigateTo("settings");
+
+    [RelayCommand]
+    private void ShowSessions() => _navigation.NavigateTo("sessions");
+
+    [RelayCommand]
+    private void ShowAppraisals() => _navigation.NavigateTo("appraisals");
+
+    [RelayCommand]
+    private void GoBack() => _navigation.GoBack();
+}

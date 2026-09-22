@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "core/summary_scrub.hpp"
+#include "core/note/summary_scrub.hpp"
 #include "ports/session_store.hpp"
 
 namespace ambient::demo {
@@ -115,7 +115,7 @@ inline std::size_t SeedSampleYear(store::ISessionStore& sessions,
                               {.text = sample.note, .style = "prose", .detail = "standard"});
         sessions.SaveDocument(id, store::DocumentKind::kPatient, {.text = sample.patient});
         sessions.SaveDocument(id, store::DocumentKind::kSummary,
-                              {.text = core::ScrubSummary(sample.summary)});
+                              {.text = note::ScrubSummary(sample.summary)});
         const json answers{
             {"happened", sample.happened}, {"learned", sample.learned}, {"next", sample.next}};
         sessions.SaveDocument(id, store::DocumentKind::kReflection, {.text = answers.dump()});

@@ -8,13 +8,13 @@
 #include <string>
 
 #include "adapters/diarisation/speaker_clustering.hpp"
-#include "core/clip_cuts.hpp"
-#include "core/diar_capture.hpp"
-#include "core/diar_regions.hpp"
-#include "core/env_flag.hpp"
-#include "core/per_turn.hpp"
-#include "core/resplit.hpp"
-#include "core/slice_refinement.hpp"
+#include "core/common/env_flag.hpp"
+#include "core/diarisation/clip_cuts.hpp"
+#include "core/diarisation/diar_capture.hpp"
+#include "core/diarisation/diar_regions.hpp"
+#include "core/diarisation/per_turn.hpp"
+#include "core/diarisation/resplit.hpp"
+#include "core/diarisation/slice_refinement.hpp"
 
 namespace ambient::diar {
 

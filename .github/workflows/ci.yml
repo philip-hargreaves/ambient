@@ -41,10 +41,12 @@ jobs:
       - name: Build
         run: dotnet build ambient.slnx
       # This job has no engine binary; the contract job runs what needs one.
-      - name: Test
-        run: dotnet test app/Ambient.Client.Tests --no-build --blame-hang-timeout 120s
+      - name: Test client
+        run: dotnet test app/Ambient.Client.Tests --no-build --filter "Requires!=Engine" --blame-hang-timeout 120s
       - name: Test app view models
-        run: dotnet test app/Ambient.App.Tests --no-build --filter "Requires!=Engine" --blame-hang-timeout 120s
+        run: dotnet test app/Ambient.App.Tests --no-build --filter "Requires!=Engine&Requires!=EngineSlow&Requires!=CrashBattery" --blame-hang-timeout 120s
+      - name: Test model fetch tool
+        run: dotnet test tools/Ambient.FetchModels.Tests --no-build --blame-hang-timeout 120s
 
   contract:
     runs-on: windows-latest
@@ -77,7 +79,7 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation `
             -DevCmdArguments '-arch=x64 -host_arch=x64'
           cmake --workflow --preset ci-dev
-          dotnet test app/Ambient.Contract.Tests --blame-hang-timeout 120s
+          dotnet test app/Ambient.Client.Tests --filter "Requires=Engine" --blame-hang-timeout 120s
           dotnet test app/Ambient.App.Tests --filter "Requires=Engine" --blame-hang-timeout 120s
 
   build:

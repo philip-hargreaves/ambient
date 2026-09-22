@@ -12,11 +12,11 @@
 
 #include "adapters/demo/sample_year.hpp"
 #include "adapters/guidance/guidance_record.hpp"
-#include "adapters/host/power_throttling.hpp"
 #include "adapters/models/ov_runtime.hpp"
+#include "adapters/system/power_throttling.hpp"
 #include "adapters/translate/translate_lane.hpp"
-#include "core/summary_scrub.hpp"
-#include "core/version.hpp"
+#include "core/common/version.hpp"
+#include "core/note/summary_scrub.hpp"
 #include "ports/store_error.hpp"
 
 namespace ambient::ipc {
@@ -285,7 +285,7 @@ std::variant<json, Error> HandleReflectionGet(ambient::store::ISessionStore& ses
         // Scrubbed on read: stored text may predate the scrub or be hand-edited
         const auto summary = sessions.ReadDocument(session, DocumentKind::kSummary);
         if (!summary.text.empty()) {
-            result["summary"] = {{"text", ambient::core::ScrubSummary(summary.text)},
+            result["summary"] = {{"text", ambient::note::ScrubSummary(summary.text)},
                                  {"generatedAt", NullWhenEmpty(summary.generated_at)},
                                  {"editedAt", NullWhenEmpty(summary.edited_at)}};
         }
@@ -322,7 +322,7 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
         if (params.contains("summary")) {
             sessions.EditDocument(
                 session, DocumentKind::kSummary,
-                ambient::core::ScrubSummary(params["summary"].get<std::string>()));
+                ambient::note::ScrubSummary(params["summary"].get<std::string>()));
         }
         const auto stored = sessions.ReadDocument(session, DocumentKind::kReflection);
         json answers = AnswersFrom(stored.text);
@@ -372,7 +372,7 @@ json HandleReflectionList(ambient::store::ISessionStore& sessions) {
                             {"happened", answers["happened"]},
                             {"learned", answers["learned"]},
                             {"next", answers["next"]},
-                            {"summary", ambient::core::ScrubSummary(summary.text)},
+                            {"summary", ambient::note::ScrubSummary(summary.text)},
                             {"createdAt", NullWhenEmpty(reflection.generated_at.empty()
                                                             ? summary.generated_at
                                                             : reflection.generated_at)},
@@ -444,7 +444,7 @@ void RegisterMethods(PipeServer& server, ambient::audio::SessionController& cont
                 {"replaySpeed", s.replay_speed},
                 {"hardware", **hardware},
                 {"openvino", std::string(ov::get_openvino_version().buildNumber)},
-                {"powerThrottling", host::Describe(host::ReadThrottling(GetCurrentProcess()))}};
+                {"powerThrottling", system::Describe(system::ReadThrottling(GetCurrentProcess()))}};
         });
     }
     server.RegisterMethod("engine/models", [&models, note_tier](const json&) {

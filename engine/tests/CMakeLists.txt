@@ -15,75 +15,76 @@ FetchContent_MakeAvailable(googletest)
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 add_executable(engine_tests
-    core/audio_ring_test.cpp
-    core/cli_args_test.cpp
-    core/clip_cuts_test.cpp
-    core/tidy_transcript_test.cpp
-    core/voice_enrolment_test.cpp
-    core/note_gate_test.cpp
-    core/resplit_test.cpp
-    core/diar_capture_test.cpp
-    core/diar_regions_test.cpp
-    core/endpointer_test.cpp
-    core/guidance_port_test.cpp
-    core/guidance_query_test.cpp
-    core/guidance_rank_test.cpp
-    core/guidance_scan_test.cpp
-    core/level_meter_test.cpp
-    core/metrics_test.cpp
-    core/note_label_test.cpp
-    core/per_turn_test.cpp
-    core/role_naming_test.cpp
-    core/seg_decode_test.cpp
-    core/throughput_test.cpp
-    core/playback_test.cpp
-    core/session_controller_test.cpp
-    core/slice_refinement_test.cpp
-    core/summary_scrub_test.cpp
-    core/turn_assembly_test.cpp
-    core/turn_reconcile_test.cpp
-    core/version_test.cpp
-    adapters/anchor_store_test.cpp
-    adapters/sample_year_test.cpp
-    adapters/capture_errors_test.cpp
-    adapters/capture_timeline_test.cpp
-    adapters/chunk_cipher_test.cpp
-    adapters/deferred_load_test.cpp
-    adapters/db_test.cpp
-    adapters/fbank_test.cpp
-    adapters/framing_test.cpp
-    adapters/gpu_lease_test.cpp
-    adapters/process_scan_test.cpp
-    adapters/guidance_chunker_test.cpp
-    adapters/guidance_corpus_test.cpp
-    adapters/guidance_indexer_test.cpp
-    adapters/guidance_lane_test.cpp
-    adapters/guidance_record_test.cpp
-    adapters/guidance_retriever_test.cpp
-    adapters/document_index_test.cpp
-    adapters/document_ingest_test.cpp
-    adapters/ingest_host_test.cpp
-    core/document_units_test.cpp
-    core/page_text_test.cpp
-    core/page_clean_test.cpp
-    core/recommendation_marks_test.cpp
-    core/reference_tail_test.cpp
-    core/patient_screen_test.cpp
-    adapters/capture_devices_test.cpp
-    adapters/handlers_test.cpp
-    adapters/messages_test.cpp
-    adapters/model_store_test.cpp
-    adapters/note_lane_test.cpp
-    adapters/note_prompt_test.cpp
-    adapters/ov_smoke_test.cpp
-    adapters/pipe_security_test.cpp
-    adapters/power_throttling_test.cpp
-    adapters/scripted_transcriber_test.cpp
-    adapters/session_store_test.cpp
-    adapters/speaker_clustering_test.cpp
-    adapters/store_recovery_test.cpp
-    adapters/wav_source_test.cpp
-    adapters/whisper_worker_test.cpp)
+    core/audio/audio_ring_test.cpp
+    core/audio/buffered_sink_test.cpp
+    core/common/cli_args_test.cpp
+    core/diarisation/clip_cuts_test.cpp
+    core/diarisation/tidy_transcript_test.cpp
+    core/audio/voice_enrolment_test.cpp
+    core/note/note_gate_test.cpp
+    core/diarisation/resplit_test.cpp
+    core/diarisation/diar_capture_test.cpp
+    core/diarisation/diar_regions_test.cpp
+    core/audio/endpointer_test.cpp
+    ports/guidance_port_test.cpp
+    core/guidance/guidance_query_test.cpp
+    core/guidance/guidance_rank_test.cpp
+    core/guidance/guidance_scan_test.cpp
+    core/audio/level_meter_test.cpp
+    core/metrics/metrics_test.cpp
+    core/note/note_label_test.cpp
+    core/diarisation/per_turn_test.cpp
+    core/diarisation/role_naming_test.cpp
+    adapters/diarisation/seg_decode_test.cpp
+    core/metrics/throughput_test.cpp
+    core/audio/playback_test.cpp
+    core/audio/session_controller_test.cpp
+    core/diarisation/slice_refinement_test.cpp
+    core/note/summary_scrub_test.cpp
+    core/transcription/turn_assembly_test.cpp
+    core/diarisation/turn_reconcile_test.cpp
+    core/common/version_test.cpp
+    adapters/diarisation/anchor_store_test.cpp
+    adapters/demo/sample_year_test.cpp
+    adapters/audio/capture_errors_test.cpp
+    adapters/audio/capture_timeline_test.cpp
+    adapters/storage/chunk_cipher_test.cpp
+    adapters/models/deferred_load_test.cpp
+    adapters/storage/db_test.cpp
+    adapters/diarisation/fbank_test.cpp
+    adapters/ipc/framing_test.cpp
+    adapters/system/gpu_lease_test.cpp
+    adapters/system/process_scan_test.cpp
+    adapters/guidance/guidance_chunker_test.cpp
+    adapters/guidance/guidance_corpus_test.cpp
+    adapters/guidance/guidance_indexer_test.cpp
+    adapters/guidance/guidance_lane_test.cpp
+    adapters/guidance/guidance_record_test.cpp
+    adapters/guidance/guidance_retriever_test.cpp
+    adapters/guidance/document_index_test.cpp
+    adapters/guidance/document_ingest_test.cpp
+    adapters/guidance/ingest_host_test.cpp
+    core/guidance/document_units_test.cpp
+    core/guidance/page_text_test.cpp
+    core/guidance/page_clean_test.cpp
+    core/guidance/recommendation_marks_test.cpp
+    core/guidance/reference_tail_test.cpp
+    core/guidance/patient_screen_test.cpp
+    adapters/audio/capture_devices_test.cpp
+    adapters/ipc/handlers_test.cpp
+    adapters/ipc/messages_test.cpp
+    adapters/models/model_store_test.cpp
+    adapters/models/note_lane_test.cpp
+    adapters/note/note_prompt_test.cpp
+    adapters/models/ov_smoke_test.cpp
+    adapters/ipc/pipe_security_test.cpp
+    adapters/system/power_throttling_test.cpp
+    adapters/transcription/scripted_transcriber_test.cpp
+    adapters/storage/session_store_test.cpp
+    adapters/diarisation/speaker_clustering_test.cpp
+    adapters/storage/store_recovery_test.cpp
+    adapters/audio/wav_source_test.cpp
+    adapters/transcription/whisper_worker_test.cpp)
 target_compile_definitions(engine_tests PRIVATE
     AMBIENT_CMAKE_VERSION="${ambient_VERSION}"
     AMBIENT_FIXTURE_DIR="${ambient_SOURCE_DIR}/schema/fixtures"
@@ -93,13 +94,13 @@ target_compile_definitions(engine_tests PRIVATE
 
 # The recovery test's kill victim
 add_executable(store_crash_helper
-    adapters/store_crash_helper.cpp)
+    support/store_crash_helper.cpp)
 target_link_libraries(store_crash_helper PRIVATE ambient_storage ambient_warnings)
 add_dependencies(engine_tests store_crash_helper)
 
 # The note lane's stand-in host: the protocol without the model
 add_executable(fake_note_host
-    adapters/fake_note_host.cpp)
+    support/fake_note_host.cpp)
 target_link_libraries(fake_note_host PRIVATE ambient_ipc ambient_models ambient_warnings)
 add_dependencies(engine_tests fake_note_host)
 target_compile_definitions(engine_tests PRIVATE
@@ -108,7 +109,7 @@ target_compile_definitions(engine_tests PRIVATE
 # The ingest host's stand-in: canned pages, a chosen exit, a stall or garbage,
 # picked by the bytes it is given
 add_executable(fake_ingest_host
-    adapters/fake_ingest_host.cpp)
+    support/fake_ingest_host.cpp)
 target_link_libraries(fake_ingest_host PRIVATE ambient_warnings)
 add_dependencies(engine_tests fake_ingest_host ambient_ingest_host)
 target_compile_definitions(engine_tests PRIVATE
@@ -122,33 +123,33 @@ target_link_libraries(engine_tests PRIVATE
 # Real-microphone tests live in their own binary under the microphone label,
 # so the ci presets can exclude what a runner without audio cannot execute
 add_executable(capture_tests
-    adapters/wasapi_capture_test.cpp)
+    adapters/audio/wasapi_capture_test.cpp)
 target_link_libraries(capture_tests PRIVATE
     ambient_audio ambient_warnings GTest::gtest_main)
 
 # Same mechanism for tests needing the Intel GPU
 add_executable(gpu_tests
-    adapters/ov_device_test.cpp
-    adapters/ov_runtime_test.cpp)
+    adapters/models/ov_device_test.cpp
+    adapters/models/ov_runtime_test.cpp)
 target_link_libraries(gpu_tests PRIVATE
     ambient_models ambient_warnings openvino::genai GTest::gtest_main)
 
 # And for tests needing staged model weights
 add_executable(models_tests
-    adapters/asr_model_test.cpp
-    adapters/asr_wer_test.cpp
-    adapters/cluster_voiceprint_test.cpp
-    adapters/diariser_pipeline_test.cpp
-    adapters/embedder_model_test.cpp
-    adapters/fbank_parity_test.cpp
-    adapters/guidance_embedder_test.cpp
-    adapters/note_writer_test.cpp
-    adapters/seg_model_test.cpp
-    adapters/silero_vad_test.cpp
-    adapters/speaker_embedder_test.cpp
-    adapters/translate_test.cpp
-    adapters/whisper_real_test.cpp
-    adapters/worker_note_writer_test.cpp)
+    adapters/models/asr_model_test.cpp
+    adapters/models/asr_wer_test.cpp
+    adapters/diarisation/cluster_voiceprint_test.cpp
+    adapters/diarisation/diariser_pipeline_test.cpp
+    adapters/models/embedder_model_test.cpp
+    adapters/diarisation/fbank_parity_test.cpp
+    adapters/guidance/guidance_embedder_test.cpp
+    adapters/models/note_writer_test.cpp
+    adapters/diarisation/seg_model_test.cpp
+    adapters/vad/silero_vad_test.cpp
+    adapters/diarisation/speaker_embedder_test.cpp
+    adapters/models/translate_test.cpp
+    adapters/models/whisper_real_test.cpp
+    adapters/models/worker_note_writer_test.cpp)
 target_compile_definitions(models_tests PRIVATE
     AMBIENT_MODELS_DIR="${ambient_SOURCE_DIR}/models"
     AMBIENT_DIAR_FIXTURE_DIR="${ambient_SOURCE_DIR}/engine/tests/fixtures/diarisation"

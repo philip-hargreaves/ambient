@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Ambient.App.Features.Documents.PatientEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Padding="0,10,0,8" RowSpacing="10">
+        <!-- The sheet sizes to its text (capped in code where a host bounds the
+             editor), the actions follow it, and a translation takes what is left -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <!-- Opened to a star share in code when a translation exists;
+                 a collapsed star row would still claim its share -->
+            <RowDefinition x:Name="TranslationRow" Height="0" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="8"
+                        Visibility="{x:Bind ViewModel.PatientCaptionVisible, Mode=OneWay}">
+                <ProgressRing
+                    Width="14"
+                    Height="14"
+                    IsActive="{x:Bind ViewModel.PatientPreparing, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.PatientPreparing, Mode=OneWay}" />
+                <TextBlock
+                    Style="{StaticResource MicroText}"
+                    Text="{x:Bind ViewModel.PatientStateCaption, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8"
+                        Visibility="{x:Bind ViewModel.PatientStale, Mode=OneWay}">
+                <FontIcon
+                    FontSize="12"
+                    Foreground="{ThemeResource CautionBrush}"
+                    Glyph="&#xE7BA;" />
+                <TextBlock
+                    Foreground="{ThemeResource CautionBrush}"
+                    Style="{StaticResource MicroText}"
+                    Text="This sheet was written before your note edits." />
+                <HyperlinkButton
+                    Padding="2,0"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.RegeneratePatientCommand}"
+                    FontSize="12">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontSize="12" Glyph="&#xE72C;" />
+                        <TextBlock FontSize="12" Text="Regenerate from note" />
+                    </StackPanel>
+                </HyperlinkButton>
+            </StackPanel>
+            </StackPanel>
+            <!-- Only the sheet is translated - the note is the clinical
+                 record and stays in English -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <ComboBox
+                    MinWidth="160"
+                    AutomationProperties.Name="Sheet language"
+                    IsEnabled="{x:Bind ViewModel.PatientDocumentReady, Mode=OneWay}"
+                    ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
+                    PlaceholderText="Language"
+                    SelectedItem="{x:Bind ViewModel.SelectedLanguage, Mode=TwoWay}" />
+                <Button
+                    Command="{x:Bind ViewModel.TranslateCommand}"
+                    Content="Translate" />
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.TranslationRunning, Mode=OneWay}">
+                    <ProgressRing
+                        Width="14"
+                        Height="14"
+                        IsActive="{x:Bind ViewModel.TranslationRunning, Mode=OneWay}" />
+                    <TextBlock Style="{StaticResource MicroText}" Text="Translating" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <TextBox
+            x:Name="PatientBox"
+            Grid.Row="1"
+            MinHeight="140"
+            IsHitTestVisible="{x:Bind ViewModel.PatientEditing, Mode=OneWay}"
+            IsReadOnly="{x:Bind ViewModel.PatientViewing, Mode=OneWay}"
+            IsTabStop="{x:Bind ViewModel.PatientEditing, Mode=OneWay}"
+            Style="{StaticResource DocumentTextBox}"
+            Text="{x:Bind ViewModel.PatientInfoText, Mode=TwoWay}" />
+
+        <Grid Grid.Row="2" Margin="0,2,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Click="OnCopyPatient"
+                        IsEnabled="{x:Bind ViewModel.PatientDocumentReady, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                        <TextBlock Text="Copy" />
+                    </StackPanel>
+                </Button>
+                <Button Click="OnExportPatient"
+                        IsEnabled="{x:Bind ViewModel.PatientDocumentReady, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.PatientViewing, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE898;" />
+                        <TextBlock Text="Export" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+                <Button
+                    Command="{x:Bind ViewModel.EditPatientCommand}"
+                    Visibility="{x:Bind ViewModel.PatientViewing, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE70F;" />
+                        <TextBlock Text="Edit" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    Command="{x:Bind ViewModel.DiscardPatientCommand}"
+                    Content="Discard"
+                    Visibility="{x:Bind ViewModel.PatientEditing, Mode=OneWay}" />
+                <Button
+                    Command="{x:Bind ViewModel.SavePatientCommand}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind ViewModel.PatientEditing, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE74E;" />
+                        <TextBlock Text="Save" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid
+            Grid.Row="3"
+            RowSpacing="4"
+            Visibility="{x:Bind ViewModel.TranslationVisible, Mode=OneWay}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <!-- Says what it is: "Polish translation", never a bare box -->
+            <TextBlock
+                Style="{StaticResource CaptionText}"
+                Text="{x:Bind ViewModel.TranslationCaption, Mode=OneWay}" />
+            <TextBox
+                Grid.Row="1"
+                MinHeight="120"
+                VerticalAlignment="Top"
+                IsReadOnly="True"
+                Style="{StaticResource DocumentTextBox}"
+                Text="{x:Bind ViewModel.TranslationText, Mode=OneWay}" />
+        </Grid>
+    </Grid>
+</UserControl>

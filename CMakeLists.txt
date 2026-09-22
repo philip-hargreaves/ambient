@@ -22,6 +22,6 @@ add_subdirectory(engine)
 
 # Developer weight acquisition: verified download into the repo model store
 add_custom_target(fetch-models
-    COMMAND dotnet run --project "${ambient_SOURCE_DIR}/app/Ambient.Fetch" -c Release --
+    COMMAND dotnet run --project "${ambient_SOURCE_DIR}/tools/Ambient.FetchModels" -c Release --
             fetch "${ambient_SOURCE_DIR}/weights" "${ambient_SOURCE_DIR}"
     VERBATIM)

@@ -9,13 +9,13 @@
 #include <thread>
 #include <utility>
 
-#include "adapters/host/gpu_lease.hpp"
-#include "adapters/host/power_request.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/note/note_prompt.hpp"
 #include "adapters/note/text_pipeline.hpp"
-#include "core/metrics.hpp"
+#include "adapters/system/gpu_lease.hpp"
+#include "adapters/system/power_request.hpp"
+#include "core/metrics/metrics.hpp"
 
 namespace ambient::note {
 
@@ -72,8 +72,8 @@ struct QwenNoteWriter::Impl {
         const std::string device = runtime.ResolveDevice(info.device);
         // Build and warm hold the GPU lease (nothing runs beside them) and a
         // power request (no standby mid-load)
-        const host::AwakeRequest awake(L"Ambient: loading the note model");
-        const auto lease = host::GpuLease::Global().Acquire();
+        const system::AwakeRequest awake(L"Ambient: loading the note model");
+        const auto lease = system::GpuLease::Global().Acquire();
         std::shared_ptr<TextPipeline> built = MakeTextPipeline(info, device);
         report.seconds = Seconds(t0);
         std::fprintf(stderr,
@@ -234,7 +234,7 @@ void QwenNoteWriter::Prefill(const std::vector<asr::Turn>& transcript, const Not
         config.max_new_tokens = 1;
         config.do_sample = false;
         config.apply_chat_template = false;
-        const auto lease = host::GpuLease::Global().Acquire();
+        const auto lease = system::GpuLease::Global().Acquire();
         const auto t0 = std::chrono::steady_clock::now();
         const TextPipeline::Result result = pipeline->Generate(prompt, config, nullptr);
         std::fprintf(stderr,
@@ -296,8 +296,8 @@ std::string QwenNoteWriter::Generate(const std::string& prompt, const Progress& 
     };
     // Generation holds the GPU lease; a recording started meanwhile decodes
     // after it ends
-    const host::AwakeRequest awake(L"Ambient: writing the note");
-    const auto lease = host::GpuLease::Global().Acquire();
+    const system::AwakeRequest awake(L"Ambient: writing the note");
+    const auto lease = system::GpuLease::Global().Acquire();
     if (lease.waited() > 0.25) {
         std::fprintf(stderr, "ambient-note-host: generation waited %.2f s for the GPU lease\n",
                      lease.waited());

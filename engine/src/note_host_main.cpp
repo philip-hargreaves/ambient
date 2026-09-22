@@ -15,11 +15,11 @@
 #include <crtdbg.h>
 #endif
 
-#include "adapters/host/power_throttling.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/note/qwen_note_writer.hpp"
+#include "adapters/system/power_throttling.hpp"
 #include "ports/transcriber.hpp"
 
 namespace {
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
             return 2;
         }
         std::fprintf(stderr, "ambient-note-host: power throttling %s\n",
-                     ambient::host::Describe(ambient::host::DisableThrottlingOnSelf()).c_str());
+                     ambient::system::Describe(ambient::system::DisableThrottlingOnSelf()).c_str());
         const std::wstring pipe_name = std::filesystem::path(argv[1]).wstring();
         const std::filesystem::path models_root = argv[2];
         const std::filesystem::path prompt_path = argv[3];

@@ -8,8 +8,8 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
-#include "core/guidance_query.hpp"
-#include "core/guidance_scan.hpp"
+#include "core/guidance/guidance_query.hpp"
+#include "core/guidance/guidance_scan.hpp"
 
 namespace ambient::guidance {
 namespace {
