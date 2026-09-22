@@ -14,6 +14,8 @@
 #include <bcrypt.h>
 // clang-format on
 
+#include "core/common/strings.hpp"
+
 namespace ambient::models {
 
 namespace {
@@ -60,12 +62,6 @@ std::string Sha256File(const std::filesystem::path& path) {
 
 namespace {
 
-std::string Lower(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return text;
-}
-
 ModelInfo ParseManifest(const std::filesystem::path& dir) {
     std::ifstream in(dir / "manifest.json");
     nlohmann::json manifest;
@@ -93,7 +89,7 @@ ModelInfo ParseManifest(const std::filesystem::path& dir) {
         info.pipeline = runtime.value("pipeline", "llm");
         info.properties = runtime.value("properties", nlohmann::json::object());
         for (const auto& [name, hash] : manifest.at("files").items()) {
-            info.file_hashes[name] = Lower(hash.get<std::string>());
+            info.file_hashes[name] = strings::Lower(hash.get<std::string>());
         }
         // Optional: without sizes the load check is presence only. Named local:
         // iterating the items of a temporary json dangles

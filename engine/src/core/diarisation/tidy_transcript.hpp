@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "ports/audio_source.hpp"
 #include "ports/transcriber.hpp"
 
@@ -33,21 +34,6 @@ inline std::string NormalisedWord(const std::string& word) {
     return out;
 }
 
-inline std::vector<std::string> SplitWords(const std::string& text) {
-    std::vector<std::string> words;
-    std::string word;
-    for (const char c : text) {
-        if (std::isspace(static_cast<unsigned char>(c)) != 0) {
-            if (!word.empty()) words.push_back(std::move(word));
-            word.clear();
-        } else {
-            word.push_back(c);
-        }
-    }
-    if (!word.empty()) words.push_back(std::move(word));
-    return words;
-}
-
 inline bool IsDisfluency(const std::string& w) {
     static const char* const kWords[] = {"um", "uh",  "er",  "erm", "hm", "hmm",
                                          "mm", "mmm", "mhm", "ah",  "eh", "huh"};
@@ -70,7 +56,7 @@ inline bool IsFunctionWord(const std::string& w) {
 inline bool NoContent(const std::string& text) {
     std::size_t function_words = 0;
     std::size_t words = 0;
-    for (const auto& raw : SplitWords(text)) {
+    for (const auto& raw : strings::Words(text)) {
         const auto w = NormalisedWord(raw);
         if (w.empty()) continue;
         ++words;
@@ -82,16 +68,6 @@ inline bool NoContent(const std::string& text) {
         return false;
     }
     return words > 0 && function_words <= 2;
-}
-
-inline bool EndsSentence(const std::string& text) {
-    for (auto it = text.rbegin(); it != text.rend(); ++it) {
-        const auto c = static_cast<unsigned char>(*it);
-        if (std::isspace(c) != 0) continue;
-        if (*it == '"' || *it == '\'' || *it == ')') continue;
-        return *it == '.' || *it == '?' || *it == '!';
-    }
-    return false;
 }
 
 inline std::string Capitalised(std::string text) {
@@ -119,7 +95,7 @@ inline std::string Terminated(std::string text) {
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())) != 0) {
         text.pop_back();
     }
-    if (text.empty() || EndsSentence(text)) return text;
+    if (text.empty() || strings::EndsSentence(text)) return text;
     if (text.back() == ',' || text.back() == ';' || text.back() == ':') text.pop_back();
     if (!text.empty() && std::isalnum(static_cast<unsigned char>(text.back())) != 0) {
         text.push_back('.');
@@ -143,7 +119,7 @@ inline std::vector<asr::Turn> TidyTranscript(std::vector<asr::Turn> turns) {
                 const bool trail_off =
                     prev.text.size() >= 3 && prev.text.compare(prev.text.size() - 3, 3, "...") == 0;
                 prev.text += ' ';
-                prev.text += detail::EndsSentence(prev.text) && !trail_off
+                prev.text += strings::EndsSentence(prev.text) && !trail_off
                                  ? detail::Capitalised(turn.text)
                                  : turn.text;
                 const std::uint64_t end = turn.first_frame + turn.frame_count;

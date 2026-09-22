@@ -17,7 +17,7 @@ core/            header-only, one folder per stage; namespace = folder
   note/          the note gate, label and summary scrub
   guidance/      query, ranking and scan; added-document units and page text
   metrics/       counters and throughput
-  common/        utf8, version, argv
+  common/        utf8, strings, version, argv
 ports/           the seams of the hexagon, flat: eleven interfaces and the store error type
 adapters/        one folder per seam, matching core/ where a stage has one
   audio/ vad/ transcription/ diarisation/ note/ translate/ guidance/ storage/ ipc/ models/

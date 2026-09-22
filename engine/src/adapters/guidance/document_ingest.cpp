@@ -21,6 +21,7 @@
 #include <shobjidl_core.h>
 // clang-format on
 
+#include "core/common/strings.hpp"
 #include "core/guidance/document_units.hpp"
 #include "core/guidance/patient_screen.hpp"
 #include "ports/store_error.hpp"
@@ -52,9 +53,7 @@ constexpr const char* kReadMeText =
     "Only add documents you are entitled to use.\n";
 
 std::string LowerExtension(const std::filesystem::path& path) {
-    auto ext = path.extension().string();
-    for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return ext;
+    return strings::Lower(path.extension().string());
 }
 
 std::string Mime(const std::filesystem::path& path) {

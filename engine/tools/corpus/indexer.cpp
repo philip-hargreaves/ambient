@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 
 namespace ambient::guidance {
@@ -27,7 +28,7 @@ std::vector<std::filesystem::path> SortedFiles(const std::filesystem::path& dir,
     std::vector<std::filesystem::path> files;
     for (const auto& entry : std::filesystem::directory_iterator(dir)) {
         if (entry.is_regular_file() &&
-            extensions.count(detail::Lower(entry.path().extension().string()))) {
+            extensions.count(strings::Lower(entry.path().extension().string()))) {
             files.push_back(entry.path());
         }
     }
@@ -86,7 +87,7 @@ std::set<std::string> ReadCodes(const std::filesystem::path& file) {
         if (end == std::string::npos) continue;
         code.erase(end + 1);
         code.erase(0, code.find_first_not_of(" \t"));
-        if (!code.empty()) codes.insert(detail::Lower(code));
+        if (!code.empty()) codes.insert(strings::Lower(code));
     }
     return codes;
 }
@@ -111,7 +112,7 @@ std::vector<Chunk> ChunksFromTextDir(const std::filesystem::path& dir) {
     std::vector<Chunk> out;
     for (const auto& path : SortedFiles(dir, {".md", ".txt"})) {
         const auto text = ReadFile(path);
-        const auto code = detail::Lower(path.stem().string());
+        const auto code = strings::Lower(path.stem().string());
         auto title = FirstHeading(text);
         if (title.empty()) title = path.stem().string();
         auto chunks = ChunksFromText(code, title, text, path.filename().string());

@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+#include "core/common/strings.hpp"
+
 namespace ambient::guidance {
 
 namespace detail {
@@ -37,8 +39,7 @@ inline bool HoldsNhsNumber(std::string_view text) {
 // Text that looks like it is about a patient: an NHS number, a date of birth
 // label, a letter's opening or a discharge heading. Guidelines carry none
 inline bool LooksLikePatientData(std::string_view text) {
-    std::string lower(text);
-    for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const std::string lower = strings::Lower(text);
     static const char* const kPhrases[] = {
         "date of birth", "dob:", "nhs number", "nhs no", "dear dr", "dear doctor",
         "discharge summary", "discharge letter",

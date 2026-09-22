@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "core/note/note_gate.hpp"
 #include "core/note/note_label.hpp"
 #include "core/note/summary_scrub.hpp"
@@ -269,12 +270,7 @@ class NoteLane {
     static std::size_t TranscriptWords(const std::vector<asr::Turn>& turns) {
         std::size_t words = 0;
         for (const auto& turn : turns) {
-            bool in_word = false;
-            for (const char c : turn.text) {
-                const bool space = c == ' ' || c == '\t' || c == '\n';
-                if (!space && !in_word) ++words;
-                in_word = !space;
-            }
+            words += static_cast<std::size_t>(strings::WordCount(turn.text));
         }
         return words;
     }

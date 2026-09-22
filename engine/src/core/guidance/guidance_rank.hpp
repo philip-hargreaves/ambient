@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 
 namespace ambient::guidance {
@@ -196,8 +197,8 @@ inline bool AboutChildren(std::string_view lower) {
 // count, silence never does
 inline bool PopulationConflict(std::string_view note, std::string_view recommendation,
                                std::string_view title = "") {
-    const auto n = detail::Lower(note);
-    auto r = detail::Lower(recommendation);
+    const auto n = strings::Lower(note);
+    auto r = strings::Lower(recommendation);
     r = detail::Erase(detail::Erase(r, "not pregnant"), "non-pregnant");
     if (detail::ContainsAny(r, {"pregnant", "pregnancy"}) &&
         detail::ContainsAny(n, {"not pregnant", "non-pregnant", "no pregnancy"})) {
@@ -208,7 +209,7 @@ inline bool PopulationConflict(std::string_view note, std::string_view recommend
     const bool adult =
         age >= 18 || detail::ContainsAnyWord(n, {"adult", "adults", "man", "woman"}) ||
         (age < 0 && !detail::AboutChildren(n) && detail::ContainsAnyWord(n, {"male", "female"}));
-    if (adult && (detail::AboutChildren(r) || detail::AboutChildren(detail::Lower(title)))) {
+    if (adult && (detail::AboutChildren(r) || detail::AboutChildren(strings::Lower(title)))) {
         return true;
     }
     const bool female = detail::ContainsAnyWord(n, {"woman", "women", "female", "she", "her"});

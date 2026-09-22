@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "core/common/strings.hpp"
+
 namespace ambient::guidance {
 
 // Sub-queries for retrieval: each sentence of the note on its own, plus the
@@ -15,36 +17,13 @@ inline constexpr int kMinSentenceWords = 3;
 
 namespace detail {
 
-inline std::string Lower(std::string_view s) {
-    std::string out(s);
-    for (auto& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return out;
-}
-
-inline int WordCount(std::string_view s) {
-    int words = 0;
-    bool in_word = false;
-    for (unsigned char c : s) {
-        const bool space = std::isspace(c) != 0;
-        if (!space && !in_word) ++words;
-        in_word = !space;
-    }
-    return words;
-}
-
-inline std::string_view Trim(std::string_view s) {
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
-    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
-    return s;
-}
-
 // The token before a full stop that does not close a sentence
 inline bool IsAbbreviation(std::string_view token) {
     static const char* const kWords[] = {"e.g",    "i.e", "dr", "mr", "mrs", "ms",  "prof", "vs",
                                          "approx", "etc", "no", "hx", "pt",  "rx",  "mg",   "mcg",
                                          "ml",     "kg",  "cm", "mm", "bd",  "tds", "od",   "prn",
                                          "st",     "ca",  "cf", "wk", "wks", "yr",  "yrs",  "mth"};
-    const auto lower = Lower(token);
+    const auto lower = strings::Lower(token);
     if (lower.size() == 1 && std::isalpha(static_cast<unsigned char>(lower[0]))) return true;
     for (const char* k : kWords) {
         if (lower == k) return true;
@@ -79,8 +58,8 @@ inline bool Contains(std::string_view s, std::string_view needle) {
 inline std::vector<std::string> SplitSentences(std::string_view note) {
     std::vector<std::string> out;
     auto flush = [&](std::size_t from, std::size_t to) {
-        const auto piece = detail::Trim(note.substr(from, to - from));
-        if (detail::WordCount(piece) >= kMinSentenceWords) out.emplace_back(piece);
+        const auto piece = strings::Trim(note.substr(from, to - from));
+        if (strings::WordCount(piece) >= kMinSentenceWords) out.emplace_back(piece);
     };
     std::size_t start = 0;
     for (std::size_t i = 0; i < note.size(); ++i) {
@@ -108,7 +87,7 @@ inline std::vector<std::string> SplitSentences(std::string_view note) {
 // patient who does not have it. Conservative: only openings and unambiguous
 // phrases count
 inline bool IsExcluded(std::string_view sentence) {
-    const auto s = detail::Lower(detail::Trim(sentence));
+    const auto s = strings::Lower(strings::Trim(sentence));
     static const char* const kOpenings[] = {
         "no ",      "nil ",         "not ",       "denies",         "denied",    "never ",
         "without ", "negative for", "no history", "family history", "fh:",       "fh ",
@@ -132,8 +111,8 @@ inline std::vector<std::string> SubQueries(std::string_view note) {
     for (auto& sentence : SplitSentences(note)) {
         if (!IsExcluded(sentence)) out.push_back(std::move(sentence));
     }
-    const auto whole = detail::Trim(note);
-    if (detail::WordCount(whole) >= kMinSentenceWords &&
+    const auto whole = strings::Trim(note);
+    if (strings::WordCount(whole) >= kMinSentenceWords &&
         std::find(out.begin(), out.end(), whole) == out.end()) {
         out.emplace_back(whole);
     }

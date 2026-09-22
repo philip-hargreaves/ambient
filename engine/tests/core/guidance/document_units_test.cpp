@@ -4,6 +4,8 @@
 
 #include <string>
 
+#include "core/common/strings.hpp"
+
 namespace ambient::guidance {
 namespace {
 
@@ -82,7 +84,7 @@ TEST(DocumentUnits, ALongParagraphSplitsAtSentenceEndsAlongItsLines) {
     ASSERT_GE(units.size(), 2u);
     std::size_t lines = 0;
     for (const auto& unit : units) {
-        EXPECT_LE(detail::WordCount(unit.text), kMaxUnitWords);
+        EXPECT_LE(strings::WordCount(unit.text), kMaxUnitWords);
         ASSERT_FALSE(unit.boxes.empty());
         lines += unit.boxes.size();
     }

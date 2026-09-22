@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_clean.hpp"
 #include "core/guidance/page_text.hpp"
@@ -81,8 +82,9 @@ inline bool Continues(std::string_view text) {
 // A short question is a heading too
 inline bool IsHeading(const Paragraph& paragraph, Scheme scheme) {
     const std::string_view text = paragraph.text;
-    return WordCount(text) < kHeadingWords && (!EndsSentence(text) || text.ends_with('?')) &&
-           MarkOf(text, scheme).empty() && !Continues(text);
+    return strings::WordCount(text) < kHeadingWords &&
+           (!strings::EndsSentence(text) || text.ends_with('?')) && MarkOf(text, scheme).empty() &&
+           !Continues(text);
 }
 
 inline std::vector<std::string_view> Tokens(std::string_view text) {
@@ -223,8 +225,9 @@ inline std::vector<Paragraph> Split(const Paragraph& paragraph) {
         piece.text += line.text;
         piece.box = piece.lines.empty() ? line.box : Union(piece.box, line.box);
         piece.lines.push_back(line);
-        words += WordCount(line.text);
-        if ((words >= kSplitWords && EndsSentence(line.text)) || words >= kMaxUnitWords) close();
+        words += strings::WordCount(line.text);
+        if ((words >= kSplitWords && strings::EndsSentence(line.text)) || words >= kMaxUnitWords)
+            close();
     }
     close();
     return out;
@@ -239,7 +242,7 @@ inline bool TokenAhead(const std::vector<Paragraph>& paragraphs, std::size_t fro
         if (i > from && (IsHeading(paragraph, scheme) || !MarkOf(paragraph.text, scheme).empty())) {
             return false;
         }
-        words += WordCount(paragraph.text);
+        words += strings::WordCount(paragraph.text);
         if (words > kMaxUnitWords) return false;
         if (EndsWithToken(paragraph.text)) return true;
     }
@@ -260,7 +263,7 @@ inline Scheme DetectScheme(const std::vector<Paragraph>& paragraphs) {
         for (const auto& paragraph : paragraphs) {
             const auto mark = MarkOf(paragraph.text, scheme);
             if (mark.empty()) continue;
-            const auto rest = detail::Trim(std::string_view(paragraph.text).substr(mark.size()));
+            const auto rest = strings::Trim(std::string_view(paragraph.text).substr(mark.size()));
             if (rest.empty() || std::isupper(static_cast<unsigned char>(rest[0])) ||
                 rest[0] == '"') {
                 ++count;
@@ -323,7 +326,7 @@ inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& parag
         }
         current.text += paragraph.text;
         mark_lines(paragraph);
-        words += detail::WordCount(paragraph.text);
+        words += strings::WordCount(paragraph.text);
     };
     for (std::size_t i = 0; i < paragraphs.size(); ++i) {
         const auto& paragraph = paragraphs[i];
@@ -348,7 +351,7 @@ inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& parag
                    !(tokens && detail::TokenAhead(paragraphs, i, words, scheme))) {
             close();
         }
-        if (detail::WordCount(paragraph.text) > kMaxUnitWords) {
+        if (strings::WordCount(paragraph.text) > kMaxUnitWords) {
             close();
             for (const auto& piece : detail::Split(paragraph)) {
                 take(piece, mark);
@@ -369,24 +372,24 @@ inline std::vector<Unit> UnitsFromParagraphs(const std::vector<Paragraph>& parag
 // and captions are known by their opening, tables and addresses by what they
 // hold, unless they say what to do
 inline bool IsFragment(const Unit& unit) {
-    const int words = detail::WordCount(unit.text);
+    const int words = strings::WordCount(unit.text);
     if (unit.number.empty() &&
-        (words < kTailWords || (words < kMinUnitWords && !detail::EndsSentence(unit.text)))) {
+        (words < kTailWords || (words < kMinUnitWords && !strings::EndsSentence(unit.text)))) {
         return true;
     }
     // "5.5 Diagnosis": a numbered heading the scheme took for a recommendation
-    if (!unit.number.empty() && words < kHeadingWords && !detail::EndsSentence(unit.text) &&
+    if (!unit.number.empty() && words < kHeadingWords && !strings::EndsSentence(unit.text) &&
         !unit.text.ends_with(':')) {
         return true;
     }
     if (detail::Contains(unit.text, ".....")) return true;  // a contents page's dot leaders
-    const auto lower = detail::Lower(unit.text);
+    const auto lower = strings::Lower(unit.text);
     if (!detail::Guides(lower) &&
         (detail::IsTable(unit) || detail::IsAffiliations(lower) || detail::IsAuthors(unit.text) ||
          detail::Contains(lower, "creative commons"))) {
         return true;
     }
-    const auto head = detail::Lower(std::string_view(unit.text).substr(0, 24));
+    const auto head = strings::Lower(std::string_view(unit.text).substr(0, 24));
     for (const auto label : kFrontMatter) {
         if (head.starts_with(label)) return true;
     }

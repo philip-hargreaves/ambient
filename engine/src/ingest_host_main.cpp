@@ -29,6 +29,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/common/strings.hpp"
 #include "core/common/utf8.hpp"
 
 namespace {
@@ -72,12 +73,6 @@ void AppendUtf8(std::string& out, unsigned int unit, unsigned int& high) {
     ambient::utf8::Encode(out, cp);
 }
 
-void Trim(std::string& s) {
-    const auto space = [](unsigned char c) { return std::isspace(c) != 0; };
-    while (!s.empty() && space(s.back())) s.pop_back();
-    s.erase(s.begin(), std::find_if_not(s.begin(), s.end(), space));
-}
-
 struct Line {
     std::string text;
     double left = 0, top = 0, right = 0, bottom = 0;
@@ -108,7 +103,7 @@ json PageJson(FPDF_DOCUMENT doc, int index) {
         Line line;
         unsigned int high = 0;
         const auto flush = [&] {
-            Trim(line.text);
+            line.text = std::string(ambient::strings::Trim(line.text));
             if (line.any && !line.text.empty()) {
                 lines.push_back(
                     {{"text", line.text}, {"box", {line.left, line.top, line.right, line.bottom}}});

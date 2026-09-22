@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "core/common/utf8.hpp"
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_text.hpp"
@@ -89,7 +90,7 @@ inline std::unordered_set<std::string> DocumentWords(const std::vector<Page>& pa
 // The line's text with digits as '#' and spaces squeezed, the same on every page
 inline std::string Form(std::string_view text) {
     std::string out;
-    for (const char c : Trim(text)) {
+    for (const char c : strings::Trim(text)) {
         if (std::isdigit(static_cast<unsigned char>(c))) {
             out.push_back('#');
         } else if (std::isspace(static_cast<unsigned char>(c))) {
@@ -200,11 +201,11 @@ inline void JoinBrokenWords(Page& page, const std::unordered_set<std::string>& w
                 if (!detail::Alpha(static_cast<unsigned char>(c))) break;
                 joined.push_back(c);
             }
-            if (!joined.empty() && words.contains(detail::Lower(joined))) text.pop_back();
+            if (!joined.empty() && words.contains(strings::Lower(joined))) text.pop_back();
         }
         text += token;
         next.erase(0, cut == std::string::npos ? next.size() : cut + 1);
-        if (detail::Trim(next).empty()) {
+        if (strings::Trim(next).empty()) {
             lines.erase(lines.begin() + static_cast<std::ptrdiff_t>(k) + 1);
         } else {
             ++k;

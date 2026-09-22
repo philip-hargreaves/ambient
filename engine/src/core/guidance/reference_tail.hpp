@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_text.hpp"
 
@@ -25,10 +26,10 @@ namespace detail {
 
 // "References", "Reference list" or "Bibliography", with or without a section number
 inline bool IsReferencesHeading(std::string_view text) {
-    auto s = Trim(text);
+    auto s = strings::Trim(text);
     std::size_t i = 0;
     while (i < s.size() && (std::isdigit(static_cast<unsigned char>(s[i])) || s[i] == '.')) ++i;
-    const auto lower = Lower(Trim(s.substr(i)));
+    const auto lower = strings::Lower(strings::Trim(s.substr(i)));
     return lower == "references" || lower == "reference list" || lower == "bibliography";
 }
 
@@ -81,9 +82,9 @@ inline bool Cites(const Paragraph& paragraph) {
 inline bool EndsList(const std::vector<Paragraph>& paragraphs, std::size_t i) {
     const auto& text = paragraphs[i].text;
     if (text.empty() || IsCitationLine(paragraphs[i].lines.front().text)) return false;
-    const auto words = WordCount(text);
+    const auto words = strings::WordCount(text);
     if (words >= kProseWords) return !HasYear(text);
-    const bool heading = words <= kListHeadingWords && !EndsSentence(text) &&
+    const bool heading = words <= kListHeadingWords && !strings::EndsSentence(text) &&
                          std::isupper(static_cast<unsigned char>(text[0])) && !HasYear(text);
     if (!heading) return false;
     for (std::size_t j = i + 1; j < paragraphs.size() && j <= i + kListLookahead; ++j) {

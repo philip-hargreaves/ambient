@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/recommendation_marks.hpp"
 
@@ -55,16 +56,6 @@ inline constexpr float kAdjacentPitch = 1.3F;
 inline constexpr float kShortLine = 0.1F;
 
 namespace detail {
-
-// Closing quotes, brackets and spaces stripped, then a full stop, question or
-// exclamation mark
-inline bool EndsSentence(std::string_view s) {
-    while (!s.empty() && (s.back() == '"' || s.back() == '\'' || s.back() == ')' ||
-                          s.back() == ' ' || static_cast<unsigned char>(s.back()) > 127)) {
-        s.remove_suffix(1);
-    }
-    return !s.empty() && (s.back() == '.' || s.back() == '?' || s.back() == '!');
-}
 
 // The page's leading: the median rise from one line's top to the next
 inline float Pitch(const Page& page) {
@@ -142,7 +133,7 @@ inline std::vector<Paragraph> ParagraphsFromPages(const std::vector<Page>& pages
                 rise <= limit && !(last_short && detail::OpensSentence(first)) &&
                 !detail::OpensMarked(line.text) && !EndsWithToken(out.back().text);
             const bool runs_on =
-                !out.empty() && !detail::EndsSentence(out.back().text) && std::islower(first);
+                !out.empty() && !strings::EndsSentence(out.back().text) && std::islower(first);
             // A wrapped grade tail always rejoins the recommendation above it
             const bool tail = !out.empty() && IsGradeTail(line.text);
             if (adjacent || runs_on || tail) {

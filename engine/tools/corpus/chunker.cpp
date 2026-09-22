@@ -3,6 +3,7 @@
 #include <cctype>
 #include <string_view>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 
 namespace ambient::guidance {
@@ -30,7 +31,7 @@ std::vector<std::string> Paragraphs(const std::string& text) {
     std::string current;
     auto flush = [&] {
         const auto para = Collapse(current);
-        if (detail::WordCount(para) >= kMinParagraphWords) out.push_back(para);
+        if (strings::WordCount(para) >= kMinParagraphWords) out.push_back(para);
         current.clear();
     };
     std::size_t i = 0;
@@ -90,7 +91,7 @@ std::vector<Chunk> ChunksFromDocument(const nlohmann::json& doc, std::set<std::s
             chunk.section = Str(rec, "section");
             chunk.update_tag = Str(rec, "update_tag");
             chunk.last_updated = last_updated;
-            chunk.text = std::string(detail::Trim(Str(rec, "text")));
+            chunk.text = std::string(strings::Trim(Str(rec, "text")));
             chunk.url = source_url + "/chapter/" + slug + "#" + id;
             out.push_back(std::move(chunk));
         }
@@ -122,7 +123,7 @@ std::vector<Chunk> ChunksFromText(const std::string& code, const std::string& ti
         number.clear();
     };
     for (const auto& para : Paragraphs(text)) {
-        const int words = detail::WordCount(para);
+        const int words = strings::WordCount(para);
         const bool starts = StartsRecommendation(para);
         if (!buffer.empty() &&
             (starts || buffered + words > kMaxWords || buffered >= kTargetWords)) {
