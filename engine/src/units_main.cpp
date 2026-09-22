@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "adapters/guidance/ingest_host.hpp"
-#include "core/document_units.hpp"
+#include "core/guidance/document_units.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {

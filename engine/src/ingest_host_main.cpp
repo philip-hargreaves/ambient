@@ -29,7 +29,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "core/utf8.hpp"
+#include "core/common/utf8.hpp"
 
 namespace {
 

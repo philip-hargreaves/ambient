@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "core/recommendation_marks.hpp"
+#include "core/guidance/recommendation_marks.hpp"
 
 namespace ambient::guidance {
 

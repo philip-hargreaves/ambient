@@ -1,4 +1,4 @@
-# Offline port of core/tidy_transcript.hpp so a tidied copy of an existing sweep
+# Offline port of core/diarisation/tidy_transcript.hpp so a tidied copy of an existing sweep
 # can be scored against its untidied self: same decode, same cuts, only the tidy differs.
 # The C++ is the source of truth; this mirrors its three rules and is checked against the
 # engine's own tidied output where both exist.

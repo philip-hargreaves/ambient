@@ -7,7 +7,7 @@
 
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
-#include "core/diar_regions.hpp"
+#include "core/diarisation/diar_regions.hpp"
 
 namespace ambient::diar {
 

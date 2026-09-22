@@ -1,4 +1,4 @@
-# Calibrate the re-split margin (core/resplit.hpp) from a dry-run sweep: each logged
+# Calibrate the re-split margin (core/diarisation/resplit.hpp) from a dry-run sweep: each logged
 # edge-chunk candidate ("resplit-candidate <a>-<b> s cluster <c> own <x> other <y> ...") is
 # labelled against the reference TextGrids and the rule "other - own >= margin" is scored
 # over a range of margins, with cross-validation.

@@ -6,12 +6,12 @@
 #include <openvino/genai/whisper_pipeline.hpp>
 #include <utility>
 
-#include "adapters/host/gpu_lease.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
-#include "core/env_flag.hpp"
-#include "core/metrics.hpp"
-#include "core/turn_assembly.hpp"
+#include "adapters/system/gpu_lease.hpp"
+#include "core/common/env_flag.hpp"
+#include "core/metrics/metrics.hpp"
+#include "core/transcription/turn_assembly.hpp"
 #include "ports/audio_source.hpp"
 #include "ports/diariser.hpp"
 
@@ -47,7 +47,7 @@ DecodeFn MakeWhisperDecode(const models::ModelStore& store, models::OvRuntime& r
     return [pipeline, config](std::span<const float> frames, std::uint64_t first_frame) {
         const ov::genai::RawSpeechInput audio(frames.begin(), frames.end());
         // Bound: the longest legitimate hold, a cold 35B load; past it the holder is wedged
-        auto& gpu = host::GpuLease::Global();
+        auto& gpu = system::GpuLease::Global();
         const bool was_broken = gpu.Broken();
         const auto lease = gpu.Acquire(std::chrono::minutes(10));
         if (!was_broken && gpu.Broken()) {

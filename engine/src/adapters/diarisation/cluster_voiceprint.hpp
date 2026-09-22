@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "adapters/diarisation/speaker_embedder.hpp"
-#include "core/diar_regions.hpp"
+#include "core/diarisation/diar_regions.hpp"
 #include "ports/diariser.hpp"
 
 namespace ambient::diar {

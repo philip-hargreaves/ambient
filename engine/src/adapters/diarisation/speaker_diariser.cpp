@@ -5,11 +5,11 @@
 
 #include "adapters/diarisation/cluster_voiceprint.hpp"
 #include "adapters/diarisation/speaker_clustering.hpp"
-#include "core/clip_cuts.hpp"
-#include "core/diar_regions.hpp"
-#include "core/env_flag.hpp"
-#include "core/role_naming.hpp"
-#include "core/slice_refinement.hpp"
+#include "core/common/env_flag.hpp"
+#include "core/diarisation/clip_cuts.hpp"
+#include "core/diarisation/diar_regions.hpp"
+#include "core/diarisation/role_naming.hpp"
+#include "core/diarisation/slice_refinement.hpp"
 
 namespace ambient::diar {
 

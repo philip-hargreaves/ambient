@@ -15,7 +15,7 @@
 FILE names a run file inside the working directory and defaults to runs.jsonl. Working data goes
 to build/retrieval/study, or to build/retrieval/$FOLDER_STUDY for the same study over a changed
 folder or chunker. The splitter, the exclusion filter, the vote and the floor are ports of
-engine/src/core/guidance_query.hpp and guidance_rank.hpp, and parity proves the port before any
+engine/src/core/guidance/guidance_query.hpp and guidance_rank.hpp, and parity proves the port before any
 variant is trusted. Run with the harness venv (openvino_genai).
 """
 

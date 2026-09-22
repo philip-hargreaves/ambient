@@ -3,7 +3,7 @@
 #include <cctype>
 #include <string_view>
 
-#include "core/guidance_query.hpp"
+#include "core/guidance/guidance_query.hpp"
 
 namespace ambient::guidance {
 namespace {

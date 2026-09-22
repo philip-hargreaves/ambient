@@ -1,0 +1,2432 @@
+#include "core/audio/session_controller.hpp"
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <tuple>
+#include <vector>
+
+#include "adapters/transcription/scripted_transcriber.hpp"
+#include "adapters/vad/passthrough_vad.hpp"
+
+namespace ambient::audio {
+namespace {
+
+constexpr auto kTestSettle = std::chrono::milliseconds(200);
+
+// The pipeline switches default to the single-decode product (env_flag.hpp);
+// tests of the retained two-pass arm (live windows, no cuts, no prefill) say so
+struct TwoPassArm {
+    static constexpr const char* kSwitches[] = {"AMBIENT_DIAR_SEG_CUTS_ONLY",
+                                                "AMBIENT_SEG_FRONTIER",
+                                                "AMBIENT_NO_LIVE_ASR",
+                                                "AMBIENT_NOTE_PREFILL",
+                                                "AMBIENT_CLIP_CUTS",
+                                                "AMBIENT_RESPLIT",
+                                                "AMBIENT_TIDY",
+                                                "AMBIENT_CHUNK_ASSEMBLE"};
+    TwoPassArm() {
+        for (const char* name : kSwitches) _putenv_s(name, "0");
+    }
+    ~TwoPassArm() {
+        for (const char* name : kSwitches) _putenv_s(name, "");
+    }
+};
+
+// One 100 ms window at an amplitude the meter reads as full scale
+std::vector<float> Window() {
+    return std::vector<float>(LevelMeter::kWindowFrames, 0.70710678F);
+}
+
+class ScriptedSource : public IAudioSource {
+   public:
+    enum class Script {
+        kStreamUntilStopped,
+        kDieImmediately,
+        kDieAfterAudio,
+        kNeverAudio,
+        kThrowAfterAudio,
+        kCompleteAfterAudio,
+    };
+
+    explicit ScriptedSource(Script script) : script_(script) {}
+
+    void Run(IAudioSink& sink) override {
+        const auto window = Window();
+        switch (script_) {
+            case Script::kDieImmediately:
+                sink.OnEnd({SourceEndReason::kFailed, "would not open"});
+                return;
+            case Script::kNeverAudio:
+                WaitForStop();
+                sink.OnEnd({SourceEndReason::kStopped, ""});
+                return;
+            case Script::kDieAfterAudio:
+                sink.OnAudio(window, 0);
+                sink.OnEnd({SourceEndReason::kDeviceLost, "unplugged"});
+                return;
+            case Script::kThrowAfterAudio:
+                sink.OnAudio(window, 0);
+                throw std::runtime_error("driver exploded");
+            case Script::kCompleteAfterAudio:
+                sink.OnAudio(window, 3);
+                sink.OnEnd({SourceEndReason::kCompleted, ""});
+                return;
+            case Script::kStreamUntilStopped:
+                while (!stop_.load()) {
+                    sink.OnAudio(window, 0);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                }
+                sink.OnEnd({SourceEndReason::kStopped, ""});
+                return;
+        }
+    }
+
+    void RequestStop() override {
+        stop_.store(true);
+    }
+
+    void SetPaused(bool paused) override {
+        ++pause_calls;
+        last_paused = paused;
+    }
+
+    void SetMonitor(bool monitor) override {
+        ++monitor_calls;
+        last_monitor = monitor;
+    }
+
+    std::atomic<int> pause_calls{0};
+    std::atomic<bool> last_paused{false};
+    std::atomic<int> monitor_calls{0};
+    std::atomic<bool> last_monitor{false};
+
+   private:
+    void WaitForStop() {
+        while (!stop_.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+
+    Script script_;
+    std::atomic<bool> stop_{false};
+};
+
+// Written on the capture thread; read after the controller has joined it
+struct RecordingEvents : ISessionEvents {
+    std::mutex mutex;
+    std::vector<float> levels;
+    std::vector<asr::Turn> turns;
+    std::vector<SourceEndReason> interruptions;
+    std::string last_detail;
+
+    void OnLevel(const LevelReading& reading) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        levels.push_back(reading.level);
+    }
+
+    void OnTurn(const asr::Turn& turn) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        turns.push_back(turn);
+    }
+
+    void OnInterrupted(SourceEndReason reason, const std::string& detail) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        interruptions.push_back(reason);
+        last_detail = detail;
+    }
+
+    void OnProgress(const std::string& stage) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        progress.push_back(stage);
+    }
+
+    std::vector<std::string> progress;
+
+    std::vector<EnrolProgress> enrol_progress;
+    std::optional<std::tuple<bool, std::string, double>> enrol_done;
+
+    void OnEnrolProgress(const EnrolProgress& p) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        enrol_progress.push_back(p);
+    }
+
+    void OnEnrolDone(bool ok, const std::string& detail, double speech_s) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        enrol_done = {ok, detail, speech_s};
+    }
+
+    void OnNotePartial(const std::string& text) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        note_partials.push_back(text);
+    }
+
+    void OnNoteReady(const std::string& text) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        note_ready = text;
+        note_done = true;
+    }
+
+    std::string note_saved_session;
+    std::string note_saved_text;
+    std::int64_t note_saved_revision = 0;
+    bool note_saved_throws = false;
+
+    void OnNoteSaved(const std::string& session, const store::Document& note) override {
+        if (note_saved_throws) throw std::runtime_error("the lane refused");
+        const std::lock_guard<std::mutex> lock(mutex);
+        note_saved_session = session;
+        note_saved_text = note.text;
+        note_saved_revision = note.revision;
+    }
+
+    void OnNoteFailed(const std::string& detail) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        note_failed = detail;
+        note_done = true;
+    }
+
+    std::string note_refused;
+    bool note_refused_overridable = true;
+
+    void OnNoteRefused(const std::string& reason, bool overridable) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        note_refused = reason;
+        note_refused_overridable = overridable;
+        note_done = true;
+    }
+
+    void OnPatientPartial(const std::string& text) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        patient_partials.push_back(text);
+    }
+
+    void OnPatientReady(const std::string& text) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        patient_ready = text;
+        patient_done = true;
+    }
+
+    void OnPatientFailed(const std::string& detail) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        patient_failed = detail;
+        patient_done = true;
+    }
+
+    std::string summary_session;
+    std::string summary_text;
+    std::string summary_failed;
+    std::atomic<bool> summary_done{false};
+
+    void OnSummaryReady(const std::string& session, const std::string& text) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        summary_session = session;
+        summary_text = text;
+        summary_done = true;
+    }
+
+    void OnSummaryFailed(const std::string& session, const std::string& detail) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        summary_session = session;
+        summary_failed = detail;
+        summary_done = true;
+    }
+
+    bool WaitForSummary() {
+        for (int i = 0; i < 500 && !summary_done.load(); ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return summary_done.load();
+    }
+
+    std::vector<std::string> note_partials;
+    std::string note_ready;
+    std::string note_failed;
+    bool note_done = false;
+    std::vector<std::string> patient_partials;
+    std::string patient_ready;
+    std::string patient_failed;
+    bool patient_done = false;
+
+    bool WaitForPatient() {
+        for (int i = 0; i < 400; ++i) {
+            {
+                const std::lock_guard<std::mutex> lock(mutex);
+                if (patient_done) {
+                    return true;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        return false;
+    }
+
+    bool WaitForNote() {
+        for (int i = 0; i < 400; ++i) {
+            {
+                const std::lock_guard<std::mutex> lock(mutex);
+                if (note_done) {
+                    return true;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        return false;
+    }
+
+    bool WaitForInterruption() {
+        for (int i = 0; i < 400; ++i) {
+            {
+                const std::lock_guard<std::mutex> lock(mutex);
+                if (!interruptions.empty()) {
+                    return true;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        return false;
+    }
+};
+
+// Records the call sequence; the tests assert which storage outcome each way
+// of ending a session produced
+struct FakeSessionStore : store::ISessionStore {
+    std::mutex mutex;
+    std::vector<std::string> calls;
+    std::vector<float> frames;
+    std::vector<asr::Turn> turns;
+    std::uint64_t lost = 0;
+    bool refuse_begin = false;
+    bool refuse_documents = false;
+    int begins = 0;
+
+    store::SessionId Begin(const store::SessionMeta& meta) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        if (refuse_begin) {
+            throw std::runtime_error("store is broken");
+        }
+        EXPECT_EQ(meta.sample_rate, kSampleRate);
+        last_retain = meta.retain;
+        last_device_id = meta.device_id;
+        last_device_name = meta.device_name;
+        const auto id = "s" + std::to_string(++begins);
+        calls.push_back("begin " + id);
+        return id;
+    }
+
+    void Append(const store::SessionId&, std::span<const float> audio,
+                std::uint64_t lost_frames) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        frames.insert(frames.end(), audio.begin(), audio.end());
+        lost += lost_frames;
+    }
+
+    void AppendTurn(const store::SessionId& id, const asr::Turn& turn) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("turn " + id);
+        turns.push_back(turn);
+    }
+
+    void ReplaceTurns(const store::SessionId& id, std::span<const asr::Turn> replacement) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("replace " + id);
+        turns.assign(replacement.begin(), replacement.end());
+    }
+
+    void Finalise(const store::SessionId& id) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("finalise " + id);
+    }
+
+    void Cancel(const store::SessionId& id) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("cancel " + id);
+    }
+
+    void Abandon(const store::SessionId& id) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("abandon " + id);
+    }
+
+    bool refuse_read_audio = false;
+
+    std::vector<store::RecoverableSession> ScanRecoverable() override {
+        return {};
+    }
+
+    std::vector<store::SessionSummary> ListSessions() override {
+        return {};
+    }
+
+    void SaveDocument(const store::SessionId& id, store::DocumentKind kind,
+                      const store::Document& document) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        if (refuse_documents) throw store::StoreError(store::StoreCode::kFull, "disk full");
+        if (kind == store::DocumentKind::kNote) {
+            calls.push_back("note " + id);
+            note = document.text;
+            ++note_revision;
+            note_style = document.style;
+            note_detail = document.detail;
+        } else if (kind == store::DocumentKind::kPatient) {
+            calls.push_back("patient " + id);
+            patient = document.text;
+        } else if (kind == store::DocumentKind::kLabel) {
+            label = document.text;
+            label_typed = false;
+        } else if (kind == store::DocumentKind::kSummary) {
+            calls.push_back("summary " + id);
+            summary = document.text;
+        }
+    }
+
+    void DeleteDocument(const store::SessionId& id, store::DocumentKind kind) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("delete-document " + id);
+        if (kind == store::DocumentKind::kSummary) summary.clear();
+    }
+
+    void EditDocument(const store::SessionId& id, store::DocumentKind kind,
+                      const std::string& text) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("edit " + id);
+        if (kind == store::DocumentKind::kLabel) {
+            label = text;
+            label_typed = true;
+            return;
+        }
+        if (kind == store::DocumentKind::kNote) ++note_revision;
+        (kind == store::DocumentKind::kNote ? note : patient) = text;
+    }
+
+    store::Document ReadDocument(const store::SessionId&, store::DocumentKind kind) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        store::Document document;
+        switch (kind) {
+            case store::DocumentKind::kNote:
+                document.text = note;
+                document.revision = note_revision;
+                break;
+            case store::DocumentKind::kPatient:
+                document.text = patient;
+                break;
+            case store::DocumentKind::kLabel:
+                document.text = label;
+                document.edited_at = label_typed ? "typed" : "";
+                break;
+            case store::DocumentKind::kSummary:
+                document.text = summary;
+                break;
+            case store::DocumentKind::kTranslation:
+            case store::DocumentKind::kReflection:
+                break;
+        }
+        return document;
+    }
+
+    std::string patient;
+    std::string summary;
+    std::int64_t note_revision = 0;
+    std::string note_style;
+    std::string note_detail;
+    std::string label;
+    bool label_typed = false;
+
+    bool refuse_read_turns = false;
+    bool last_retain = true;
+    std::string last_device_id;
+    std::string last_device_name;
+    std::atomic<int> sweeps{0};  // apart from calls: the sequences there are exact
+
+    void EraseUnretained() override {
+        ++sweeps;
+    }
+
+    store::SessionId Seed(const store::SessionSeed&) override {
+        return "seeded";
+    }
+
+    std::size_t ClearDemo() override {
+        return 0;
+    }
+
+    std::size_t DeleteAll() override {
+        return 0;
+    }
+
+    std::vector<asr::Turn> ReadTurns(const store::SessionId& id) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        if (refuse_read_turns) throw std::runtime_error("no session " + id);
+        calls.push_back("readTurns " + id);
+        return turns;
+    }
+
+    std::vector<float> ReadAudio(const store::SessionId& id) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        if (refuse_read_audio) {
+            throw std::runtime_error("no session " + id);
+        }
+        calls.push_back("readAudio " + id);
+        return stored_audio;
+    }
+
+    void Delete(const store::SessionId& id) override {
+        const std::lock_guard<std::mutex> lock(mutex);
+        calls.push_back("delete " + id);
+    }
+
+    std::vector<float> stored_audio;
+
+    std::vector<std::string> Calls() {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return calls;
+    }
+
+    std::string note;
+};
+
+struct FakeNoteWriter : note::INoteWriter {
+    std::string result = "the clinical note";
+    bool fail = false;
+    bool patient = false;
+    bool fail_patient = false;
+    std::atomic<bool> block{false};
+    std::atomic<bool> cancelled{false};
+    std::atomic<int> prepares{0};
+    std::mutex mutex;
+    std::vector<std::vector<asr::Turn>> calls;
+    note::NoteOptions last_options;
+    std::string patient_input;
+    std::string label_result = "  \"Elbow swelling.\"  ";  // sanitises to Elbow swelling
+    std::atomic<int> label_calls{0};
+    std::atomic<bool> block_label{false};
+
+    std::string WriteLabel(const std::string&) override {
+        ++label_calls;
+        while (block_label.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return label_result;
+    }
+
+    std::string summary_input;
+    bool fail_summary = false;
+
+    std::string WriteSummary(const std::string& note_text) override {
+        {
+            const std::lock_guard<std::mutex> lock(mutex);
+            summary_input = note_text;
+        }
+        if (fail_summary) {
+            throw std::runtime_error("summary generation failed");
+        }
+        return "A patient in their forties presented with a swollen elbow.";
+    }
+
+    void Prepare() override {
+        ++prepares;
+    }
+
+    std::atomic<int> prefills{0};
+    std::string last_prefill_speaker;  // read after the controller joins its threads
+
+    void Prefill(const std::vector<asr::Turn>& guess, const note::NoteOptions&) override {
+        ++prefills;
+        if (!guess.empty()) last_prefill_speaker = guess.front().speaker;
+    }
+
+    bool WritesPatient() const override {
+        return patient;
+    }
+
+    std::string WritePatient(const std::string& note_text, const Progress& progress) override {
+        {
+            const std::lock_guard<std::mutex> lock(mutex);
+            patient_input = note_text;
+        }
+        progress("Your appointment");
+        if (fail_patient) {
+            throw std::runtime_error("patient generation failed");
+        }
+        return "the patient sheet";
+    }
+
+    std::string Write(const std::vector<asr::Turn>& transcript, const note::NoteOptions& options,
+                      const Progress& progress) override {
+        cancelled = false;  // per generation, like the real writer
+        {
+            const std::lock_guard<std::mutex> lock(mutex);
+            calls.push_back(transcript);
+            last_options = options;
+        }
+        // Partials are prefixes of the final text, as the real writer streams them
+        progress(result.substr(0, std::min<std::size_t>(11, result.size())));
+        progress(result.substr(0, std::min<std::size_t>(20, result.size())));
+        while (block.load() && !cancelled.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (fail) {
+            throw std::runtime_error("generation failed");
+        }
+        return cancelled.load() ? "interrupted" : result;
+    }
+
+    void Cancel() override {
+        cancelled = true;
+    }
+};
+
+SourceFactory FactoryFor(ScriptedSource::Script script) {
+    return [script](const std::optional<ReplaySpec>&, const std::string&) {
+        return std::make_unique<ScriptedSource>(script);
+    };
+}
+
+struct RecordingTranscriber : asr::ITranscriber {
+    std::vector<std::pair<std::uint64_t, std::size_t>> windows;  // first_frame, count
+    int begins = 0;
+    int finishes = 0;
+    std::atomic<int> releases{0};
+
+    void Release() override {
+        ++releases;
+    }
+
+    void Begin(asr::ITurnSink&) override {
+        ++begins;
+    }
+
+    void Submit(std::span<const float> frames, std::uint64_t first_frame,
+                std::uint64_t /*first_new_frame*/ = 0) override {
+        windows.push_back({first_frame, frames.size()});
+    }
+
+    void Finish() override {
+        ++finishes;
+    }
+};
+
+bool WaitForFrames(FakeSessionStore& store, std::size_t n);
+
+struct GatedVad : PassthroughVad {
+    std::atomic<bool> ready{true};
+
+    bool Ready() const override {
+        return ready.load();
+    }
+};
+
+TEST(SessionController, WindowsAreIdenticalWhenTheVadArrivesLate) {
+    TwoPassArm two_pass;
+    const auto run = [](bool vad_ready) {
+        RecordingEvents events;
+        FakeSessionStore store;
+        RecordingTranscriber transcriber;
+        GatedVad vad;
+        vad.ready = vad_ready;
+        SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio),
+                                     events, store, transcriber, vad, kTestSettle);
+        EXPECT_TRUE(controller.Start());
+        controller.Stop();
+        return transcriber.windows;
+    };
+
+    const auto ready = run(true);
+    const auto late = run(false);  // drained whole at finalise
+
+    ASSERT_FALSE(ready.empty());
+    EXPECT_EQ(ready, late) << "a deferred VAD must not change window boundaries";
+}
+
+TEST(SessionController, HopsBufferedWhileTheVadLoadsDrainMidSession) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    RecordingTranscriber transcriber;
+    GatedVad vad;
+    vad.ready = false;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    WaitForFrames(store, 200);
+    EXPECT_TRUE(transcriber.windows.empty()) << "nothing decodes before the VAD is up";
+
+    vad.ready = true;
+    WaitForFrames(store, 800);
+    controller.Stop();
+
+    std::size_t submitted = 0;
+    for (const auto& [first_frame, count] : transcriber.windows) {
+        EXPECT_EQ(first_frame, submitted) << "the backlog drains contiguously from frame zero";
+        submitted += count;
+    }
+    EXPECT_EQ(submitted, store.frames.size());
+}
+
+TEST(SessionController, MetricsCarryTheSessionAndItsStages) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    metrics::Registry registry;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 nullptr, &registry);
+
+    ASSERT_TRUE(controller.Start(ReplaySpec{"x.wav", 4.0, false}));
+    controller.Stop();
+
+    const auto s = registry.Take();
+    EXPECT_TRUE(s.replay);
+    EXPECT_EQ(s.replay_speed, 4.0);
+    EXPECT_TRUE(s.stage_seconds.contains("transcriber drained"));
+    EXPECT_TRUE(s.stage_seconds.contains("capture joined"));
+}
+
+TEST(SessionController, EveryCapturedFrameReachesTheTranscriberByStop) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    RecordingTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    EXPECT_EQ(transcriber.begins, 1);
+    EXPECT_EQ(transcriber.finishes, 1);
+    ASSERT_FALSE(transcriber.windows.empty());
+    EXPECT_EQ(transcriber.windows.front().first, 0u);
+    std::size_t submitted = 0;
+    for (const auto& [first_frame, count] : transcriber.windows) {
+        EXPECT_EQ(first_frame, submitted) << "windows must be contiguous";
+        submitted += count;
+    }
+    EXPECT_EQ(submitted, store.frames.size()) << "the tail must be flushed at stop";
+}
+
+TEST(SessionController, WithoutADiariserTheLiveWindowsAreTheTranscript) {
+    // The single-decode defaults, but no speaker models: the windows still decode
+    RecordingEvents events;
+    FakeSessionStore store;
+    RecordingTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+    ASSERT_FALSE(transcriber.windows.empty()) << "no diariser: the live pass carries the words";
+}
+
+TEST(SessionController, TurnsReachTheStoreAndTheEvents) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_EQ(store.turns.size(), 1u);
+    ASSERT_EQ(events.turns.size(), 1u);
+    EXPECT_EQ(store.turns[0].text, events.turns[0].text);
+    EXPECT_EQ(store.turns[0].first_frame, 0u);
+    EXPECT_EQ(store.turns[0].frame_count, Window().size());
+}
+
+TEST(SessionController, TheNoteFollowsTheSeal) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    // The warm-up rides the diarisation thread's first tick; a source that
+    // completes at exactly the tick threshold races the stop, so stream
+    // until the warm-up has been observed
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(events.note_partials, (std::vector<std::string>{"the clinica", "the clinical note"}));
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_EQ(events.note_saved_text, "the clinical note");
+    EXPECT_EQ(events.note_saved_session, controller.LastFinalised());
+    EXPECT_EQ(events.note_saved_revision, 1) << "the note as stored, not as generated";
+    EXPECT_TRUE(events.note_failed.empty());
+    EXPECT_EQ(store.note, "the clinical note");
+    const auto calls = store.Calls();
+    EXPECT_EQ(calls.back(), "note s1") << "the note is stored after the seal";
+    ASSERT_EQ(writer.calls.size(), 1u);
+    EXPECT_FALSE(writer.calls[0].empty()) << "the writer gets the transcript";
+    EXPECT_GE(writer.prepares.load(), 1) << "the weights warm while the session records";
+}
+
+TEST(SessionController, ARefusedNoteSaveStillReachesTheShellAndFiresNoNoteSaved) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.refuse_documents = true;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_TRUE(events.note_saved_session.empty()) << "nothing stored, nothing to search";
+    EXPECT_TRUE(store.note.empty());
+}
+
+TEST(SessionController, WhatFollowsTheNoteCannotFailIt) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    events.note_saved_throws = true;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_TRUE(events.note_failed.empty());
+    EXPECT_EQ(store.note, "the clinical note");
+}
+
+TEST(SessionController, TheNoteBringsItsOptionsAndLabel) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+    controller.SetNoteOptions({"soap", "concise"});
+
+    ASSERT_TRUE(controller.Start());
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+
+    EXPECT_EQ(store.note_style, "soap");
+    EXPECT_EQ(store.note_detail, "concise");
+    // The title lands after the documents, on the note thread
+    for (int i = 0; i < 500 && store.label.empty(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_EQ(store.label, "Elbow swelling") << "the model's title, sanitised";
+    EXPECT_EQ(writer.label_calls.load(), 1);
+    EXPECT_FALSE(store.label_typed);
+}
+
+TEST(SessionController, ARejectedTitleLeavesNoLabel) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.label_result = "  \"...\"  ";  // nothing survives the sanitiser
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+    for (int i = 0; i < 100 && writer.label_calls.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    EXPECT_EQ(writer.label_calls.load(), 1);
+    EXPECT_EQ(store.label, "") << "no title beats a bad title; the list shows the date";
+}
+
+// The title is written after the documents. A consultation opened meanwhile
+// is not refused for it
+TEST(SessionController, OpenIsNotRefusedWhileTheTitleIsWritten) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.turns = {{0, 16000 * 30, "doctor", "a stored consultation with enough words to note"}};
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.block_label = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+    for (int i = 0; i < 500 && writer.label_calls.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_EQ(writer.label_calls.load(), 1) << "the title is being written";
+
+    EXPECT_TRUE(controller.Open("past"));
+
+    writer.block_label = false;
+    for (int i = 0; i < 500 && store.label.empty(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_EQ(store.label, "Elbow swelling");
+}
+
+TEST(SessionController, ATypedLabelSurvivesTheNote) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.label = "Elbow swelling";
+    store.label_typed = true;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));  // the lane finishes
+
+    EXPECT_EQ(store.label, "Elbow swelling");
+    EXPECT_TRUE(store.label_typed);
+    EXPECT_EQ(writer.label_calls.load(), 0) << "a typed label is never regenerated";
+}
+
+TEST(SessionController, AnOpenedSessionIsTheRegenerateTarget) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.turns = {{0, 16000 * 30, "doctor", "a stored consultation with enough words to note"}};
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    EXPECT_FALSE(controller.RegenerateNote({"prose", "standard"})) << "nothing to regenerate yet";
+    ASSERT_TRUE(controller.Open("past"));
+    EXPECT_TRUE(controller.Reviewing());
+    EXPECT_EQ(controller.LastFinalised(), "past");
+
+    ASSERT_TRUE(controller.RegenerateNote({"soap", "concise"}));
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(store.note, "the clinical note");
+    EXPECT_EQ(store.note_style, "soap");
+    const auto calls = store.Calls();
+    EXPECT_NE(std::find(calls.begin(), calls.end(), "note past"), calls.end())
+        << "the note is stored against the opened session";
+
+    controller.Close();
+    EXPECT_FALSE(controller.Reviewing());
+    EXPECT_TRUE(controller.LastFinalised().empty());
+    EXPECT_FALSE(controller.RegenerateNote({"prose", "standard"})) << "closed";
+}
+
+TEST(SessionController, RegeneratePatientRewritesTheSheetFromTheStoredNote) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.turns = {{0, 16000 * 30, "doctor", "a stored consultation with enough words to note"}};
+    store.note = "the note as the clinician edited it";
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.patient = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    EXPECT_FALSE(controller.RegeneratePatient()) << "nothing open yet";
+    ASSERT_TRUE(controller.Open("past"));
+    ASSERT_TRUE(controller.RegeneratePatient());
+    ASSERT_TRUE(events.WaitForPatient());
+
+    EXPECT_EQ(writer.patient_input, "the note as the clinician edited it")
+        << "the sheet regenerates from the stored note, edits included";
+    EXPECT_EQ(store.patient, "the patient sheet");
+
+    controller.Close();
+    EXPECT_FALSE(controller.RegeneratePatient()) << "closed";
+}
+
+TEST(SessionController, WriteSummaryStoresTheCaseSummaryForAnyStoredSession) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.note = "the note as stored";
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.WriteSummary("past")) << "no review needed: any stored session";
+    ASSERT_TRUE(events.WaitForSummary());
+    EXPECT_EQ(events.summary_session, "past");
+    EXPECT_EQ(events.summary_text, "A patient in their forties presented with a swollen elbow.");
+    EXPECT_EQ(writer.summary_input, "the note as stored");
+    EXPECT_EQ(store.summary, events.summary_text);
+
+    events.summary_done = false;
+    writer.fail_summary = true;
+    ASSERT_TRUE(controller.WriteSummary("past"));
+    ASSERT_TRUE(events.WaitForSummary());
+    EXPECT_EQ(events.summary_failed, "summary generation failed");
+
+    store.note.clear();
+    EXPECT_FALSE(controller.WriteSummary("past")) << "no note, nothing to summarise";
+}
+
+TEST(SessionController, OpenIsRefusedWhileRecordingOrForAnUnknownSession) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    store.refuse_read_turns = true;
+    EXPECT_FALSE(controller.Open("nope"));
+    store.refuse_read_turns = false;
+
+    ASSERT_TRUE(controller.Open("past"));
+    ASSERT_TRUE(controller.Start());
+    EXPECT_FALSE(controller.Reviewing()) << "Record closes the review";
+    EXPECT_FALSE(controller.Open("past")) << "not while recording";
+    for (int i = 0; i < 500 && writer.prepares.load() == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(controller.LastFinalised(), "s1") << "the seal sets its own target";
+}
+
+TEST(SessionController, RetainReachesTheStoreAndLeavingSweeps) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 nullptr, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start(std::nullopt, {}, false));
+    EXPECT_FALSE(store.last_retain);
+    EXPECT_EQ(store.sweeps.load(), 1) << "the previous consultation is left at start";
+    controller.Stop();
+
+    controller.Close();
+    EXPECT_EQ(store.sweeps.load(), 2) << "and at close";
+
+    ASSERT_TRUE(controller.Start());
+    EXPECT_TRUE(store.last_retain) << "the default keeps";
+    EXPECT_EQ(store.sweeps.load(), 3);
+    controller.Stop();
+}
+
+TEST(SessionController, RegenerateWithoutAWriterIsRefusedNotCrashed) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.turns = {{0, 16000, "doctor", "words"}};
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 nullptr, nullptr, 0);
+
+    ASSERT_TRUE(controller.Open("past"));
+    EXPECT_FALSE(controller.RegenerateNote({"prose", "standard"}));
+}
+
+TEST(SessionController, TheNoteLaneFreesTheTranscriberFirst) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    RecordingTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(transcriber.releases.load(), 1) << "the GPU is freed before the note writes";
+}
+
+TEST(SessionController, PatientInformationFollowsTheNote) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.patient = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForPatient());
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_EQ(writer.patient_input, "the clinical note") << "the note is the patient input";
+    EXPECT_EQ(events.patient_partials, (std::vector<std::string>{"Your appointment"}));
+    EXPECT_EQ(events.patient_ready, "the patient sheet");
+    EXPECT_EQ(store.patient, "the patient sheet");
+}
+
+TEST(SessionController, AFailedPatientLeavesTheNoteIntact) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.patient = true;
+    writer.fail_patient = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForPatient());
+    EXPECT_EQ(events.patient_failed, "patient generation failed");
+    EXPECT_TRUE(events.patient_ready.empty());
+    EXPECT_EQ(events.note_ready, "the clinical note");
+    EXPECT_EQ(store.note, "the clinical note");
+    EXPECT_TRUE(store.patient.empty());
+}
+
+TEST(SessionController, ANoteOnlyWriterSkipsThePatientLane) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_TRUE(events.patient_partials.empty());
+    EXPECT_TRUE(writer.patient_input.empty());
+}
+
+TEST(SessionController, AFailedNoteAnnouncesAndStoresNothing) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.fail = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(events.note_failed, "generation failed");
+    EXPECT_TRUE(events.note_ready.empty());
+    EXPECT_TRUE(store.note.empty());
+}
+
+TEST(SessionController, DestructionCancelsANoteStillWriting) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.block = true;
+    {
+        SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio),
+                                     events, store, transcriber, vad, kTestSettle, nullptr,
+                                     5 * kSampleRate, &writer, nullptr, 0);
+        ASSERT_TRUE(controller.Start());
+        controller.Stop();
+        // Destruction must catch the write in flight, not before it starts
+        for (int i = 0; i < 400; ++i) {
+            {
+                const std::lock_guard<std::mutex> lock(events.mutex);
+                if (!events.note_partials.empty()) {
+                    break;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+
+    EXPECT_TRUE(writer.cancelled.load());
+    EXPECT_EQ(events.note_ready, "interrupted") << "an interrupted write returns what it had";
+}
+
+TEST(SessionController, CancelWritesNoNote) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Cancel();
+
+    EXPECT_TRUE(writer.calls.empty());
+    EXPECT_TRUE(events.note_partials.empty());
+}
+
+TEST(SessionController, StartAcksOnlyAfterAudioFlowsAndLevelsFollow) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    EXPECT_TRUE(controller.Running());
+    controller.Stop();
+
+    EXPECT_FALSE(controller.Running());
+    ASSERT_FALSE(events.levels.empty());
+    EXPECT_NEAR(events.levels.front(), 1.0F, 0.01F);
+    EXPECT_TRUE(events.interruptions.empty()) << "a user stop is not an interruption";
+}
+
+TEST(SessionController, StartFailsWhenTheSourceDiesFirst) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kDieImmediately), events, store,
+                                 transcriber, vad, kTestSettle);
+
+    EXPECT_FALSE(controller.Start());
+
+    EXPECT_EQ(controller.LastEnd().reason, SourceEndReason::kFailed);
+    EXPECT_EQ(controller.LastEnd().detail, "would not open");
+    EXPECT_TRUE(events.interruptions.empty());
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "cancel s1"}))
+        << "a session that never produced audio leaves no trace";
+}
+
+TEST(SessionController, StartFailsWhenNoAudioArrivesBeforeTheDeadline) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kNeverAudio), events, store,
+                                 transcriber, vad, kTestSettle);
+
+    EXPECT_FALSE(controller.Start());
+
+    EXPECT_NE(controller.LastEnd().detail.find("deadline"), std::string::npos);
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "cancel s1"}));
+}
+
+TEST(SessionController, StartFailsWhenTheStoreRefusesASession) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    store.refuse_begin = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    EXPECT_FALSE(controller.Start());
+    EXPECT_FALSE(controller.Running());
+    EXPECT_EQ(controller.LastEnd().reason, SourceEndReason::kFailed);
+    EXPECT_NE(controller.LastEnd().detail.find("store"), std::string::npos);
+
+    // The refusal is not sticky: the next start works
+    store.refuse_begin = false;
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+}
+
+TEST(SessionController, StopFinalisesTheSession) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "turn s1", "finalise s1"}))
+        << "the tail turn lands before the session seals";
+    EXPECT_FALSE(store.frames.empty()) << "captured audio must reach the store";
+}
+
+struct FakeDiariser : diar::IDiariser {
+    int calls = 0;
+    int accruals = 0;
+    int accrued_cluster = -1;
+    std::size_t audio_frames = 0;
+    int clusters = 1;
+    std::vector<double> similarities;
+    diar::DiariseTiming timing;
+
+    std::size_t boundary_cuts = 0;
+    std::vector<std::uint64_t> bounds;
+
+    // Written on the diarisation thread; read after the controller joins it
+    int advances = 0;
+
+    std::vector<float> voiceprint{0.6f, 0.8f};  // what EmbedVoice answers; empty = too short
+    std::size_t embedded_frames = 0;
+    std::vector<float> replaced;
+    std::uint64_t replaced_at = 0;
+
+    std::vector<float> EmbedVoice(std::span<const float> audio) override {
+        embedded_frames = audio.size();
+        return voiceprint;
+    }
+
+    void ReplaceAnchor(std::span<const float> vp, std::uint64_t at) override {
+        replaced.assign(vp.begin(), vp.end());
+        replaced_at = at;
+    }
+    std::size_t advanced_frames = 0;
+    std::size_t advanced_turns = 0;
+    int takes = 0;
+    int discards = 0;
+    bool speculate_first_turn = false;
+
+    diar::DiariseResult Diarise(std::span<const float> audio,
+                                std::span<const std::uint64_t> turn_boundaries) override {
+        boundary_cuts = turn_boundaries.size();
+        bounds.assign(turn_boundaries.begin(), turn_boundaries.end());
+        ++calls;
+        audio_frames = audio.size();
+        diar::DiariseResult result;
+        result.cluster_count = clusters;
+        result.timing = timing;
+        if (clusters == 1) {
+            result.slices = {{0, audio.size(), 0}};
+        } else {
+            const auto half = audio.size() / 2;
+            result.slices = {{0, half, 0}, {half, audio.size(), 1}};
+        }
+        return result;
+    }
+
+    int similarity_calls = 0;
+
+    std::vector<double> AnchorSimilarities(std::span<const float>,
+                                           const std::vector<diar::LabelledSlice>&, int) override {
+        ++similarity_calls;
+        return similarities;
+    }
+
+    void AccrueDoctor(std::span<const float>, const std::vector<diar::LabelledSlice>&,
+                      int doctor_cluster) override {
+        ++accruals;
+        accrued_cluster = doctor_cluster;
+    }
+
+    int voiceprint_cluster = -1;
+
+    std::vector<float> DoctorVoiceprint(std::span<const float>,
+                                        const std::vector<diar::LabelledSlice>&,
+                                        int doctor_cluster) override {
+        voiceprint_cluster = doctor_cluster;
+        return {1.0f};
+    }
+
+    void AccrueVoiceprint(std::span<const float>) override {
+        ++accruals;
+        accrued_cluster = voiceprint_cluster;
+    }
+
+    void Advance(std::span<const float> audio, std::span<const asr::Turn> turns,
+                 const diar::DecodeClipFn&) override {
+        ++advances;
+        advanced_frames = audio.size();
+        advanced_turns = turns.size();
+    }
+
+    int settles = 0;
+    std::size_t settled_frames = 0;
+    std::vector<std::uint64_t> cut_points;
+
+    void AddCutPoints(std::span<const std::uint64_t> cuts) override {
+        cut_points.insert(cut_points.end(), cuts.begin(), cuts.end());
+    }
+
+    void Settle(std::span<const float> audio, std::span<const asr::Turn>,
+                const diar::DecodeClipFn&) override {
+        ++settles;
+        settled_frames = audio.size();
+    }
+
+    bool speculate_transcript = false;
+
+    std::vector<asr::Turn> SpeculativeTranscript() override {
+        if (!speculate_transcript) return {};
+        return {{0, 16000, "doctor", "settled words"}};
+    }
+
+    // Pretends capture speculated the first cluster's turn (its span is the
+    // first half of the audio Diarise saw)
+    diar::TurnTexts TakeTurnTexts() override {
+        ++takes;
+        diar::TurnTexts cache;
+        if (speculate_first_turn && audio_frames > 0) {
+            cache[{0, audio_frames / 2}] = "speculated words";
+        }
+        return cache;
+    }
+
+    void DiscardCapture() override {
+        ++discards;
+    }
+};
+
+// Streams until the store holds enough audio that each of two merged turns
+// clears the 0.3 s decode floor; wall-clock sleeps are too coarse on Windows
+bool WaitForFrames(FakeSessionStore& store, std::size_t n) {
+    for (int i = 0; i < 400; ++i) {
+        {
+            const std::lock_guard<std::mutex> lock(store.mutex);
+            if (store.frames.size() >= n) return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return false;
+}
+
+TEST(SessionController, StopReplacesTurnsWithTheAttributedTranscript) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    EXPECT_EQ(diariser.calls, 1);
+    EXPECT_FALSE(store.frames.empty());
+    EXPECT_EQ(diariser.audio_frames, store.frames.size())
+        << "the diariser hears exactly the captured audio";
+    EXPECT_EQ(store.Calls(),
+              (std::vector<std::string>{"begin s1", "turn s1", "replace s1", "finalise s1"}))
+        << "the attributed transcript supersedes the live turns before the seal";
+    ASSERT_EQ(store.turns.size(), 1u);
+    EXPECT_EQ(store.turns[0].speaker, "speaker 1") << "one cluster cannot be named";
+    EXPECT_EQ(diariser.accruals, 0) << "an abstained session must not teach the anchor";
+}
+
+TEST(SessionController, AnchorSimilaritiesNameTheRolesAndAccrue) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    diariser.similarities = {0.2, 0.8};
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    ASSERT_FALSE(store.turns.empty());
+    for (const auto& turn : store.turns) {
+        EXPECT_TRUE(turn.speaker == "doctor" || turn.speaker == "patient") << turn.speaker;
+    }
+    EXPECT_EQ(diariser.accruals, 1);
+    EXPECT_EQ(diariser.accrued_cluster, 1) << "the nearer cluster to the anchor is the doctor";
+    EXPECT_EQ(diariser.similarity_calls, 1) << "the anchor is consulted once, off the decode path";
+    EXPECT_GT(diariser.boundary_cuts, 0u) << "transcribed-turn edges reach the diariser as cuts";
+}
+
+TEST(SessionController, FinaliseDecodesEachTurnFromItsOwnAudio) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    diariser.similarities = {0.2, 0.8};
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    ASSERT_EQ(store.turns.size(), 2u) << "one merged turn per cluster";
+    const auto half = diariser.audio_frames / 2;
+    EXPECT_EQ(store.turns[0].text, "Re-decoded " + std::to_string(half) + " frames at 0.")
+        << "tidied at the seal";
+    EXPECT_EQ(store.turns[1].first_frame, half);
+    EXPECT_NE(store.turns[0].speaker, store.turns[1].speaker);
+}
+
+TEST(SessionController, DiarisationAdvancesDuringCapture) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    // One 100 ms window per tick, so a short session advances several times
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames);
+
+    ASSERT_TRUE(controller.Start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    controller.Stop();
+
+    EXPECT_GT(diariser.advances, 0) << "capture-phase work ran during the recording";
+    EXPECT_GT(diariser.advanced_frames, 0u);
+    EXPECT_LE(diariser.advanced_frames, store.frames.size())
+        << "Advance only ever sees captured audio";
+    EXPECT_EQ(diariser.calls, 1);
+}
+
+TEST(SessionController, TheSpeculatedOpeningReachesTheNoteWriterOnlyBehindTheFlag) {
+    struct FlagScope {
+        explicit FlagScope(const char* value) {
+            _putenv_s("AMBIENT_NOTE_PREFILL", value);
+        }
+        ~FlagScope() {
+            _putenv_s("AMBIENT_NOTE_PREFILL", "");
+        }
+    };
+    for (const bool flag : {false, true}) {
+        FlagScope scope(flag ? "1" : "0");
+        RecordingEvents events;
+        FakeSessionStore store;
+        asr::ScriptedTranscriber transcriber;
+        PassthroughVad vad;
+        FakeDiariser diariser;
+        diariser.speculate_transcript = true;
+        FakeNoteWriter writer;
+        SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped),
+                                     events, store, transcriber, vad, kTestSettle, &diariser,
+                                     LevelMeter::kWindowFrames, &writer);
+        ASSERT_TRUE(controller.Start());
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        controller.Stop();
+        ASSERT_GT(diariser.advances, 0);
+        if (flag) {
+            EXPECT_GT(writer.prefills.load(), 0) << "each tick hands the guess to the note lane";
+            EXPECT_EQ(writer.last_prefill_speaker, "doctor");
+        } else {
+            EXPECT_EQ(writer.prefills.load(), 0) << "shipped behaviour: no prefill";
+        }
+    }
+}
+
+TEST(SessionController, FinaliseSettlesTheRemainingAudioOnlyBehindTheClipCutsFlag) {
+    struct FlagScope {
+        explicit FlagScope(const char* value) {
+            _putenv_s("AMBIENT_CLIP_CUTS", value);
+        }
+        ~FlagScope() {
+            _putenv_s("AMBIENT_CLIP_CUTS", "");
+        }
+    };
+    for (const bool flag : {false, true}) {
+        FlagScope scope(flag ? "snap" : "0");
+        RecordingEvents events;
+        FakeSessionStore store;
+        asr::ScriptedTranscriber transcriber;
+        PassthroughVad vad;
+        FakeDiariser diariser;
+        SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped),
+                                     events, store, transcriber, vad, kTestSettle, &diariser,
+                                     LevelMeter::kWindowFrames);
+        ASSERT_TRUE(controller.Start());
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        controller.Stop();
+        if (flag) {
+            EXPECT_EQ(diariser.settles, 1) << "finalise decodes what capture had not reached";
+            EXPECT_EQ(diariser.settled_frames, store.frames.size());
+        } else {
+            EXPECT_EQ(diariser.settles, 0) << "shipped behaviour: no catch-up pass";
+        }
+        EXPECT_EQ(diariser.calls, 1);
+    }
+}
+
+TEST(SessionController, ATicksClipCutsAreAppliedInTheSameTick) {
+    struct FlagScope {
+        FlagScope() {
+            _putenv_s("AMBIENT_CLIP_CUTS", "snap");
+        }
+        ~FlagScope() {
+            _putenv_s("AMBIENT_CLIP_CUTS", "");
+        }
+    } scope;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    transcriber.clip_cuts = {800, 2400};
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames);
+    ASSERT_TRUE(controller.Start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    controller.Stop();
+
+    ASSERT_GT(diariser.advances, 0);
+    EXPECT_EQ(diariser.cut_points, (std::vector<std::uint64_t>{800, 2400}))
+        << "the cuts reach the diariser once";
+    EXPECT_GE(diariser.advances, 2) << "the tick that produced cuts advances again at once";
+}
+
+TEST(SessionController, ASpeculatedTurnTextIsUsedWithoutRedecoding) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    diariser.similarities = {0.2, 0.8};
+    diariser.speculate_first_turn = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    EXPECT_EQ(diariser.takes, 1);
+    ASSERT_EQ(store.turns.size(), 2u);
+    EXPECT_EQ(store.turns[0].text, "Speculated words.") << "the cache hit stands, tidied";
+    EXPECT_NE(store.turns[1].text.find("e-decoded"), std::string::npos) << "the miss decodes fresh";
+}
+
+TEST(SessionController, PauseReachesTheSourceAndStopStillWins) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    ScriptedSource* source = nullptr;
+    SourceFactory factory = [&source](const std::optional<ReplaySpec>&, const std::string&) {
+        auto s = std::make_unique<ScriptedSource>(ScriptedSource::Script::kStreamUntilStopped);
+        source = s.get();
+        return s;
+    };
+    SessionController controller(std::move(factory), events, store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.SetPaused(true);
+    controller.SetPaused(false);
+    controller.Stop();
+
+    ASSERT_NE(source, nullptr);
+    EXPECT_EQ(source->pause_calls.load(), 2);
+    EXPECT_FALSE(source->last_paused.load());
+}
+
+TEST(SessionController, MonitorToggleReachesTheSource) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    ScriptedSource* source = nullptr;
+    SourceFactory factory = [&source](const std::optional<ReplaySpec>&, const std::string&) {
+        auto s = std::make_unique<ScriptedSource>(ScriptedSource::Script::kStreamUntilStopped);
+        source = s.get();
+        return s;
+    };
+    SessionController controller(std::move(factory), events, store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.SetMonitor(true);
+    controller.SetMonitor(false);
+    controller.Stop();
+
+    ASSERT_NE(source, nullptr);
+    EXPECT_EQ(source->monitor_calls.load(), 2);
+    EXPECT_FALSE(source->last_monitor.load());
+}
+
+TEST(SessionController, TheChosenMicrophoneIsPinnedAndOnRecord) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    std::string pinned;
+    SourceFactory factory = [&pinned](const std::optional<ReplaySpec>&, const std::string& mic_id) {
+        pinned = mic_id;
+        return std::make_unique<ScriptedSource>(ScriptedSource::Script::kStreamUntilStopped);
+    };
+    SessionController controller(std::move(factory), events, store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start(std::nullopt, {}, true,
+                                 {"{0.0.1}.{aa}", "Microphone Array (Cirrus Logic)"}));
+    controller.Stop();
+
+    EXPECT_EQ(pinned, "{0.0.1}.{aa}");
+    EXPECT_EQ(store.last_device_id, "{0.0.1}.{aa}");
+    EXPECT_EQ(store.last_device_name, "Microphone Array (Cirrus Logic)");
+}
+
+TEST(SessionController, AReplayCarriesNoDeviceSnapshot) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start(ReplaySpec{"C:/tracks/elbow.wav"}, {}, true,
+                                 {"{0.0.1}.{aa}", "Microphone Array"}));
+    controller.Stop();
+
+    EXPECT_EQ(store.last_device_id, "");
+    EXPECT_EQ(store.last_device_name, "");
+}
+
+TEST(SessionController, AReplaySpecReachesTheFactory) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    std::optional<ReplaySpec> seen;
+    SourceFactory factory = [&seen](const std::optional<ReplaySpec>& replay, const std::string&) {
+        seen = replay;
+        return std::make_unique<ScriptedSource>(ScriptedSource::Script::kStreamUntilStopped);
+    };
+    SessionController controller(std::move(factory), events, store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start(ReplaySpec{"C:/tracks/elbow.wav", 4.0, true}));
+    controller.Stop();
+
+    ASSERT_TRUE(seen.has_value());
+    EXPECT_EQ(seen->path, "C:/tracks/elbow.wav");
+    EXPECT_EQ(seen->speed, 4.0);
+    EXPECT_TRUE(seen->monitor);
+}
+
+TEST(SessionController, CancelDiscardsCaptureState) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Cancel();
+
+    EXPECT_GE(diariser.discards, 1) << "a cancelled session's capture state must not leak";
+    EXPECT_EQ(diariser.takes, 0) << "nothing splices on cancel";
+    EXPECT_EQ(diariser.calls, 0) << "nothing diarises on cancel";
+}
+
+TEST(SessionController, RedecodesNeverReachTheStore) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    diariser.similarities = {0.2, 0.8};
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    const auto calls = store.Calls();
+    const auto replace = std::find(calls.begin(), calls.end(), "replace s1");
+    ASSERT_NE(replace, calls.end());
+    for (auto it = calls.begin(); it != calls.end(); ++it) {
+        if (*it == "turn s1") {
+            EXPECT_LT(it - calls.begin(), replace - calls.begin())
+                << "a re-decode appended to the store";
+        }
+    }
+}
+
+TEST(SessionController, AmbiguousLexicalEvidenceKeepsNumberedSpeakers) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;  // scripted text carries no role signal
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    ASSERT_FALSE(store.turns.empty());
+    for (const auto& turn : store.turns) {
+        EXPECT_TRUE(turn.speaker == "speaker 1" || turn.speaker == "speaker 2") << turn.speaker;
+    }
+    EXPECT_EQ(diariser.accruals, 0);
+}
+
+TEST(SessionController, CancelNeverDiarises) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Cancel();
+
+    EXPECT_EQ(diariser.calls, 0);
+    EXPECT_TRUE(events.progress.empty()) << "a cancel finalises nothing to report";
+}
+
+TEST(SessionController, StopReportsEachFinaliseStageAsItStarts) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    EXPECT_EQ(events.progress, (std::vector<std::string>{"transcript", "speakers", "turns"}));
+}
+
+TEST(SessionController, StopWithoutADiariserReportsOnlyTheTranscriptStage) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    EXPECT_EQ(events.progress, (std::vector<std::string>{"transcript"}))
+        << "a stage that never runs is never announced";
+}
+
+TEST(SessionController, DiariseTimingReachesTheMetrics) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.timing.embed_s = 0.25;
+    diariser.timing.embed_misses = 3;
+    metrics::Registry registry;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser, 5 * kSampleRate,
+                                 nullptr, &registry);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(WaitForFrames(store, 12800));
+    controller.Stop();
+
+    const auto s = registry.Take();
+    EXPECT_EQ(s.stage_seconds.at("diarise embed"), 0.25);
+    EXPECT_EQ(s.stage_seconds.at("diarise embed misses"), 3);
+    EXPECT_TRUE(s.stage_seconds.contains("diarise voiceprints"))
+        << "the overlapped voiceprint task is timed by the controller";
+    EXPECT_TRUE(s.stage_seconds.contains("voiceprints joined"));
+    EXPECT_TRUE(s.stage_seconds.contains("diarised"));
+}
+
+TEST(SessionController, CancelErasesTheSession) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Cancel();
+
+    EXPECT_FALSE(controller.Running());
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "cancel s1"}));
+    EXPECT_TRUE(events.interruptions.empty()) << "a user cancel is not an interruption";
+}
+
+TEST(SessionController, MidSessionDeathRaisesInterruptedAndAbandons) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kDieAfterAudio), events, store,
+                                 transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(events.WaitForInterruption());
+    controller.Stop();
+
+    ASSERT_EQ(events.interruptions.size(), 1u);
+    EXPECT_EQ(events.interruptions[0], SourceEndReason::kDeviceLost);
+    EXPECT_EQ(events.last_detail, "unplugged");
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "turn s1", "abandon s1"}))
+        << "an interrupted recording is kept for recovery, not finalised";
+}
+
+TEST(SessionController, AThrowingSourceIsGuardedAndReported) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kThrowAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    ASSERT_TRUE(events.WaitForInterruption());
+    controller.Stop();
+
+    ASSERT_EQ(events.interruptions.size(), 1u);
+    EXPECT_EQ(events.interruptions[0], SourceEndReason::kFailed);
+    EXPECT_NE(events.last_detail.find("driver exploded"), std::string::npos);
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "turn s1", "abandon s1"}));
+}
+
+TEST(SessionController, ACompletedReplayEndsQuietlyAndFinalises) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    EXPECT_TRUE(events.interruptions.empty());
+    EXPECT_EQ(controller.LostFrames(), 3u);
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "turn s1", "finalise s1"}));
+    EXPECT_EQ(store.frames.size(), Window().size());
+    EXPECT_EQ(store.lost, 3u) << "loss accounting must reach the store";
+}
+
+TEST(SessionController, CancelAfterACompletedReplayStillErases) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Cancel();
+
+    EXPECT_EQ(store.Calls(), (std::vector<std::string>{"begin s1", "cancel s1"}))
+        << "the source completing is not the user's keep-or-discard decision";
+}
+
+TEST(SessionController, StartWhileRunningIsRefused) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    EXPECT_FALSE(controller.Start());
+    controller.Stop();
+
+    EXPECT_EQ(store.begins, 1) << "the refused start must not open a second session";
+}
+
+TEST(SessionController, RestartAfterAStopGetsAFreshSource) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    // Two runs, two windows, two level readings, two stored sessions
+    EXPECT_EQ(events.levels.size(), 2u);
+    EXPECT_EQ(store.begins, 2);
+}
+
+TEST(SessionController, StopBeforeStartIsANoOp) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    controller.Stop();
+
+    EXPECT_FALSE(controller.Running());
+    EXPECT_TRUE(store.Calls().empty());
+}
+
+TEST(SessionController, NoteOptionsReachTheWriter) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    controller.SetNoteOptions({"soap", "concise"});
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_EQ(writer.last_options.style, "soap");
+    EXPECT_EQ(writer.last_options.detail, "concise");
+}
+
+TEST(SessionController, RegenerateRewritesTheLastNoteWithNewOptions) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+    ASSERT_TRUE(events.WaitForNote());
+    {
+        const std::lock_guard<std::mutex> lock(events.mutex);
+        events.note_done = false;
+    }
+
+    ASSERT_TRUE(controller.RegenerateNote({"soap", "concise"}));
+    ASSERT_TRUE(events.WaitForNote());
+
+    ASSERT_EQ(writer.calls.size(), 2u);
+    EXPECT_EQ(writer.last_options.style, "soap");
+    EXPECT_EQ(writer.last_options.detail, "concise");
+    EXPECT_EQ(store.note, "the clinical note") << "the regenerated note is re-saved";
+}
+
+TEST(SessionController, RegenerateRefusedWhileRecordingOrWithNothingFinalised) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer, nullptr, 0);
+
+    EXPECT_FALSE(controller.RegenerateNote({})) << "nothing finalised yet";
+
+    ASSERT_TRUE(controller.Start());
+    EXPECT_FALSE(controller.RegenerateNote({})) << "a live session refuses";
+    controller.Stop();
+}
+
+TEST(SessionController, AThinTranscriptIsRefusedWithoutAskingTheModel) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;  // one 5-word turn, far below the floor
+    PassthroughVad vad;
+    FakeNoteWriter writer;
+    writer.patient = true;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle, nullptr, 5 * kSampleRate,
+                                 &writer);
+
+    ASSERT_TRUE(controller.Start());
+    controller.Stop();
+
+    ASSERT_TRUE(events.WaitForNote());
+    EXPECT_TRUE(writer.calls.empty()) << "the model must never see a transcript this thin";
+    EXPECT_NE(events.note_refused.find("words; a note needs at least 25"), std::string::npos);
+    EXPECT_FALSE(events.note_refused_overridable) << "insisting would make the model fabricate";
+    EXPECT_TRUE(events.note_ready.empty());
+    EXPECT_TRUE(events.patient_ready.empty()) << "no sheet without a note";
+    EXPECT_TRUE(events.note_failed.empty()) << "a thin recording is not an error state";
+    EXPECT_TRUE(store.note.empty());
+}
+
+TEST(SessionController, AResumedSessionReplaysStoredAudioThenSupersedesTheOld) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.stored_audio = std::vector<float>(LevelMeter::kWindowFrames * 3, 0.5F);
+    RecordingTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    ASSERT_TRUE(controller.Start(std::nullopt, "old-session"));
+    ASSERT_TRUE(WaitForFrames(store, LevelMeter::kWindowFrames * 3 + Window().size()));
+    controller.Stop();
+
+    const auto calls = store.Calls();
+    EXPECT_NE(std::find(calls.begin(), calls.end(), "readAudio old-session"), calls.end());
+    EXPECT_NE(std::find(calls.begin(), calls.end(), "delete old-session"), calls.end())
+        << "the old session is superseded once the new one seals";
+    // The new session's store holds the stored audio and the live audio as
+    // one continuous stream
+    EXPECT_EQ(store.frames.size(), LevelMeter::kWindowFrames * 3 + Window().size());
+}
+
+TEST(SessionController, AResumeOfAMissingSessionFailsTheStart) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    store.refuse_read_audio = true;
+    RecordingTranscriber transcriber;
+    PassthroughVad vad;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kCompleteAfterAudio), events,
+                                 store, transcriber, vad, kTestSettle);
+
+    EXPECT_FALSE(controller.Start(std::nullopt, "gone"));
+    EXPECT_FALSE(controller.Running());
+}
+
+}  // namespace
+namespace {
+
+std::optional<std::tuple<bool, std::string, double>> WaitEnrol(RecordingEvents& events,
+                                                               SessionController& controller) {
+    for (int i = 0; i < 400 && controller.Enrolling(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    const std::lock_guard<std::mutex> lock(events.mutex);
+    return events.enrol_done;
+}
+
+TEST(SessionController, EnrolmentEmbedsTheSpeechAndReplacesTheAnchor) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+    ASSERT_TRUE(controller.StartEnrolment(0.5, {}, 0.1));
+    const auto done = WaitEnrol(events, controller);
+    ASSERT_TRUE(done.has_value());
+    EXPECT_TRUE(std::get<0>(*done)) << std::get<1>(*done);
+    EXPECT_GE(std::get<2>(*done), 0.1);
+    EXPECT_EQ(diariser.replaced, diariser.voiceprint);
+    EXPECT_GT(diariser.replaced_at, 1'700'000'000u) << "stamped with the wall clock";
+    EXPECT_GE(diariser.embedded_frames, 1600u) << "the gated speech reached the embedder";
+    {
+        const std::lock_guard<std::mutex> lock(events.mutex);
+        EXPECT_FALSE(events.enrol_progress.empty()) << "the level was reported";
+        EXPECT_TRUE(events.levels.empty()) << "not as session levels";
+    }
+    EXPECT_TRUE(store.Calls().empty()) << "an enrolment stores nothing";
+}
+
+TEST(SessionController, EnrolmentIsRefusedDuringASessionAndViceVersa) {
+    TwoPassArm two_pass;
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+    ASSERT_TRUE(controller.Start());
+    EXPECT_FALSE(controller.StartEnrolment(0.5));
+    controller.Stop();
+
+    ASSERT_TRUE(controller.StartEnrolment(2.0, {}, 0.1));
+    EXPECT_FALSE(controller.Start()) << "the microphone is the enrolment's";
+    controller.CancelEnrolment();
+    const auto done = WaitEnrol(events, controller);
+    ASSERT_TRUE(done.has_value());
+    EXPECT_FALSE(std::get<0>(*done));
+    EXPECT_EQ(std::get<1>(*done), "cancelled");
+    EXPECT_TRUE(diariser.replaced.empty()) << "a cancelled enrolment changes nothing";
+    ASSERT_TRUE(controller.Start()) << "and the microphone is free again";
+    controller.Stop();
+}
+
+TEST(SessionController, FinishEndsTheReadingEarlyAndKeepsThePrint) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+    ASSERT_TRUE(controller.StartEnrolment(120.0, {}, 0.1));  // the cap, never reached
+    for (int i = 0; i < 200 && diariser.embedded_frames == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        std::lock_guard<std::mutex> lock(events.mutex);
+        if (!events.enrol_progress.empty() && events.enrol_progress.back().speech_s >= 0.2) break;
+    }
+    controller.FinishEnrolment();
+    const auto done = WaitEnrol(events, controller);
+    ASSERT_TRUE(done.has_value());
+    EXPECT_TRUE(std::get<0>(*done)) << std::get<1>(*done);
+    EXPECT_LT(std::get<2>(*done), 60.0) << "stopped at Finish, not at the cap";
+    EXPECT_EQ(diariser.replaced, diariser.voiceprint);
+}
+
+TEST(SessionController, TooLittleSpeechLeavesTheAnchorAlone) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser);
+    ASSERT_TRUE(controller.StartEnrolment(0.3, {}, 20.0));
+    const auto done = WaitEnrol(events, controller);
+    ASSERT_TRUE(done.has_value());
+    EXPECT_FALSE(std::get<0>(*done));
+    EXPECT_NE(std::get<1>(*done).find("not enough clear speech"), std::string::npos);
+    EXPECT_TRUE(diariser.replaced.empty());
+}
+
+TEST(SessionController, AMicrophoneThatDiesFailsTheEnrolmentWithTheReason) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kDieAfterAudio), events, store,
+                                 transcriber, vad, kTestSettle, &diariser);
+    ASSERT_TRUE(controller.StartEnrolment(5.0, {}, 0.01));
+    const auto done = WaitEnrol(events, controller);
+    ASSERT_TRUE(done.has_value());
+    EXPECT_FALSE(std::get<0>(*done));
+    EXPECT_EQ(std::get<1>(*done), "microphone unplugged");
+    EXPECT_TRUE(diariser.replaced.empty());
+}
+
+}  // namespace
+
+namespace {
+
+bool WaitNote(RecordingEvents& events) {
+    for (int i = 0; i < 600; ++i) {
+        {
+            const std::lock_guard<std::mutex> lock(events.mutex);
+            if (events.note_done) return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return false;
+}
+
+TEST(SessionController, ARefusedNoteIsReportedNotSavedAndTeachesThePrintNothing) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    diariser.similarities = {0.9, 0.3};
+    FakeNoteWriter writer;
+    writer.result = "NOT A CONSULTATION: a cooking video with one speaker";
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames, &writer, nullptr, 0);
+    ASSERT_TRUE(controller.Start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    controller.Stop();
+    ASSERT_TRUE(WaitNote(events));
+    const std::lock_guard<std::mutex> lock(events.mutex);
+    EXPECT_EQ(events.note_refused, "a cooking video with one speaker");
+    EXPECT_TRUE(events.note_ready.empty()) << "no note reached the shell";
+    EXPECT_TRUE(events.note_partials.empty()) << "the refusal never streamed as a note";
+    EXPECT_EQ(writer.patient_input, "") << "no sheet";
+    EXPECT_EQ(writer.label_calls.load(), 0) << "no title";
+    EXPECT_EQ(diariser.accruals, 0) << "the print learned nothing";
+    EXPECT_FALSE(store.Calls().empty());
+    for (const auto& call : store.Calls()) {
+        EXPECT_EQ(call.find("note"), std::string::npos) << call;
+    }
+}
+
+TEST(SessionController, ARefusedSessionIsDeletedWhenTheConsultationCloses) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    FakeNoteWriter writer;
+    writer.result = "NOT A CONSULTATION: a cooking video";
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames, &writer, nullptr, 0);
+    ASSERT_TRUE(controller.Start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    controller.Stop();
+    ASSERT_TRUE(WaitNote(events));
+    const auto id = controller.LastFinalised();
+    ASSERT_FALSE(id.empty());
+
+    controller.Close();
+
+    const auto calls = store.Calls();
+    EXPECT_NE(std::find(calls.begin(), calls.end(), "delete " + id), calls.end())
+        << "a refused recording is not kept";
+    EXPECT_TRUE(controller.LastFinalised().empty());
+}
+
+TEST(SessionController, ARefusedSessionInsistedUponIsKept) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    FakeNoteWriter writer;
+    writer.result = "NOT A CONSULTATION: a cooking video";
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames, &writer, nullptr, 0);
+    ASSERT_TRUE(controller.Start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    controller.Stop();
+    ASSERT_TRUE(WaitNote(events));
+    {
+        const std::lock_guard<std::mutex> lock(events.mutex);
+        events.note_done = false;
+    }
+    note::NoteOptions confirmed;
+    confirmed.confirmed = true;
+    ASSERT_TRUE(controller.RegenerateNote(confirmed));
+    ASSERT_TRUE(WaitNote(events));
+    const auto id = controller.LastFinalised();
+
+    controller.Close();
+
+    for (const auto& call : store.Calls()) {
+        EXPECT_NE(call, "delete " + id) << "the clinician insisted, so the session stays";
+    }
+}
+
+TEST(SessionController, AWrittenNoteLetsThePrintLearnAndAConfirmedRewriteCannotBeRefused) {
+    RecordingEvents events;
+    FakeSessionStore store;
+    asr::ScriptedTranscriber transcriber;
+    PassthroughVad vad;
+    FakeDiariser diariser;
+    diariser.clusters = 2;
+    diariser.similarities = {0.9, 0.3};
+    FakeNoteWriter writer;
+    SessionController controller(FactoryFor(ScriptedSource::Script::kStreamUntilStopped), events,
+                                 store, transcriber, vad, kTestSettle, &diariser,
+                                 LevelMeter::kWindowFrames, &writer, nullptr, 0);
+    ASSERT_TRUE(controller.Start());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    controller.Stop();
+    ASSERT_TRUE(WaitNote(events));
+    {
+        const std::lock_guard<std::mutex> lock(events.mutex);
+        ASSERT_FALSE(events.note_ready.empty());
+    }
+    EXPECT_EQ(diariser.accruals, 1) << "learned once the note was written";
+
+    // The clinician overrides a refusal: the same lane, told not to refuse
+    writer.result = "NOT A CONSULTATION: the model still says so";
+    {
+        const std::lock_guard<std::mutex> lock(events.mutex);
+        events.note_done = false;
+    }
+    note::NoteOptions confirmed;
+    confirmed.confirmed = true;
+    ASSERT_TRUE(controller.RegenerateNote(confirmed));
+    ASSERT_TRUE(WaitNote(events));
+    const std::lock_guard<std::mutex> lock(events.mutex);
+    EXPECT_TRUE(events.note_refused.empty());
+    EXPECT_EQ(events.note_ready, "NOT A CONSULTATION: the model still says so")
+        << "the confirmed rewrite is delivered as the note, whatever it says";
+}
+
+}  // namespace
+
+}  // namespace ambient::audio
