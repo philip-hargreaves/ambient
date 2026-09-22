@@ -1,10 +1,11 @@
 using System.Text.Json;
 
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The anchor/status and anchor/clear methods against the real engine.
 /// </summary>
+[Trait("Requires", "Engine")]
 public class AnchorContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

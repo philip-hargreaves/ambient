@@ -2,13 +2,14 @@ using System.IO.Pipes;
 using System.Text.Json;
 using Ambient.Client;
 
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The real shell client against the real engine process. This is the evidence
 /// the two halves agree on the wire, not just against fixtures.
 /// </summary>
 [Collection("engine")]
+[Trait("Requires", "Engine")]
 public class ContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);

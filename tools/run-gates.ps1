@@ -1,4 +1,4 @@
-# Every suite with nothing filtered out: engine, shell, contract. Run before a PR.
+# Every suite with nothing filtered out: engine, shell, client and contract. Run before a PR.
 #
 #   .\tools\run-gates.ps1 [-Build] [-WithMicrophone] [-List]
 #
@@ -71,8 +71,8 @@ Invoke-Gate 'shell' {
 }
 
 Invoke-Gate 'contract' {
-    if ($List) { dotnet test "$root\app\Ambient.Contract.Tests" -t }
-    else { dotnet test "$root\app\Ambient.Contract.Tests" }
+    if ($List) { dotnet test "$root\app\Ambient.Client.Tests" -t }
+    else { dotnet test "$root\app\Ambient.Client.Tests" }
 }
 
 foreach ($image in 'ambient_engine', 'ambient_note_host') {

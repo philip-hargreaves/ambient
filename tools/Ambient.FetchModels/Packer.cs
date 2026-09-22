@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Ambient.Fetch;
+namespace Ambient.FetchModels;
 
 /// <summary>
 /// Prepares one pack for publishing: shards files over the asset cap into

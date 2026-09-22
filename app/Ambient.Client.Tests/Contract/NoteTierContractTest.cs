@@ -1,11 +1,12 @@
 using Ambient.Client;
 
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The note/tier method against the real engine, with no weights staged:
 /// the parameter checks and the lane-absent answer are the engine's own.
 /// </summary>
+[Trait("Requires", "Engine")]
 public class NoteTierContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

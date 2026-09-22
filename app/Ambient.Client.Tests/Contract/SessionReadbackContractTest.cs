@@ -1,10 +1,11 @@
 using System.Text.Json;
 
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The record, read back, delete loop against the real engine.
 /// </summary>
+[Trait("Requires", "Engine")]
 public class SessionReadbackContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

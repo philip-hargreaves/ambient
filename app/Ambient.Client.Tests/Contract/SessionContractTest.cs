@@ -1,9 +1,10 @@
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The session methods and the notifications they produce, against the real
 /// engine. Runs on a private pipe, so it is independent of the engine group.
 /// </summary>
+[Trait("Requires", "Engine")]
 public class SessionContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

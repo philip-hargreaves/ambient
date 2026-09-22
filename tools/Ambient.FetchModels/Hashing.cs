@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Ambient.Fetch;
+namespace Ambient.FetchModels;
 
 public static class Hashing
 {

@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using Ambient.Client;
 
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// Launches the real ambient_engine.exe and connects a verified client to it.

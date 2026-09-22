@@ -1,12 +1,13 @@
 using System.Text.Json;
 
-namespace Ambient.Contract.Tests;
+namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The guidance contract as the CI engine can show it. No embedding model is staged, so the
 /// feature reports itself unavailable, a search fails with the loader's reason and a recorded
 /// session carries no record.
 /// </summary>
+[Trait("Requires", "Engine")]
 public class GuidanceContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

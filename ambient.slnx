@@ -21,17 +21,16 @@
     <Project Path="app/Ambient.Client/Ambient.Client.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
-    <Project Path="app/Ambient.Contract.Tests/Ambient.Contract.Tests.csproj">
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
-    <Project Path="app/Ambient.Fetch/Ambient.Fetch.csproj">
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
-    <Project Path="app/Ambient.Fetch.Tests/Ambient.Fetch.Tests.csproj">
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
   </Folder>
   <Folder Name="/engine/">
     <File Path="engine/CMakeLists.txt" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Ambient.FetchModels/Ambient.FetchModels.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tools/Ambient.FetchModels.Tests/Ambient.FetchModels.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
 </Solution>

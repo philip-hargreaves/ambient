@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -17,9 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Ambient.Client\Ambient.Client.csproj" />
+    <ProjectReference Include="..\Ambient.FetchModels\Ambient.FetchModels.csproj" />
   </ItemGroup>
-
-  <!-- The engine is built by CMake; EngineProcess locates it under build/<preset>/engine. -->
 
 </Project>

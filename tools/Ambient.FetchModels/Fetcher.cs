@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Ambient.Fetch;
+namespace Ambient.FetchModels;
 
 /// <summary>
 /// Downloads and installs one pack: shards resume from the bytes on disk,
