@@ -121,7 +121,7 @@ class ScriptedSource : public IAudioSource {
     std::atomic<bool> stop_{false};
 };
 
-// Written on the capture thread; read after the controller has joined it
+// Written on the pipeline thread; read after the controller has joined capture
 struct RecordingEvents : ISessionEvents {
     std::mutex mutex;
     std::vector<float> levels;

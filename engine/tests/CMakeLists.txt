@@ -15,6 +15,8 @@ FetchContent_MakeAvailable(googletest)
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 add_executable(engine_tests
+    core/audio/audio_ring_test.cpp
+    core/audio/buffered_sink_test.cpp
     core/common/cli_args_test.cpp
     core/diarisation/clip_cuts_test.cpp
     core/diarisation/tidy_transcript_test.cpp

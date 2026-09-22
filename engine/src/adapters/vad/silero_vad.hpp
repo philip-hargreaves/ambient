@@ -9,7 +9,7 @@
 namespace ambient::audio {
 
 // Silero through the model store, on CPU, loaded eagerly: ~0.1 ms per hop,
-// so it runs inline on the capture path
+// so it runs inline on the audio pipeline, behind the capture ring
 class SileroVad : public IStreamingVad {
    public:
     SileroVad(const models::ModelStore& store, models::OvRuntime& runtime);

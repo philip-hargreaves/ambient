@@ -15,6 +15,7 @@
 #include <thread>
 #include <utility>
 
+#include "core/audio/buffered_sink.hpp"
 #include "core/audio/endpointer.hpp"
 #include "core/audio/level_meter.hpp"
 #include "core/audio/resume_source.hpp"
@@ -37,7 +38,7 @@
 
 namespace ambient::audio {
 
-// Session events, delivered on the capture thread
+// Session events, delivered on the audio pipeline thread behind the capture ring
 class ISessionEvents {
    public:
     virtual ~ISessionEvents() = default;
@@ -107,6 +108,9 @@ class SessionController {
     // Below this the model writes from its prompt, not the consultation
     // (measured on 14 s); refusing is the only safe output
     static constexpr std::size_t kMinNoteWords = 25;
+    // Audio the capture thread can run ahead of the pipeline before frames are
+    // lost; a first-launch model compile stalls for seconds, not tens
+    static constexpr std::size_t kCaptureBufferFrames = 30 * kSampleRate;
 
     SessionController(SourceFactory factory, ISessionEvents& events, store::ISessionStore& store,
                       asr::ITranscriber& transcriber, IStreamingVad& vad,
@@ -545,10 +549,11 @@ class SessionController {
         }
     };
 
-    struct Sink : IAudioSink {
+    // The pipeline thread: store, VAD, endpointer, meter, off the capture thread
+    struct PipelineSink : IAudioSink {
         SessionController& controller;
 
-        explicit Sink(SessionController& owner) : controller(owner) {}
+        explicit PipelineSink(SessionController& owner) : controller(owner) {}
 
         void OnAudio(std::span<const float> frames, std::uint64_t lost_frames) override {
             store::SessionId id;
@@ -607,21 +612,23 @@ class SessionController {
         }
     };
 
+    // The source's thread only fills the ring; the pipeline runs behind it.
     // An escape from a thread function is std::terminate, so nothing escapes
     void GuardedRun() {
-        Sink sink(*this);
+        PipelineSink sink(*this);
+        BufferedSink buffered(sink, kCaptureBufferFrames);
         try {
-            source_->Run(sink);
+            source_->Run(buffered);
         } catch (const std::exception& e) {
-            sink.OnEnd(
+            buffered.OnEnd(
                 {SourceEndReason::kFailed, std::string("capture thread threw: ") + e.what()});
         } catch (...) {
-            sink.OnEnd({SourceEndReason::kFailed, "capture thread threw"});
+            buffered.OnEnd({SourceEndReason::kFailed, "capture thread threw"});
         }
     }
 
     // Diarisation's causal work, spread over the recording; the heavy
-    // Advance runs outside the lock, off the capture thread
+    // Advance runs outside the lock, off the pipeline thread
     void DiarLoop() {
         // Accelerated replay delivers audio faster than real time; a wall
         // floor keeps the tick rate sane at any speed
@@ -699,7 +706,7 @@ class SessionController {
         }
     }
 
-    // Capture thread while running, finalise after it joins; never both
+    // Pipeline thread while running, finalise after capture joins; never both
     void DrainVadBacklog() {
         if (vad_backlog_.empty()) {
             return;
@@ -1307,7 +1314,7 @@ class SessionController {
     int diar_ticks_ = 0;         // under mutex_; diagnostics
     LevelMeter meter_;
     std::optional<Endpointer> endpointer_;
-    std::vector<float> vad_backlog_;  // capture thread, then finalise
+    std::vector<float> vad_backlog_;  // pipeline thread, then finalise
     TurnSink turn_sink_{*this};
     mutable std::mutex mutex_;
     std::condition_variable cv_;
