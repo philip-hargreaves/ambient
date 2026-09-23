@@ -82,8 +82,8 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
     /// <summary>Theme as the Appearance control's selection, same order.</summary>
     public int ThemeIndex
     {
-        get => Theme switch { "light" => 1, "dark" => 2, _ => 0 };
-        set => Theme = value switch { 1 => "light", 2 => "dark", _ => "system" };
+        get => Math.Max(0, AppPreferences.Themes.ToList().IndexOf(Theme));
+        set => Theme = AppPreferences.Themes[Math.Clamp(value, 0, AppPreferences.Themes.Count - 1)];
     }
 
     /// <summary>Runs transcription on the NPU; the engine restarts to apply.</summary>

@@ -4,20 +4,67 @@ using Ambient.App.Core.Hosting;
 
 namespace Ambient.App.Core.Preferences;
 
-/// <summary>One small json file of app preferences; absent means defaults.</summary>
-public sealed class AppPreferences(string path, ILogger? logger = null)
+/// <summary>
+/// One small json document of app preferences; absent means defaults, unreadable means
+/// defaults and a log line. Values the shell cannot render or the engine would refuse never
+/// leave the load boundary.
+/// </summary>
+public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = null)
 {
-    private sealed record Stored(
-        bool DemoTrayEnabled, bool NpuTranscription, bool CollectPerformanceData,
-        string? NoteStyle = null, string? NoteDetail = null,
-        bool KeepConsultations = false, bool ShowPerformanceMetrics = false,
-        string? MicId = null, string? Theme = null, string? NoteTier = null,
-        bool SeedDataEnabled = false, bool DeveloperToolsExpanded = false,
-        bool IncludeResearchGuidance = false, bool DemoMode = false, string? DemoTrack = null,
-        bool DocumentsExpanded = false);
+    /// <summary>The json as written: named fields, a schema version, nothing positional.</summary>
+    private sealed record PreferencesFile
+    {
+        public int SchemaVersion { get; init; } = CurrentSchema;
+
+        public bool DemoTrayEnabled { get; init; }
+
+        public bool DemoMode { get; init; }
+
+        public string? DemoTrack { get; init; }
+
+        public bool SeedDataEnabled { get; init; }
+
+        public bool NpuTranscription { get; init; }
+
+        public bool CollectPerformanceData { get; init; }
+
+        public bool KeepConsultations { get; init; }
+
+        public bool ShowPerformanceMetrics { get; init; }
+
+        public bool DeveloperToolsExpanded { get; init; }
+
+        public bool DocumentsExpanded { get; init; }
+
+        public bool IncludeResearchGuidance { get; init; }
+
+        public string? MicId { get; init; }
+
+        public string? Theme { get; init; }
+
+        public string? NoteStyle { get; init; }
+
+        public string? NoteDetail { get; init; }
+
+        public string? NoteTier { get; init; }
+    }
+
+    public const int CurrentSchema = 1;
+
+    /// <summary>The values the shell can render or the engine accepts, each with its default first.</summary>
+    public static readonly IReadOnlyList<string> Themes = ["system", "light", "dark"];
+
+    public static readonly IReadOnlyList<string> NoteStyles = ["prose", "soap"];
+
+    public static readonly IReadOnlyList<string> NoteDetails = ["standard", "concise", "detailed"];
 
     /// <summary>The note model tiers the engine's store can resolve, in ladder order.</summary>
     public static readonly IReadOnlyList<string> NoteTiers = ["constrained", "default", "accuracy"];
+
+    public AppPreferences(string path, ILogger? logger = null)
+        : this(new FilePreferencesStore(path), logger)
+    {
+    }
 
     public bool DemoTrayEnabled { get; set; }
 
@@ -59,11 +106,11 @@ public sealed class AppPreferences(string path, ILogger? logger = null)
     public string MicId { get; set; } = "";
 
     /// <summary>"system" follows the OS; "light" and "dark" override it.</summary>
-    public string Theme { get; set; } = "system";
+    public string Theme { get; set; } = Themes[0];
 
-    public string NoteStyle { get; set; } = "prose";
+    public string NoteStyle { get; set; } = NoteStyles[0];
 
-    public string NoteDetail { get; set; } = "standard";
+    public string NoteDetail { get; set; } = NoteDetails[0];
 
     /// <summary>
     /// Which note model the engine loads, as a role ("default", "accuracy",
@@ -71,45 +118,52 @@ public sealed class AppPreferences(string path, ILogger? logger = null)
     /// </summary>
     public string NoteTier { get; set; } = "default";
 
-    public static AppPreferences Load(string path, ILogger? logger = null)
+    public static AppPreferences Load(string path, ILogger? logger = null) =>
+        Load(new FilePreferencesStore(path), logger);
+
+    public static AppPreferences Load(IPreferencesStore store, ILogger? logger = null)
     {
-        var preferences = new AppPreferences(path, logger);
-        if (!File.Exists(path))
+        var preferences = new AppPreferences(store, logger);
+        PreferencesFile? stored;
+        try
+        {
+            var json = store.Read();
+            if (json is null)
+            {
+                return preferences;
+            }
+
+            stored = JsonSerializer.Deserialize<PreferencesFile>(json);
+        }
+        catch (Exception e)
+        {
+            // A corrupt document means defaults; the next save replaces it
+            logger?.PreferencesUnreadable(e.Message);
+            return preferences;
+        }
+
+        if (stored is null)
         {
             return preferences;
         }
 
-        try
-        {
-            var stored = JsonSerializer.Deserialize<Stored>(File.ReadAllText(path));
-            preferences.DemoTrayEnabled = stored?.DemoTrayEnabled ?? false;
-            preferences.SeedDataEnabled = stored?.SeedDataEnabled ?? false;
-            preferences.NpuTranscription = stored?.NpuTranscription ?? false;
-            preferences.CollectPerformanceData = stored?.CollectPerformanceData ?? false;
-            preferences.KeepConsultations = stored?.KeepConsultations ?? false;
-            preferences.ShowPerformanceMetrics = stored?.ShowPerformanceMetrics ?? false;
-            preferences.DeveloperToolsExpanded = stored?.DeveloperToolsExpanded ?? false;
-            preferences.IncludeResearchGuidance = stored?.IncludeResearchGuidance ?? false;
-            preferences.DemoMode = stored?.DemoMode ?? false;
-            preferences.DemoTrack = stored?.DemoTrack ?? "";
-            preferences.DocumentsExpanded = stored?.DocumentsExpanded ?? false;
-            preferences.MicId = stored?.MicId ?? "";
-            // Values the shell cannot render never leave this boundary
-            preferences.Theme = stored?.Theme is "light" or "dark" ? stored.Theme : "system";
-            // Values the engine would refuse never leave this boundary
-            preferences.NoteStyle = stored?.NoteStyle is "prose" or "soap"
-                ? stored.NoteStyle : "prose";
-            preferences.NoteDetail = stored?.NoteDetail is "concise" or "standard" or "detailed"
-                ? stored.NoteDetail : "standard";
-            preferences.NoteTier = stored?.NoteTier is not null && NoteTiers.Contains(stored.NoteTier)
-                ? stored.NoteTier : "default";
-        }
-        catch (Exception e)
-        {
-            // A corrupt file means defaults; the next save replaces it
-            logger?.PreferencesUnreadable(e.Message);
-        }
-
+        // A newer document is read for what this build knows; a save rewrites it at this schema
+        preferences.DemoTrayEnabled = stored.DemoTrayEnabled;
+        preferences.DemoMode = stored.DemoMode;
+        preferences.DemoTrack = stored.DemoTrack ?? "";
+        preferences.SeedDataEnabled = stored.SeedDataEnabled;
+        preferences.NpuTranscription = stored.NpuTranscription;
+        preferences.CollectPerformanceData = stored.CollectPerformanceData;
+        preferences.KeepConsultations = stored.KeepConsultations;
+        preferences.ShowPerformanceMetrics = stored.ShowPerformanceMetrics;
+        preferences.DeveloperToolsExpanded = stored.DeveloperToolsExpanded;
+        preferences.DocumentsExpanded = stored.DocumentsExpanded;
+        preferences.IncludeResearchGuidance = stored.IncludeResearchGuidance;
+        preferences.MicId = stored.MicId ?? "";
+        preferences.Theme = Known(stored.Theme, Themes, Themes[0]);
+        preferences.NoteStyle = Known(stored.NoteStyle, NoteStyles, NoteStyles[0]);
+        preferences.NoteDetail = Known(stored.NoteDetail, NoteDetails, NoteDetails[0]);
+        preferences.NoteTier = Known(stored.NoteTier, NoteTiers, "default");
         return preferences;
     }
 
@@ -117,16 +171,32 @@ public sealed class AppPreferences(string path, ILogger? logger = null)
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(new Stored(
-                DemoTrayEnabled, NpuTranscription, CollectPerformanceData,
-                NoteStyle, NoteDetail, KeepConsultations, ShowPerformanceMetrics, MicId,
-                Theme, NoteTier, SeedDataEnabled, DeveloperToolsExpanded,
-                IncludeResearchGuidance, DemoMode, DemoTrack, DocumentsExpanded)));
+            store.Write(JsonSerializer.Serialize(new PreferencesFile
+            {
+                DemoTrayEnabled = DemoTrayEnabled,
+                DemoMode = DemoMode,
+                DemoTrack = DemoTrack,
+                SeedDataEnabled = SeedDataEnabled,
+                NpuTranscription = NpuTranscription,
+                CollectPerformanceData = CollectPerformanceData,
+                KeepConsultations = KeepConsultations,
+                ShowPerformanceMetrics = ShowPerformanceMetrics,
+                DeveloperToolsExpanded = DeveloperToolsExpanded,
+                DocumentsExpanded = DocumentsExpanded,
+                IncludeResearchGuidance = IncludeResearchGuidance,
+                MicId = MicId,
+                Theme = Theme,
+                NoteStyle = NoteStyle,
+                NoteDetail = NoteDetail,
+                NoteTier = NoteTier,
+            }));
         }
         catch (Exception e)
         {
             logger?.PreferencesNotSaved(e.Message);
         }
     }
+
+    private static string Known(string? value, IReadOnlyList<string> known, string fallback) =>
+        value is not null && known.Contains(value) ? value : fallback;
 }
