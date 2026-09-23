@@ -20,6 +20,10 @@ class ITranslator {
     // warm. Safe to call repeatedly
     virtual void Prepare() {}
 
+    // Frees the model once no translation holds it. The next Prepare or
+    // Translate loads it again
+    virtual void Release() {}
+
     virtual std::string Translate(const std::string& text, const std::string& language,
                                   const Progress& progress) = 0;
 

@@ -1,0 +1,47 @@
+{
+  "nllb-600m": {
+    "hf": "facebook/nllb-200-distilled-600M",
+    "licence": "CC-BY-NC-4.0",
+    "role": "shipped",
+    "family": "nllb",
+    "codes": {"Urdu": "urd_Arab", "Punjabi": "pan_Guru", "Bengali": "ben_Beng", "Gujarati": "guj_Gujr",
+              "Polish": "pol_Latn", "Romanian": "ron_Latn", "Arabic": "arb_Arab", "Somali": "som_Latn"},
+    "source": "eng_Latn"
+  },
+  "m2m100-418m": {
+    "hf": "facebook/m2m100_418M",
+    "licence": "MIT",
+    "role": "candidate",
+    "family": "m2m100",
+    "codes": {"Urdu": "ur", "Punjabi": "pa", "Bengali": "bn", "Gujarati": "gu",
+              "Polish": "pl", "Romanian": "ro", "Arabic": "ar", "Somali": "so"},
+    "source": "en"
+  },
+  "m2m100-1.2b": {
+    "hf": "facebook/m2m100_1.2B",
+    "licence": "MIT",
+    "role": "candidate",
+    "family": "m2m100",
+    "codes": {"Urdu": "ur", "Punjabi": "pa", "Bengali": "bn", "Gujarati": "gu",
+              "Polish": "pl", "Romanian": "ro", "Arabic": "ar", "Somali": "so"},
+    "source": "en"
+  },
+  "small100": {
+    "hf": "alirezamsh/small100",
+    "licence": "MIT",
+    "role": "candidate",
+    "family": "small100",
+    "codes": {"Urdu": "ur", "Punjabi": "pa", "Bengali": "bn", "Gujarati": "gu",
+              "Polish": "pl", "Romanian": "ro", "Arabic": "ar", "Somali": "so"},
+    "source": "en"
+  },
+  "madlad400-3b": {
+    "hf": "google/madlad400-3b-mt",
+    "licence": "Apache-2.0",
+    "role": "candidate",
+    "family": "madlad",
+    "codes": {"Urdu": "ur", "Punjabi": "pa", "Bengali": "bn", "Gujarati": "gu",
+              "Polish": "pl", "Romanian": "ro", "Arabic": "ar", "Somali": "so"},
+    "source": "en"
+  }
+}

@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -70,6 +71,23 @@ TEST(ModelStore, EnumeratesStagedManifests) {
     EXPECT_EQ(store.List()[1].task, "asr");
     EXPECT_EQ(store.List()[1].device, "GPU");
     EXPECT_EQ(store.List()[1].licence, "MIT");
+}
+
+TEST(ModelStore, EverySpellingOfTheRootGivesOneModelDirectory) {
+    TempRoot root;
+    MakeModel(root.path, "silero-vad", "vad", "default");
+    const auto expected = ModelStore(root.path).List().at(0).dir;
+
+    const auto roundabout = (root.path / "silero-vad" / "..").generic_string();
+    EXPECT_EQ(ModelStore(roundabout).List().at(0).dir, expected);
+
+    const auto link = root.path.parent_path() / (root.path.filename().string() + "-link");
+    const std::string mklink =
+        "mklink /J \"" + link.string() + "\" \"" + root.path.string() + "\" >nul 2>&1";
+    if (std::system(mklink.c_str()) != 0) GTEST_SKIP() << "no junction";
+    const auto through_link = ModelStore(link).List().at(0).dir;
+    std::filesystem::remove(link);
+    EXPECT_EQ(through_link, expected);
 }
 
 TEST(ModelStore, ADirectoryWithoutAManifestIsInvisible) {

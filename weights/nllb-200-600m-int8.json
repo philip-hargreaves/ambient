@@ -13,12 +13,13 @@
     "openvino_detokenizer.xml": "1d8463746dba54cd84cbc67442022aa8ce2041d1dd3332ae485abadf21f25872",
     "openvino_encoder_model.bin": "c7755342cc4fc8b7a1fc4903a91f1e0d3788233552c6aed2869ce1ec171d7776",
     "openvino_encoder_model.xml": "dbefbc114c8f30b22c082b84c3a30d9968ac8df8c393d5f8a3c8bf462e33fd02",
-    "openvino_tokenizer.bin": "00363721d140eda6daf88376a548cd2eaebdac3161326cd773c8d7991053fe78",
-    "openvino_tokenizer.xml": "11c893efb4087f89d079eeeb04b78811d019c793dc26a6337363b8c0a3aec14c",
+    "openvino_tokenizer.bin": "c79cc5cf33bfb462d7eb3a8d041113205962aad8cae9855930cca749ab0c293c",
+    "openvino_tokenizer.xml": "548eb516674290ee939ed78ed2822ab26d028e7ceb43fbd986057658c8c381f1",
     "sentencepiece.bpe.model": "14bb8dfb35c0ffdea7bc01e56cea38b9e3d5efcdcb9c251d6b40538e1aab555a",
     "special_tokens_map.json": "27d4e8cb8b9a7c0f8234273dfefa64568f859c796f058037b4228948b84cd5fc",
     "tokenizer.json": "b3be18cc91c94d4a1d83731ace4dac0b90a7db024edecdeb9fe7d19ec01ce901",
-    "tokenizer_config.json": "78f074bb0808578ea85ec87d35300180a988df88d23e9d9d3c93661e1a0f9415"
+    "tokenizer_config.json": "78f074bb0808578ea85ec87d35300180a988df88d23e9d9d3c93661e1a0f9415",
+    "NOTICE.txt": "9d22af7a37751eaa1ec1d38a80f9f77f783da4e4cb23c3fce80494185d67e29f"
   },
   "shards": {
     "config.json": [
@@ -93,16 +94,16 @@
     ],
     "openvino_tokenizer.bin": [
       {
-        "name": "nllb-200-600m-int8--openvino_tokenizer.bin",
-        "size": 17337086,
-        "sha256": "00363721d140eda6daf88376a548cd2eaebdac3161326cd773c8d7991053fe78"
+        "name": "nllb-200-600m-int8--openvino_tokenizer-sp.bin",
+        "size": 4859677,
+        "sha256": "c79cc5cf33bfb462d7eb3a8d041113205962aad8cae9855930cca749ab0c293c"
       }
     ],
     "openvino_tokenizer.xml": [
       {
-        "name": "nllb-200-600m-int8--openvino_tokenizer.xml",
-        "size": 33091,
-        "sha256": "11c893efb4087f89d079eeeb04b78811d019c793dc26a6337363b8c0a3aec14c"
+        "name": "nllb-200-600m-int8--openvino_tokenizer-sp.xml",
+        "size": 13038,
+        "sha256": "548eb516674290ee939ed78ed2822ab26d028e7ceb43fbd986057658c8c381f1"
       }
     ],
     "sentencepiece.bpe.model": [
@@ -132,6 +133,13 @@
         "size": 41770,
         "sha256": "78f074bb0808578ea85ec87d35300180a988df88d23e9d9d3c93661e1a0f9415"
       }
+    ],
+    "NOTICE.txt": [
+      {
+        "name": "nllb-200-600m-int8--NOTICE.txt",
+        "size": 854,
+        "sha256": "9d22af7a37751eaa1ec1d38a80f9f77f783da4e4cb23c3fce80494185d67e29f"
+      }
     ]
   },
   "manifest": {
@@ -141,7 +149,10 @@
     "tier": "default",
     "licence": "CC-BY-NC-4.0",
     "runtime": {
-      "device": "CPU"
+      "device": "CPU",
+      "properties": {
+        "CACHE_MODE": "OPTIMIZE_SIZE"
+      }
     },
     "source": {
       "path": "C:\\dev\\ambient\\build\\nllb-export\\nllb-200-600m-int8"
@@ -157,13 +168,14 @@
       "openvino_detokenizer.xml": "1d8463746dba54cd84cbc67442022aa8ce2041d1dd3332ae485abadf21f25872",
       "openvino_encoder_model.bin": "c7755342cc4fc8b7a1fc4903a91f1e0d3788233552c6aed2869ce1ec171d7776",
       "openvino_encoder_model.xml": "dbefbc114c8f30b22c082b84c3a30d9968ac8df8c393d5f8a3c8bf462e33fd02",
-      "openvino_tokenizer.bin": "00363721d140eda6daf88376a548cd2eaebdac3161326cd773c8d7991053fe78",
-      "openvino_tokenizer.xml": "11c893efb4087f89d079eeeb04b78811d019c793dc26a6337363b8c0a3aec14c",
+      "openvino_tokenizer.bin": "c79cc5cf33bfb462d7eb3a8d041113205962aad8cae9855930cca749ab0c293c",
+      "openvino_tokenizer.xml": "548eb516674290ee939ed78ed2822ab26d028e7ceb43fbd986057658c8c381f1",
       "sentencepiece.bpe.model": "14bb8dfb35c0ffdea7bc01e56cea38b9e3d5efcdcb9c251d6b40538e1aab555a",
       "special_tokens_map.json": "27d4e8cb8b9a7c0f8234273dfefa64568f859c796f058037b4228948b84cd5fc",
       "tokenizer_config.json": "78f074bb0808578ea85ec87d35300180a988df88d23e9d9d3c93661e1a0f9415",
-      "tokenizer.json": "b3be18cc91c94d4a1d83731ace4dac0b90a7db024edecdeb9fe7d19ec01ce901"
+      "tokenizer.json": "b3be18cc91c94d4a1d83731ace4dac0b90a7db024edecdeb9fe7d19ec01ce901",
+      "NOTICE.txt": "9d22af7a37751eaa1ec1d38a80f9f77f783da4e4cb23c3fce80494185d67e29f"
     }
   },
-  "totalBytes": 943738617
+  "totalBytes": 931242009
 }

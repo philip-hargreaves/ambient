@@ -400,7 +400,8 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
             return json::object();
         });
     server.RegisterMethod(
-        "session/start", [&controller, playback](const json& params) -> std::variant<json, Error> {
+        "session/start",
+        [&controller, playback, translator](const json& params) -> std::variant<json, Error> {
             // A playback block replays a stored consultation as a demo.
             // Nothing is captured or generated
             if (params.contains("playback")) {
@@ -446,6 +447,8 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
                                   params.value("retain", true), mic)) {
                 return Error{kCaptureFailed, "Capture failed", json(controller.LastEnd().detail)};
             }
+            // Capture and the note need the memory
+            if (translator != nullptr) translator->Release();
             return json{{"sessionId", controller.CurrentSession()}};
         });
     server.RegisterMethod(
@@ -497,13 +500,23 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
         return json::object();
     });
     // A past session under review: regenerate and translate act on it as
-    // on a fresh seal. Record closes the review
+    // on a fresh seal. Record closes the review. A stored sheet preloads
+    // the translator
     server.RegisterMethod(
-        "session/open", [&controller](const json& params) -> std::variant<json, Error> {
+        "session/open",
+        [&controller, &sessions, translator](const json& params) -> std::variant<json, Error> {
             const auto id = IdFrom(params);
             if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
             if (!controller.Open(std::get<std::string>(id))) {
                 return SessionError("recording, a note is being written, or no such session");
+            }
+            if (translator != nullptr) {
+                try {
+                    const auto sheet = sessions.ReadDocument(
+                        std::get<std::string>(id), ambient::store::DocumentKind::kPatient);
+                    if (!sheet.text.empty()) translator->Prepare();
+                } catch (...) {  // NOLINT(bugprone-empty-catch) Translate loads it anyway
+                }
             }
             return json::object();
         });

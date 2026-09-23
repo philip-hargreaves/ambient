@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <filesystem>
+#include <thread>
 
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
@@ -40,6 +42,33 @@ TEST(NllbTranslator, TranslatesTheSheetAndStreams) {
     const std::string polish = translator.Translate(kSheet, "Polish", nullptr);
     ASSERT_FALSE(polish.empty());
     EXPECT_NE(polish, french);
+}
+
+TEST(NllbTranslator, ACurlyApostropheTranslatesAsAStraightOne) {
+    if (!std::filesystem::exists(kModels / "nllb-200-600m-int8")) {
+        GTEST_SKIP() << "translation model not staged";
+    }
+    models::ModelStore store(kModels);
+    models::OvRuntime runtime;
+    NllbTranslator translator(store, runtime);
+    EXPECT_EQ(
+        translator.Translate("It\xE2\x80\x99s your body\xE2\x80\x99s defence.", "Urdu", nullptr),
+        translator.Translate("It's your body's defence.", "Urdu", nullptr));
+}
+
+TEST(NllbTranslator, AReleasedTranslatorLoadsAgainAndTranslatesTheSame) {
+    if (!std::filesystem::exists(kModels / "nllb-200-600m-int8")) {
+        GTEST_SKIP() << "translation model not staged";
+    }
+    models::ModelStore store(kModels);
+    models::OvRuntime runtime;
+    NllbTranslator translator(store, runtime);
+    translator.Prepare();
+    const std::string before = translator.Translate(kSheet, "Punjabi", nullptr);
+    translator.Release();
+    // Release returns before the unload
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    EXPECT_EQ(translator.Translate(kSheet, "Punjabi", nullptr), before);
 }
 
 TEST(NllbTranslator, AnUnknownLanguageIsRefused) {

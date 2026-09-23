@@ -10,10 +10,11 @@
 #include <nlohmann/json.hpp>
 #include <openvino/openvino.hpp>
 #include <stdexcept>
-#include <thread>
 
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
+#include "adapters/models/residency.hpp"
+#include "core/translate/plain_punctuation.hpp"
 
 namespace ambient::translate {
 
@@ -21,12 +22,19 @@ namespace {
 
 constexpr std::size_t kMaxTokens = 512;
 
+// 0.9 GB while loaded, under 2 s to reload
+constexpr auto kIdleRelease = std::chrono::minutes(10);
+
 nlohmann::json LoadLanguages(const std::filesystem::path& dir) {
     std::ifstream in(dir / "languages.json");
     if (!in) {
         throw std::runtime_error("translation model has no languages.json");
     }
     return nlohmann::json::parse(in);
+}
+
+double SecondsSince(std::chrono::steady_clock::time_point t0) {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
 }  // namespace
@@ -40,32 +48,73 @@ struct NllbTranslator::Impl {
     nlohmann::json languages;
     std::int64_t eos = 2;
     std::int64_t decoder_start = 2;
-    std::mutex mutex;  // one translation at a time, guards the requests
-    bool loaded = false;
-    std::mutex prepare_mutex;  // guards the one warm thread
-    std::thread loader;
-    ov::Core core;  // tokenizer models need the tokenizers extension
+    std::int64_t source_language = 0;
+    std::mutex mutex;  // one translation at a time
+    ov::Core core;     // tokenizer models need the tokenizers extension
+    bool extension = false;
     ov::InferRequest tokenizer;
     ov::InferRequest detokenizer;
     ov::InferRequest encoder;
     ov::InferRequest decoder;
     std::atomic<bool> cancel{false};
+    // Last, so its thread stops first
+    std::unique_ptr<models::Residency> residency;
 
+    // Called by the residency while no translation runs
     void Load() {
-        if (loaded) {
-            return;
+        try {
+            LoadAndWarm();
+        } catch (...) {
+            Reset();
+            throw;
         }
+    }
+
+    void LoadAndWarm() {
+        const auto t0 = std::chrono::steady_clock::now();
         const models::ModelInfo& info = store.Resolve("translation", "default");
         encoder = runtime.Load(store, "translation", "default", "openvino_encoder_model.xml")
                       .model.create_infer_request();
         decoder = runtime.Load(store, "translation", "default", "openvino_decoder_model.xml")
                       .model.create_infer_request();
-        core.add_extension("openvino_tokenizers.dll");
+        if (!extension) {
+            core.add_extension("openvino_tokenizers.dll");
+            extension = true;
+        }
         tokenizer = core.compile_model((info.dir / "openvino_tokenizer.xml").string(), "CPU")
                         .create_infer_request();
         detokenizer = core.compile_model((info.dir / "openvino_detokenizer.xml").string(), "CPU")
                           .create_infer_request();
-        loaded = true;
+        // Primes the CPU kernels for the first real sentence
+        const auto& first = languages.at("languages").begin().value();
+        TranslateSentences("Ready.", first.at("id").get<std::int64_t>());
+        std::fprintf(stderr, "ambient-engine: translator warmed in %.1f s\n", SecondsSince(t0));
+    }
+
+    void Unload() {
+        Reset();
+        std::fprintf(stderr, "ambient-engine: translator released\n");
+    }
+
+    void Reset() {
+        tokenizer = ov::InferRequest();
+        detokenizer = ov::InferRequest();
+        encoder = ov::InferRequest();
+        decoder = ov::InferRequest();
+    }
+
+    // NLLB reads the ids between the source language and end tokens
+    std::vector<std::int64_t> Tokenize(const std::string& sentence) {
+        ov::Tensor input(ov::element::string, ov::Shape{1});
+        input.data<std::string>()[0] = PlainPunctuation(sentence);
+        tokenizer.set_input_tensor(input);
+        tokenizer.infer();
+        const auto body = tokenizer.get_tensor("input_ids");
+        const auto* first = body.data<const std::int64_t>();
+        std::vector<std::int64_t> ids{source_language};
+        ids.insert(ids.end(), first, first + body.get_size());
+        ids.push_back(eos);
+        return ids;
     }
 
     std::string Detokenize(const std::vector<std::int64_t>& ids) {
@@ -90,12 +139,11 @@ struct NllbTranslator::Impl {
     // structure and its quality
     std::string TranslateLine(const std::string& line, std::int64_t target,
                               const std::function<void(const std::string&)>& partial = {}) {
-        ov::Tensor input(ov::element::string, ov::Shape{1});
-        input.data<std::string>()[0] = line;
-        tokenizer.set_input_tensor(input);
-        tokenizer.infer();
-        const auto ids = tokenizer.get_tensor("input_ids");
-        const auto mask = tokenizer.get_tensor("attention_mask");
+        const auto source = Tokenize(line);
+        ov::Tensor ids(ov::element::i64, {1, source.size()});
+        std::copy(source.begin(), source.end(), ids.data<std::int64_t>());
+        ov::Tensor mask(ov::element::i64, {1, source.size()});
+        std::fill_n(mask.data<std::int64_t>(), source.size(), std::int64_t{1});
 
         encoder.set_tensor("input_ids", ids);
         encoder.set_tensor("attention_mask", mask);
@@ -179,43 +227,23 @@ NllbTranslator::NllbTranslator(const models::ModelStore& store, models::OvRuntim
     : impl_(new Impl(store, runtime)) {
     const models::ModelInfo& info = store.Resolve("translation", "default");
     impl_->languages = LoadLanguages(info.dir);
-    impl_->eos = impl_->languages.at("special").at("eos").get<std::int64_t>();
-    impl_->decoder_start = impl_->languages.at("special").at("decoderStart").get<std::int64_t>();
+    const auto& special = impl_->languages.at("special");
+    impl_->eos = special.at("eos").get<std::int64_t>();
+    impl_->decoder_start = special.at("decoderStart").get<std::int64_t>();
+    impl_->source_language = special.at("sourceLang").get<std::int64_t>();
+    Impl* const impl = impl_.get();
+    impl_->residency = std::make_unique<models::Residency>(
+        [impl] { impl->Load(); }, [impl] { impl->Unload(); }, kIdleRelease);
 }
 
-NllbTranslator::~NllbTranslator() {
-    std::thread loader;
-    {
-        std::lock_guard<std::mutex> lock(impl_->prepare_mutex);
-        loader = std::move(impl_->loader);
-    }
-    if (loader.joinable()) {
-        loader.join();
-    }
-}
+NllbTranslator::~NllbTranslator() = default;
 
-// The warm must INFER: the CPU plugin's first-inference specialisation
-// measured ~12 s. A failed warm is retried by the first Translate
 void NllbTranslator::Prepare() {
-    std::lock_guard<std::mutex> lock(impl_->prepare_mutex);
-    if (impl_->loaded || impl_->loader.joinable()) {
-        return;
-    }
-    impl_->loader = std::thread([impl = impl_.get()] {
-        const auto t0 = std::chrono::steady_clock::now();
-        try {
-            std::lock_guard<std::mutex> lock(impl->mutex);
-            impl->Load();
-            const auto& languages = impl->languages.at("languages");
-            const auto target = languages.begin().value().at("id").get<std::int64_t>();
-            impl->TranslateSentences("Ready.", target);
-            std::fprintf(
-                stderr, "ambient-engine: translator warmed in %.1f s\n",
-                std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: translator warm failed (%s)\n", e.what());
-        }
-    });
+    impl_->residency->Want();
+}
+
+void NllbTranslator::Release() {
+    impl_->residency->Release();
 }
 
 std::vector<std::string> NllbTranslator::Languages() {
@@ -237,38 +265,39 @@ std::string NllbTranslator::Translate(const std::string& text, const std::string
     }
     const auto target = languages.at(language).at("id").get<std::int64_t>();
 
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    impl_->cancel = false;
-    const auto t0 = std::chrono::steady_clock::now();
-    impl_->Load();
+    return impl_->residency->Use([&] {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        impl_->cancel = false;
+        const auto t0 = std::chrono::steady_clock::now();
 
-    std::string translated;
-    std::size_t from = 0;
-    while (from <= text.size() && !impl_->cancel.load()) {
-        const auto end = text.find('\n', from);
-        const std::string line =
-            text.substr(from, end == std::string::npos ? std::string::npos : end - from);
-        if (!translated.empty()) {
-            translated += '\n';
+        std::string translated;
+        std::size_t from = 0;
+        while (from <= text.size() && !impl_->cancel.load()) {
+            const auto end = text.find('\n', from);
+            const std::string line =
+                text.substr(from, end == std::string::npos ? std::string::npos : end - from);
+            if (!translated.empty()) {
+                translated += '\n';
+            }
+            if (!line.empty() && line.find_first_not_of(" \t") != std::string::npos) {
+                const std::string prefix = translated;
+                translated += impl_->TranslateSentences(line, target, [&](const std::string& part) {
+                    if (progress) progress(prefix + part);
+                });
+            }
+            if (progress) {
+                progress(translated);
+            }
+            if (end == std::string::npos) {
+                break;
+            }
+            from = end + 1;
         }
-        if (!line.empty() && line.find_first_not_of(" \t") != std::string::npos) {
-            const std::string prefix = translated;
-            translated += impl_->TranslateSentences(line, target, [&](const std::string& text) {
-                if (progress) progress(prefix + text);
-            });
-        }
-        if (progress) {
-            progress(translated);
-        }
-        if (end == std::string::npos) {
-            break;
-        }
-        from = end + 1;
-    }
 
-    std::fprintf(stderr, "ambient-engine: translated to %s in %.1f s\n", language.c_str(),
-                 std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
-    return translated;
+        std::fprintf(stderr, "ambient-engine: translated to %s in %.1f s\n", language.c_str(),
+                     SecondsSince(t0));
+        return translated;
+    });
 }
 
 void NllbTranslator::Cancel() {
