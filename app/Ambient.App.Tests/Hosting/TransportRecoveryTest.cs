@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Platform;
 using Ambient.App.Tests.Support;
 using Ambient.Client;
 
@@ -23,16 +24,20 @@ public class TransportRecoveryTest
 
     private static string FindEngine() => EnginePath.Find();
 
-    // Requests fail fast while the connection is (re)dialling, so poll
+    // Requests fail fast while the connection is (re)dialling, so poll. A cold engine
+    // verifies its models before it answers, which can take well over the old 5 s budget
+    private static readonly TimeSpan ConnectBudget = TimeSpan.FromSeconds(60);
+
     private static async Task<JsonElement> RetryAsync(Func<Task<JsonElement>> request)
     {
-        for (var attempt = 0; ; attempt++)
+        var deadline = DateTime.UtcNow + ConnectBudget;
+        while (true)
         {
             try
             {
                 return await request();
             }
-            catch (IOException) when (attempt < 100)
+            catch (IOException) when (DateTime.UtcNow < deadline)
             {
                 await Task.Delay(50);
             }
@@ -52,8 +57,8 @@ public class TransportRecoveryTest
             await PipeTransport.ConnectAsync(pipeName, Timeout, pid, ct));
         try
         {
-            // Echo, not a session: this test is about the transport, and echo
-            // needs no microphone on a CI runner
+            // Echo tests the transport alone and needs no microphone on a
+            // CI runner
             host.Start();
             await RetryAsync(() => connection.RequestAsync("engine/echo", new { payload = "up" }, Timeout));
             var firstPid = host.EnginePid;

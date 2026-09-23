@@ -1,8 +1,8 @@
 using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
 
@@ -10,22 +10,24 @@ namespace Ambient.App.Core.Features.Settings;
 
 /// <summary>
 /// The clinician's voiceprint as one thing: learned from consultations, or set
-/// up by reading a passage and refined by consultations after that. Never two.
+/// up by reading a passage and refined by consultations after that. There is only ever one.
 /// </summary>
 public sealed partial class VoiceViewModel : ObservableObject
 {
-    // Below this the automatic print is still settling; the copy says so
+    // Below this the automatic print is still settling. The copy says so
     private const int LearnedAfterSessions = 5;
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
+    private readonly IDialogService _dialogs;
     private readonly ISessionState? _session;
     private readonly StatusBarViewModel? _status;
     private readonly TimeProvider _clock;
 
-    public VoiceViewModel(IEngineClient engine, ISessionState? session = null,
+    public VoiceViewModel(IEngineApi engine, IDialogService dialogs, ISessionState? session = null,
         StatusBarViewModel? status = null, TimeProvider? clock = null)
     {
         _engine = engine;
+        _dialogs = dialogs;
         _session = session;
         _status = status;
         _clock = clock ?? TimeProvider.System;
@@ -59,12 +61,6 @@ public sealed partial class VoiceViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SetUpVoiceCommand), nameof(ForgetVoiceCommand))]
     public partial bool Busy { get; private set; }
 
-    /// <summary>The view runs the enrolment dialog; true when a print was made.</summary>
-    public Func<Task<bool>>? RunEnrolment { get; set; }
-
-    /// <summary>Forgetting is irreversible, so the view confirms it once.</summary>
-    public Func<Task<bool>>? ConfirmForget { get; set; }
-
     public bool HasVoice => Origin != "none";
 
     public string SetUpLabel => HasVoice ? "Redo" : "Set up";
@@ -87,19 +83,15 @@ public sealed partial class VoiceViewModel : ObservableObject
 
         try
         {
-            var status = await _engine
-                .RequestAsync("anchor/status", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
-            Origin = status.GetProperty("origin").GetString() ?? "none";
-            Sessions = status.GetProperty("sessions").GetInt32();
-            EnrolledAt = status.TryGetProperty("enrolledAt", out var at)
-                         && at.ValueKind == JsonValueKind.Number
-                ? DateTimeOffset.FromUnixTimeSeconds(at.GetInt64())
-                : null;
+            var status = await _engine.AnchorStatusAsync().ConfigureAwait(true);
+            Origin = status.Origin;
+            Sessions = status.Sessions;
+            EnrolledAt = status.EnrolledAt is { } at ? DateTimeOffset.FromUnixTimeSeconds(at) : null;
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // An unreachable engine leaves the last known state on screen
+            _status?.Log($"anchor/status failed: {e.Message}");
         }
     }
 
@@ -115,7 +107,7 @@ public sealed partial class VoiceViewModel : ObservableObject
         Busy = true;
         try
         {
-            var made = await RunEnrolment!().ConfigureAwait(true);
+            var made = await _dialogs.RunEnrolmentAsync().ConfigureAwait(true);
             await RefreshAsync().ConfigureAwait(true);
             if (made)
             {
@@ -128,7 +120,7 @@ public sealed partial class VoiceViewModel : ObservableObject
         }
     }
 
-    private bool CanSetUp() => _engine.Connected && !Busy && RunEnrolment is not null;
+    private bool CanSetUp() => _engine.Connected && !Busy;
 
     [RelayCommand(CanExecute = nameof(CanForget))]
     private async Task ForgetVoice()
@@ -139,7 +131,10 @@ public sealed partial class VoiceViewModel : ObservableObject
             return;
         }
 
-        if (ConfirmForget is not null && !await ConfirmForget().ConfigureAwait(true))
+        // Forgetting cannot be undone, so it is asked once
+        if (!await _dialogs.ConfirmAsync("Forget voice enrolment?",
+                "It will be learned again from your next consultation.", "Forget")
+            .ConfigureAwait(true))
         {
             return;
         }
@@ -147,8 +142,7 @@ public sealed partial class VoiceViewModel : ObservableObject
         Busy = true;
         try
         {
-            await _engine.RequestAsync("anchor/clear", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            await _engine.ClearAnchorAsync().ConfigureAwait(true);
             await RefreshAsync().ConfigureAwait(true);
             _status?.Append("voice enrolment forgotten");
         }

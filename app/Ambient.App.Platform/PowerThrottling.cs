@@ -2,11 +2,13 @@ using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
 using Windows.Win32.System.Threading;
 
-namespace Ambient.App.Core.Hosting;
+using Ambient.App.Core.Hosting;
+
+namespace Ambient.App.Platform;
 
 /// <summary>
 /// Windows throttles windowless background processes (EcoQoS) once the user
-/// is idle; measured finalise 4.0 s to 6.3 s. The launched engine is opted
+/// is idle. Finalise measured 4.0 s to 6.3 s. The launched engine is opted
 /// out here as well as by itself, so the state never rests on one call.
 /// </summary>
 [System.Runtime.Versioning.SupportedOSPlatform("windows8.0")]

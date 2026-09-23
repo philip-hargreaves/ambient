@@ -1,18 +1,18 @@
-using System.Text.Json;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Shell;
 
 /// <summary>The live numbers behind the status bar's model chips.</summary>
 public class StatusBarMetricsTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     private static (StatusBarViewModel Status, FakeEngineClient Engine) Create()
     {
         var engine = new FakeEngineClient(autoNotify: false);
-        return (new StatusBarViewModel(engine, new InlineDispatcher()), engine);
+        return (new StatusBarViewModel(new EngineApi(engine), new InlineDispatcher()), engine);
     }
 
     [Fact]
@@ -37,10 +37,10 @@ public class StatusBarMetricsTest
     public async Task TheEngineMeasuredRateBeatsTheArrivalCount()
     {
         var (status, engine) = Create();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => status.NoteChip.Length > 0);
 
-        // The engine meters at the source, before its 12 Hz throttle: the
-        // shell shows that figure, not how often notifications arrived
+        // The engine meters at the source, before its 12 Hz throttle, and the
+        // shell shows that figure
         engine.RaiseNotification("note/partial",
             Params(new { text = "The", tokensPerSecond = 15.3 }));
         Assert.Equal(15.3, status.TokensPerSecond);
@@ -103,7 +103,7 @@ public class StatusBarMetricsTest
     public async Task ChipsNameTheModelsAndCarryTheirLiveFigures()
     {
         var (status, engine) = Create();
-        await Task.Delay(50);  // the connect-time model fetch
+        await WaitUntilAsync(() => status.AsrChip.Length > 0);  // the connect-time model fetch
 
         Assert.Equal("Whisper Large v3 Turbo · GPU", status.AsrChip);
         Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
@@ -138,14 +138,14 @@ public class StatusBarMetricsTest
     public async Task TheNoteChipMetersTheStream()
     {
         var (status, engine) = Create();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => status.NoteChip.Length > 0);
         Assert.DoesNotContain("tok/s", status.NoteChip);
 
         engine.RaiseNotification("note/partial", Params(new { text = "The" }));
         engine.RaiseNotification("note/partial", Params(new { text = "The patient" }));
         engine.RaiseNotification("note/ready");
 
-        // Frozen value survives the stream's end; a new consultation clears it
+        // The frozen value survives the stream's end. A new consultation clears it
         var frozen = status.NoteChip;
         status.ResetThroughput();
         Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
@@ -199,12 +199,12 @@ public class StatusBarMetricsTest
         var engine = new FakeEngineClient(autoNotify: false);
         var reading = 5.06;
         var status = new StatusBarViewModel(
-            engine, new InlineDispatcher(), memoryGb: () => reading);
+            new EngineApi(engine), new InlineDispatcher(), memoryGb: () => reading);
 
         await status.PollMetricsOnceAsync();
         Assert.Equal("Memory · 5.1 GB", status.MemoryChip);
 
-        reading = 0;  // the provider failed; no figure beats a wrong one
+        reading = 0;  // the provider failed, so no figure shows
         await status.PollMetricsOnceAsync();
         Assert.Equal("", status.MemoryChip);
     }

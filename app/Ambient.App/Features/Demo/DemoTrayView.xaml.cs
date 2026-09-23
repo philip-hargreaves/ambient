@@ -1,6 +1,4 @@
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Storage.Pickers;
 using Ambient.App.Core.Features.Demo;
 
 namespace Ambient.App.Features.Demo;
@@ -33,28 +31,10 @@ public sealed partial class DemoTrayView : UserControl
             ReplayFlyout.Items.Add(item);
         }
 
-        var browse = new MenuFlyoutItem { Text = "Browse for a recording..." };
-        browse.Click += OnBrowse;
-        ReplayFlyout.Items.Add(browse);
-    }
-
-    private async void OnBrowse(object sender, RoutedEventArgs e)
-    {
-        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.Downloads };
-        picker.FileTypeFilter.Add(".wav");
-        // Unpackaged WinUI: the picker must be bound to our window handle
-        var window = App.Current.Window;
-        if (window is null)
+        ReplayFlyout.Items.Add(new MenuFlyoutItem
         {
-            return;
-        }
-
-        WinRT.Interop.InitializeWithWindow.Initialize(
-            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-        var file = await picker.PickSingleFileAsync();
-        if (file is not null)
-        {
-            ViewModel.UseTrack(file.Path);
-        }
+            Text = "Browse for a recording...",
+            Command = ViewModel.BrowseCommand,
+        });
     }
 }

@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Appraisal;
-using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Features.Appraisal;
 
@@ -9,11 +8,11 @@ namespace Ambient.App.Features.Appraisal;
 /// </summary>
 public sealed partial class ReflectionDialog : ContentDialog
 {
-    public ReflectionDialog(ReflectionViewModel viewModel, StatusBarViewModel status)
+    public ReflectionDialog(ReflectionViewModel viewModel)
     {
         ViewModel = viewModel;
         InitializeComponent();
-        EditorHost.Content = new ReflectionEditorView(viewModel, status);
+        EditorHost.Content = new ReflectionEditorView(viewModel);
     }
 
     public ReflectionViewModel ViewModel { get; }
@@ -34,7 +33,7 @@ public sealed partial class ReflectionDialog : ContentDialog
         }
         finally
         {
-            ViewModel.Detach();
+            ViewModel.Dispose();
             deferral.Complete();
         }
     }

@@ -1,14 +1,15 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Hosting;
 
 /// <summary>
-/// IEngineClient that follows the supervisor: connects when the engine comes
+/// IEngineTransport that follows the supervisor: connects when the engine comes
 /// up, drops the transport when it goes down, and fails requests fast in
 /// between. Each engine process gets its own pid-verified connection.
 /// </summary>
-public sealed class EngineConnection : IEngineClient
+public sealed class EngineConnection : IEngineTransport
 {
     private const string ShellName = "ambient-shell";
     private const string ShellVersion = "0.1.0";
@@ -20,10 +21,11 @@ public sealed class EngineConnection : IEngineClient
     private static readonly TimeSpan RedialDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IEngineHost _host;
-    private readonly Func<uint, CancellationToken, Task<IEngineClient>> _connect;
+    private readonly Func<uint, CancellationToken, Task<IEngineTransport>> _connect;
+    private readonly ILogger? _logger;
     private readonly CancellationTokenSource _disposal = new();
     private readonly object _gate = new();
-    private IEngineClient? _transport;
+    private IEngineTransport? _transport;
     private Exception? _lastConnectError;
     private int _generation;
     private volatile string? _methodInFlight;
@@ -44,14 +46,16 @@ public sealed class EngineConnection : IEngineClient
         }
     }
 
-    // The last request started, for the crash report; not an accounting system
+    // The last request started, for the crash report
     public string? MethodInFlight => _methodInFlight;
 
     public EngineConnection(
-        IEngineHost host, Func<uint, CancellationToken, Task<IEngineClient>> connect)
+        IEngineHost host, Func<uint, CancellationToken, Task<IEngineTransport>> connect,
+        ILogger? logger = null)
     {
         _host = host;
         _connect = connect;
+        _logger = logger;
         host.StatusChanged += OnEngineStatusChanged;
         if (host.Status == EngineStatus.Running)
         {
@@ -64,7 +68,7 @@ public sealed class EngineConnection : IEngineClient
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        IEngineClient transport;
+        IEngineTransport transport;
         lock (_gate)
         {
             transport = _transport
@@ -92,7 +96,7 @@ public sealed class EngineConnection : IEngineClient
 
         _host.StatusChanged -= OnEngineStatusChanged;
         await _disposal.CancelAsync().ConfigureAwait(false);
-        IEngineClient? transport;
+        IEngineTransport? transport;
         lock (_gate)
         {
             transport = _transport;
@@ -127,7 +131,7 @@ public sealed class EngineConnection : IEngineClient
 
     private void DropTransport()
     {
-        IEngineClient? old;
+        IEngineTransport? old;
         lock (_gate)
         {
             _generation++;
@@ -137,15 +141,15 @@ public sealed class EngineConnection : IEngineClient
 
         if (old is not null)
         {
-            _ = old.DisposeAsync().AsTask();
+            Observe(old.DisposeAsync().AsTask(), "transport dispose");
             ConnectedChanged?.Invoke(false);
         }
     }
 
     private async Task ConnectAsync(int generation)
     {
-        // Redial until installed or superseded; a silent give-up here was
-        // once a permanently dead connection
+        // Redial until installed or superseded. Giving up here would leave
+        // the connection dead for good
         while (Volatile.Read(ref _disposed) == 0 && !_disposal.IsCancellationRequested)
         {
             lock (_gate)
@@ -169,6 +173,7 @@ public sealed class EngineConnection : IEngineClient
             }
             catch (Exception e)
             {
+                _logger?.StepFailed("engine connect attempt", e.Message);
                 lock (_gate)
                 {
                     if (_generation == generation)
@@ -210,7 +215,7 @@ public sealed class EngineConnection : IEngineClient
             transport.NotificationReceived += OnInnerNotification;
             lock (_gate)
             {
-                // A newer status event owns the connection now; stand down
+                // A newer status event owns the connection now, so stand down
                 if (_generation == generation && _disposed == 0)
                 {
                     _transport = transport;
@@ -237,4 +242,10 @@ public sealed class EngineConnection : IEngineClient
 
     private void OnInnerNotification(string method, JsonElement parameters) =>
         NotificationReceived?.Invoke(method, parameters);
+
+    // Fire-and-forget work still reports a failure somewhere
+    private void Observe(Task task, string what) =>
+        _ = task.ContinueWith(
+            t => _logger?.StepFailed(what, t.Exception?.GetBaseException().Message ?? "faulted"),
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
 }

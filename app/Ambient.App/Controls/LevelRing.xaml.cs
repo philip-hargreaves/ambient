@@ -3,24 +3,17 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
+using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Controls;
 
 /// <summary>
-/// The presence behind a disc button: a soft accent glow with no edge that
-/// brightens and reaches further with the microphone level, and one hairline
-/// ring that eases outward from the disc. Restrained on purpose: it should read
-/// as "alive", never as an alarm.
+/// The presence behind a disc button: a soft accent glow that grows with the
+/// microphone level and one hairline ring that eases outward from the disc.
+/// Kept restrained so it reads as calm activity.
 /// </summary>
 public sealed partial class LevelRing : UserControl
 {
-    private const double GlowReach = 0.6;    // the glow's diameter beyond the disc at full level, as a fraction
-    private const double RingReach = 0.22;   // the ring's swell at full level
-    private const double GlowFloor = 0.08;   // glow alpha at silence
-    private const double GlowCeiling = 0.42;
-    private const double RingFloor = 0.25;   // ring alpha at silence
-    private const double RingCeiling = 0.85;
-
     public static readonly DependencyProperty LevelProperty = DependencyProperty.Register(
         nameof(Level), typeof(double), typeof(LevelRing),
         new PropertyMetadata(0.0, (d, _) => ((LevelRing)d).Apply()));
@@ -72,17 +65,6 @@ public sealed partial class LevelRing : UserControl
         set => SetValue(DiameterProperty, value);
     }
 
-    // Pure, so a test can pin the curve without a visual tree
-    public static double GlowScaleFor(double level) => 1.0 + GlowReach * Math.Clamp(level, 0.0, 1.0);
-
-    public static double RingScaleFor(double level) => 1.0 + RingReach * Math.Clamp(level, 0.0, 1.0);
-
-    public static double GlowAlphaFor(double level) =>
-        GlowFloor + (GlowCeiling - GlowFloor) * Math.Clamp(level, 0.0, 1.0);
-
-    public static double RingAlphaFor(double level) =>
-        RingFloor + (RingCeiling - RingFloor) * Math.Clamp(level, 0.0, 1.0);
-
     private Color Transparent() => Color.FromArgb(0, _accent.R, _accent.G, _accent.B);
 
     private Color WithAlpha(double alpha) =>
@@ -93,11 +75,11 @@ public sealed partial class LevelRing : UserControl
         var level = Level;
         Glow.Width = Glow.Height = Diameter;
         Ring.Width = Ring.Height = Diameter + 6;
-        GlowScale.ScaleX = GlowScale.ScaleY = GlowScaleFor(level);
-        RingScale.ScaleX = RingScale.ScaleY = RingScaleFor(level);
-        _glow.GradientStops[0].Color = WithAlpha(GlowAlphaFor(level));
-        _glow.GradientStops[1].Color = WithAlpha(GlowAlphaFor(level) * 0.45);
+        GlowScale.ScaleX = GlowScale.ScaleY = LevelCurve.GlowScale(level);
+        RingScale.ScaleX = RingScale.ScaleY = LevelCurve.RingScale(level);
+        _glow.GradientStops[0].Color = WithAlpha(LevelCurve.GlowAlpha(level));
+        _glow.GradientStops[1].Color = WithAlpha(LevelCurve.GlowAlpha(level) * 0.45);
         _glow.GradientStops[2].Color = Transparent();
-        _ring.Color = WithAlpha(RingAlphaFor(level));
+        _ring.Color = WithAlpha(LevelCurve.RingAlpha(level));
     }
 }

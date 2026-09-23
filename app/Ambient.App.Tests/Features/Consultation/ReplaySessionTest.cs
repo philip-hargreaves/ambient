@@ -3,10 +3,12 @@ using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Platform;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
@@ -32,8 +34,8 @@ public class ReplaySessionTest
         var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(directory);
         var wav = SessionContractWav.Write(seconds: 5);
-        // Real models when present: startup cost and code paths must match
-        // the shipped app, not a scripted stand-in
+        // Real models when present, so startup cost and code paths match
+        // the shipped app
         var models = FindModels();
         using var launcher = new ProcessEngineLauncher(
             FindEngine(),
@@ -62,8 +64,7 @@ public class ReplaySessionTest
             }
             var pidAtStart = host.EnginePid;
 
-            // The idle window between launch and play is where the silent
-            // connection death lived
+            // The connection must survive the idle window between launch and play
             await Task.Delay(TimeSpan.FromSeconds(20));
             Assert.Equal(pidAtStart, host.EnginePid);
 
@@ -98,7 +99,7 @@ public class ReplaySessionTest
             }
             catch (IOException)
             {
-                // The engine may still hold the store for a beat; temp cleans itself
+                // The engine may still hold the store for a moment, and temp cleans itself
             }
         }
     }
@@ -277,7 +278,7 @@ public class ReplaySessionTest
             var stop = await connection.RequestAsync("session/stop", null, TimeSpan.FromSeconds(240));
             Assert.Equal(secondId, stop.GetProperty("sessionId").GetString());
 
-            // The transcript covers the whole consult, not just the tail
+            // The transcript covers the whole consult, including the audio before the kill
             var transcript = await connection.RequestAsync(
                 "session/transcript", new { id = secondId }, Timeout);
             var labelled = transcript.GetProperty("turns").EnumerateArray()
@@ -324,9 +325,7 @@ public class ReplaySessionTest
             new FileCrashLog(Path.Combine(directory, "crashes.jsonl")));
         await using var connection = new EngineConnection(host, async (pid, ct) =>
             await PipeTransport.ConnectAsync(pipeName, Timeout, pid, ct));
-        var session = new ConsultationViewModel(
-            connection, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel());
+        var session = new ConsultationViewModel(new EngineApi(connection), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(connection, new StatusBarViewModel()), TestSession.Guidance(new StatusBarViewModel()));
         try
         {
             host.Start();
@@ -336,8 +335,8 @@ public class ReplaySessionTest
             Assert.Equal(SessionState.Recording, session.State);
             await WaitUntilAsync(() => session.AudioSeconds > 3, TimeSpan.FromSeconds(20));
 
-            // Two kills in quick succession, the second mid-resume - the
-            // double-crash sequence observed in the field
+            // Two kills in quick succession, the second mid-resume, as in the
+            // double crash observed in the field
             var atKill = session.AudioSeconds;
             var firstPid = host.EnginePid!.Value;
             Process.GetProcessById(firstPid).Kill();
@@ -440,16 +439,6 @@ public class ReplaySessionTest
         }
 
         Assert.True(crashes == 0, $"{crashes}/6 accelerated session starts crashed the engine");
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan limit)
-    {
-        var deadline = DateTime.UtcNow + limit;
-        while (!condition())
-        {
-            Assert.True(DateTime.UtcNow < deadline, "condition not reached in time");
-            await Task.Delay(100);
-        }
     }
 
     private static string? FindModels()

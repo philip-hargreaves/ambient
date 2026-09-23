@@ -2,7 +2,9 @@ using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 
-namespace Ambient.App.Core.Hosting;
+using Ambient.App.Core.Hosting;
+
+namespace Ambient.App.Platform;
 
 /// <summary>
 /// Watches a launched engine through the process handle CreateProcess

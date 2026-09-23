@@ -2,6 +2,8 @@ using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Tests.Support;
+using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Demo;
 
@@ -14,7 +16,7 @@ public class DemoTrayViewModelTest
     public async Task PlaySendsTheReplayRequest()
     {
         var (session, engine, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, [Track()]) { Speed = 4, MonitorAudio = true };
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]) { Speed = 4, MonitorAudio = true };
 
         await tray.PlayCommand.ExecuteAsync(null);
 
@@ -31,7 +33,7 @@ public class DemoTrayViewModelTest
     public void SpeedCyclesAndMarksSmoke()
     {
         var (session, _, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, [Track()]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
 
         Assert.Equal("1×", tray.SpeedLabel);
         Assert.False(tray.IsSmoke);
@@ -50,7 +52,7 @@ public class DemoTrayViewModelTest
     public async Task PauseTogglesThroughTheEngine()
     {
         var (session, engine, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, [Track()]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
         await tray.PlayCommand.ExecuteAsync(null);
 
         await tray.TogglePauseCommand.ExecuteAsync(null);
@@ -66,7 +68,7 @@ public class DemoTrayViewModelTest
     {
         var (session, engine, _) = TestSession.Create();
         var wav = SessionContractWav.Write(seconds: 2);
-        var tray = new DemoTrayViewModel(session, [new DemoTrack("Silence", wav)]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [new DemoTrack("Silence", wav)]);
         await tray.PlayCommand.ExecuteAsync(null);
 
         for (var i = 0; i < 10; i++)
@@ -83,7 +85,7 @@ public class DemoTrayViewModelTest
     public async Task PlayIsIdleOnlyAndStopFinalises()
     {
         var (session, _, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, [Track()]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
 
         Assert.True(tray.PlayCommand.CanExecute(null));
         await tray.PlayCommand.ExecuteAsync(null);
@@ -99,7 +101,7 @@ public class DemoTrayViewModelTest
     {
         var (session, engine, _) = TestSession.Create();
         var wav = SessionContractWav.Write(seconds: 1);
-        var tray = new DemoTrayViewModel(session, [new DemoTrack("Short", wav)]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [new DemoTrack("Short", wav)]);
         await tray.PlayCommand.ExecuteAsync(null);
 
         for (var i = 0; i < 10; i++)
@@ -115,7 +117,7 @@ public class DemoTrayViewModelTest
     public async Task MonitorTogglesLiveDuringAReplay()
     {
         var (session, engine, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, [Track()]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
         await tray.PlayCommand.ExecuteAsync(null);
 
         tray.MonitorAudio = true;
@@ -129,7 +131,7 @@ public class DemoTrayViewModelTest
     {
         var (session, engine, _) = TestSession.Create();
         engine.SetConnected(false);
-        var tray = new DemoTrayViewModel(session, [Track()]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
 
         Assert.False(tray.PlayCommand.CanExecute(null));
         engine.SetConnected(true);
@@ -140,7 +142,7 @@ public class DemoTrayViewModelTest
     public void BrowseAddsASelectableTrack()
     {
         var (session, _, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, [Track()]);
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
 
         tray.UseTrack("C:/elsewhere/my_recording.wav");
 

@@ -7,6 +7,7 @@ namespace Ambient.Client.Tests.Contract;
 /// feature reports itself unavailable, a search fails with the loader's reason and a recorded
 /// session carries no record.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class GuidanceContractTest
 {
@@ -64,7 +65,7 @@ public class GuidanceContractTest
             Assert.Equal(JsonValueKind.Null, failure.GetProperty("id").ValueKind);
             Assert.False(string.IsNullOrEmpty(failure.GetProperty("detail").GetString()));
 
-            // No note model, so no note and nothing searched. The record is absent rather than empty
+            // No note model, so no note and nothing searched. The record is absent
             await client.RequestAsync("session/start", null, Timeout);
             await client.RequestAsync("session/stop", null, Timeout);
             await patientReady.Task.WaitAsync(Timeout);

@@ -8,7 +8,7 @@ public sealed record DemoMaster(string SessionId, double AudioSeconds);
 
 /// <summary>
 /// Demo mode: Record plays a saved run back instead of listening. A developer
-/// setting; the saved runs are the ones the recorder names in the masters file.
+/// setting. The saved runs are the ones the recorder names in the masters file.
 /// </summary>
 public sealed class DemoMode(AppPreferences? preferences = null, string? mastersPath = null,
     IReadOnlyList<DemoCase>? cases = null)
@@ -42,7 +42,7 @@ public sealed class DemoMode(AppPreferences? preferences = null, string? masters
         }
     }
 
-    /// <summary>The track whose saved run plays; empty falls back to the first.</summary>
+    /// <summary>The track whose saved run plays. Empty falls back to the first.</summary>
     public string Track
     {
         get => _track;
@@ -59,11 +59,11 @@ public sealed class DemoMode(AppPreferences? preferences = null, string? masters
     /// <summary>Tracks with a saved run, in the file's order.</summary>
     public IReadOnlyList<string> Tracks => [.. _masters.Keys];
 
-    /// <summary>What Record plays back; null when no saved run exists.</summary>
+    /// <summary>What Record plays back, null when no saved run exists.</summary>
     public DemoMaster? Master =>
         _masters.TryGetValue(_track, out var chosen) ? chosen : _masters.Values.FirstOrDefault();
 
-    // {"Elbow swelling": {"id": "...", "audioSeconds": 539.7}}; missing or broken means none
+    // {"Elbow swelling": {"id": "...", "audioSeconds": 539.7}}. Missing or broken means none
     private static Dictionary<string, DemoMaster> LoadMasters(string? path)
     {
         var masters = new Dictionary<string, DemoMaster>();

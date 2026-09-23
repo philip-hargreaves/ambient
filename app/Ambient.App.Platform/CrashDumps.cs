@@ -1,6 +1,8 @@
 using Microsoft.Win32;
 
-namespace Ambient.App.Core.Hosting;
+using Ambient.App.Core.Hosting;
+
+namespace Ambient.App.Platform;
 
 /// <summary>WER local dumps for the engine processes: per-user, minidumps
 /// only (a full dump could carry audio), capped, re-asserted per launch.</summary>
@@ -18,7 +20,7 @@ public static class CrashDumps
                 using var key = hive.CreateSubKey($@"{LocalDumps}\{exe}");
                 key.SetValue("DumpFolder", dumpFolder, RegistryValueKind.ExpandString);
                 key.SetValue("DumpCount", 3, RegistryValueKind.DWord);
-                key.SetValue("DumpType", 1, RegistryValueKind.DWord);  // mini, not full
+                key.SetValue("DumpType", 1, RegistryValueKind.DWord);  // minidump
             }
             catch (Exception)
             {

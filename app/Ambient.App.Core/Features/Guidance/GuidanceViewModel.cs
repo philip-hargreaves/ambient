@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Ports;
+using Ambient.App.Core.Shell;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
 
@@ -33,6 +35,51 @@ public enum GuidanceSection
 /// </summary>
 public sealed partial class GuidanceViewModel : ObservableObject
 {
+    private readonly ILauncher _launcher;
+    private readonly IClipboard _clipboard;
+    private readonly StatusBarViewModel _status;
+
+    public GuidanceViewModel(ILauncher launcher, IClipboard clipboard, StatusBarViewModel status)
+    {
+        _launcher = launcher;
+        _clipboard = clipboard;
+        _status = status;
+    }
+
+    /// <summary>The section folded to its heading. The review's patient sheet folds the same way.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BodyVisible), nameof(FoldGlyph))]
+    public partial bool Folded { get; set; }
+
+    public bool BodyVisible => !Folded;
+
+    // Open shows an up chevron, folded a down one
+    public string FoldGlyph => Folded ? "\uE70D" : "\uE70E";
+
+    [RelayCommand]
+    private void ToggleFold() => Folded = !Folded;
+
+    /// <summary>A web link opens in the browser, an added document in the PDF viewer.</summary>
+    [RelayCommand]
+    private async Task Open(GuidanceRecommendation found)
+    {
+        if (found.FromDocument)
+        {
+            await OpenDocumentAsync(found).ConfigureAwait(true);
+        }
+        else if (!await _launcher.OpenLinkAsync(found.Link).ConfigureAwait(true))
+        {
+            _status.Append("Could not open the link - no browser answered");
+        }
+    }
+
+    [RelayCommand]
+    private Task ShowInDocument(GuidanceRecommendation found) => ShowInDocumentAsync(found);
+
+    [RelayCommand]
+    private Task CopyCitation(GuidanceRecommendation found) =>
+        _clipboard.CopyAsync(_status, found.CitationText, "Citation");
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible),
         nameof(SettingsLinkVisible),
@@ -314,11 +361,11 @@ public sealed partial class GuidanceViewModel : ObservableObject
     /// A reopened session's record, or null when it was never searched. True when the
     /// added documents have changed since, so the caller can search again.
     /// </summary>
-    public bool LoadStored(JsonElement? guidance)
+    public bool LoadStored(GuidanceRecord? guidance)
     {
         NotStored = false;
         FoundIn = "";
-        if (guidance is not { ValueKind: JsonValueKind.Object } record)
+        if (guidance is not { } record)
         {
             _noteResults = [];
             Stale = false;
@@ -328,7 +375,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         }
 
         ApplyRecord(record);
-        if (!Flag(record, "documentsChanged") || !HasRecord)
+        if (!record.DocumentsChanged || !HasRecord)
         {
             return false;
         }
@@ -344,10 +391,10 @@ public sealed partial class GuidanceViewModel : ObservableObject
     }
 
     /// <summary>The note's search came back, for the consultation on screen.</summary>
-    public void ApplyReady(JsonElement result)
+    public void ApplyReady(GuidanceRecord result)
     {
         ApplyRecord(result);
-        NotStored = GuidanceCard.Field(result, "storeError").Length > 0;
+        NotStored = result.StoreError is { Length: > 0 };
         ShowFoundIn(_noteClock);
     }
 
@@ -361,7 +408,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
     }
 
     // A query reply after Clear or a new consultation belongs to nothing on screen
-    public void ApplyQueryReady(JsonElement result)
+    public void ApplyQueryReady(GuidanceRecord result)
     {
         if (!QuerySearching)
         {
@@ -390,25 +437,21 @@ public sealed partial class GuidanceViewModel : ObservableObject
     /// guidance/corpora: the embedder's state. Searching needs only that, since added
     /// documents are searched whether or not any corpus is installed.
     /// </summary>
-    public void ApplyCorpora(JsonElement corpora)
+    public void ApplyCorpora(CorporaStatus corpora)
     {
-        ReadinessDetail = GuidanceCard.Field(corpora, "detail");
+        ReadinessDetail = corpora.Detail ?? "";
         var refused = new List<string>();
-        if (corpora.TryGetProperty("corpora", out var list)
-            && list.ValueKind == JsonValueKind.Array)
+        foreach (var corpus in corpora.Corpora)
         {
-            foreach (var corpus in list.EnumerateArray())
+            var reason = corpus.Unavailable ?? "";
+            if (reason.Length > 0)
             {
-                var reason = GuidanceCard.Field(corpus, "unavailable");
-                if (reason.Length > 0)
-                {
-                    refused.Add($"{GuidanceCard.Field(corpus, "id")}: {reason}");
-                }
+                refused.Add($"{corpus.Id}: {reason}");
             }
         }
 
         RefusedCorpora = refused;
-        Readiness = GuidanceCard.Field(corpora, "state") switch
+        Readiness = corpora.State switch
         {
             "loading" => GuidanceReadiness.Loading,
             "ready" => GuidanceReadiness.Ready,
@@ -437,14 +480,14 @@ public sealed partial class GuidanceViewModel : ObservableObject
         ApplyQueryFailed();
     }
 
-    private void ApplyRecord(JsonElement record)
+    private void ApplyRecord(GuidanceRecord record)
     {
         _noteResults = ReadResults(record, true);
         Section = _noteResults.Count > 0 ? GuidanceSection.Results
-            : Searched(record).Count > 0 ? GuidanceSection.NothingMatched
+            : record.Searched.Count > 0 ? GuidanceSection.NothingMatched
             : GuidanceSection.NoCorpusAtSearch;
         StaleCaption = NoteStaleCaption;
-        Stale = Flag(record, "stale");
+        Stale = record.Stale == true;
         ShowCards();
     }
 
@@ -508,37 +551,23 @@ public sealed partial class GuidanceViewModel : ObservableObject
     }
 
     // The source label needs the corpus name, which only the searched list carries
-    private static List<GuidanceRecommendation> ReadResults(JsonElement record, bool fromNote)
+    private static List<GuidanceRecommendation> ReadResults(GuidanceRecord record, bool fromNote)
     {
         var sources = new Dictionary<string, (string Name, string Label)>(StringComparer.Ordinal);
-        foreach (var corpus in Searched(record))
+        foreach (var corpus in record.Searched)
         {
-            sources[GuidanceCard.Field(corpus, "id")] =
-                (GuidanceCard.Field(corpus, "name"), GuidanceCard.Field(corpus, "label"));
+            sources[corpus.Id] = (corpus.Name, corpus.Label ?? "");
         }
 
         var results = new List<GuidanceRecommendation>();
-        if (record.TryGetProperty("shown", out var shown) && shown.ValueKind == JsonValueKind.Array)
+        foreach (var result in record.Shown)
         {
-            foreach (var result in shown.EnumerateArray())
-            {
-                var (name, label) = sources.GetValueOrDefault(
-                    GuidanceCard.Field(result, "corpus"), ("", ""));
-                var labelled = label.Length > 0;
-                results.Add(GuidanceRecommendation.From(
-                    result, labelled ? label : name, fromNote, labelled));
-            }
+            var (name, label) = sources.GetValueOrDefault(result.Corpus ?? "", ("", ""));
+            var labelled = label.Length > 0;
+            results.Add(GuidanceRecommendation.From(
+                result, labelled ? label : name, fromNote, labelled));
         }
 
         return results;
     }
-
-    private static List<JsonElement> Searched(JsonElement record) =>
-        record.TryGetProperty("searched", out var searched)
-        && searched.ValueKind == JsonValueKind.Array
-            ? [.. searched.EnumerateArray()]
-            : [];
-
-    private static bool Flag(JsonElement element, string property) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
 }

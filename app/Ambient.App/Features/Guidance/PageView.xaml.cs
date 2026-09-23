@@ -3,9 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Guidance;
-using Ambient.App.Core.Shell;
 using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Guidance;
@@ -16,12 +14,10 @@ public sealed partial class PageView : UserControl
     // Glyph boxes are tight, so a mark reaches a little past the letters
     private const double MarkPad = 4;
 
-    public PageView(ConsultationViewModel consultation, StatusBarViewModel status)
+    public PageView(PageViewModel viewModel, FocusReturn focus)
     {
-        ViewModel = consultation.PageView;
+        ViewModel = viewModel;
         InitializeComponent();
-        ViewModel.OpenFile = LaunchAsync;
-        ViewModel.CopyText = text => ClipboardHelper.CopyAsync(status, text, "Citation");
         // Focus lands on Close as the pane opens and goes back to the link that opened it
         ViewModel.PropertyChanged += (_, e) =>
         {
@@ -36,16 +32,12 @@ public sealed partial class PageView : UserControl
             }
             else
             {
-                Opener?.Focus(FocusState.Programmatic);
-                Opener = null;
+                focus.Return();
             }
         };
     }
 
     public PageViewModel ViewModel { get; }
-
-    /// <summary>The control that opened the pane, for focus to return to.</summary>
-    public static FrameworkElement? Opener { get; set; }
 
     public static ImageSource? Bitmap(string path) =>
         path.Length == 0 ? null : new BitmapImage(new Uri(path));
@@ -103,15 +95,6 @@ public sealed partial class PageView : UserControl
                 ViewModel.NextPageCommand.Execute(null);
                 e.Handled = true;
                 break;
-        }
-    }
-
-    private static async Task LaunchAsync(string path)
-    {
-        var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
-        if (!await Windows.System.Launcher.LaunchFileAsync(file))
-        {
-            throw new InvalidOperationException("no PDF viewer answered");
         }
     }
 }

@@ -1,23 +1,13 @@
 using System.Text.Json;
 using Ambient.App.Core.Hosting;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Hosting;
 
 public class EngineConnectionTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
-
-    // The connect path is fire-and-forget, so its effects land asynchronously
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        for (var i = 0; i < 500 && !condition(); i++)
-        {
-            await Task.Delay(10);
-        }
-
-        Assert.True(condition());
-    }
 
     private static readonly JsonElement Empty = JsonSerializer.SerializeToElement(new { });
 
@@ -46,7 +36,7 @@ public class EngineConnectionTest
         }
     }
 
-    private sealed class FakeTransport : IEngineClient
+    private sealed class FakeTransport : IEngineTransport
     {
         public int HelloProtocol { get; init; } = Protocol.ProtocolVersion;
 
@@ -103,7 +93,7 @@ public class EngineConnectionTest
 
         public Exception? ConnectFailure { get; set; }
 
-        public TaskCompletionSource<IEngineClient>? PendingConnect { get; set; }
+        public TaskCompletionSource<IEngineTransport>? PendingConnect { get; set; }
 
         public EngineConnection Connection { get; }
 
@@ -125,7 +115,7 @@ public class EngineConnectionTest
 
                 var transport = new FakeTransport { HelloProtocol = HelloProtocol };
                 Transports.Add(transport);
-                return Task.FromResult<IEngineClient>(transport);
+                return Task.FromResult<IEngineTransport>(transport);
             });
         }
     }
@@ -226,7 +216,7 @@ public class EngineConnectionTest
     public async Task AStaleConnectDoesNotClobberANewerOne()
     {
         var rig = new Rig();
-        var pending = new TaskCompletionSource<IEngineClient>();
+        var pending = new TaskCompletionSource<IEngineTransport>();
         rig.PendingConnect = pending;
         rig.Host.RaiseStatus(EngineStatus.Running);
 

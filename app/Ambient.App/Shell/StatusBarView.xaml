@@ -17,7 +17,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- One status, replaced as things happen; the ring means "in progress" -->
+            <!-- One status, replaced as things happen. The ring means "in progress" -->
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <ProgressRing
                     Width="14"
@@ -33,7 +33,7 @@
             <Border Grid.Column="1" />
 
             <!-- The two models at work, each with its live figure inside its
-                 own chip; tabular figures so digits change without jitter -->
+                 own chip. Tabular figures so digits change without jitter -->
             <StackPanel
                 Grid.Column="2"
                 Orientation="Horizontal"
@@ -42,9 +42,9 @@
                 <Border
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     Style="{StaticResource ChipBorder}"
-                    Visibility="{x:Bind AsrChipVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.AsrChipVisible, Mode=OneWay}">
                     <!-- Colour pairs swapped by visibility: code-resolved
-                         brushes follow the OS theme, not the chosen one -->
+                         brushes follow only the OS theme -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse
                             Width="6"
@@ -74,7 +74,7 @@
                 <Border
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     Style="{StaticResource ChipBorder}"
-                    Visibility="{x:Bind NoteChipVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.NoteChipVisible, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse
                             Width="6"
@@ -94,11 +94,11 @@
                             Typography.NumeralAlignment="Tabular" />
                     </StackPanel>
                 </Border>
-                <!-- Not a worker, so no dot: ambient footprint, same grammar -->
+                <!-- The app's own footprint: not a worker, so no dot -->
                 <Border
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     Style="{StaticResource ChipBorder}"
-                    Visibility="{x:Bind MemoryChipVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.MemoryChipVisible, Mode=OneWay}">
                     <TextBlock
                         Style="{StaticResource CaptionText}"
                         Text="{x:Bind ViewModel.MemoryChip, Mode=OneWay}"
@@ -106,8 +106,8 @@
                 </Border>
             </StackPanel>
 
-            <!-- Partner marks from Assets/logos/credits.json; edit the file
-                 per showcase, never the code -->
+            <!-- Partner marks from Assets/logos/credits.json. Change them per
+                 showcase in that file -->
             <StackPanel
                 x:Name="CreditsRow"
                 Grid.Column="3"

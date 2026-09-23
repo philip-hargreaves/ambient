@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace Ambient.App.Core.Features.Appraisal;
 
 /// <summary>
-/// Patterns that may identify a patient. Names what it found; never edits; cannot catch everything.
+/// Patterns that may identify a patient. Reports what it found without editing the text, and cannot catch everything.
 /// </summary>
 public static partial class IdentifierCheck
 {
@@ -44,7 +44,7 @@ public static partial class IdentifierCheck
     [GeneratedRegex(@"\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b")]
     private static partial Regex NumericDate();
 
-    // The three forms the engine's scrub removes; a month alone is allowed
+    // The three forms the engine's scrub removes. A month alone is allowed
     [GeneratedRegex(
         @"\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\b\.?(?:,?\s+\d{4})?|(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\b\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b|(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\b\.?\s+\d{4}\b)")]
     private static partial Regex WrittenDate();

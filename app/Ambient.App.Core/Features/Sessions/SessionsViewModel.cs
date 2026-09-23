@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
@@ -33,11 +34,11 @@ public sealed record SessionRow(
 /// </summary>
 public sealed partial class SessionsViewModel : ObservableObject
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
-
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly StatusBarViewModel _status;
     private readonly ConsultationViewModel _consultation;
+    private readonly IDialogService _dialogs;
+    private readonly INavigationService _navigation;
     private readonly AppPreferences? _preferences;
 
     public ObservableCollection<SessionRow> Sessions { get; } = [];
@@ -45,9 +46,10 @@ public sealed partial class SessionsViewModel : ObservableObject
     /// <summary>
     /// Keep consultations is off and nothing is stored: the page explains
     /// itself instead of showing a bare empty list. Existing history always
-    /// shows; only the clinician empties it.
+    /// shows, and only the clinician empties it.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
     public partial bool EmptyBecauseOff { get; private set; }
 
     [ObservableProperty]
@@ -55,9 +57,25 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     /// <summary>True while the selected session is open in the panes.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
     public partial bool DetailOpen { get; private set; }
 
-    /// <summary>The open session's label; editing it renames the session.</summary>
+    /// <summary>"Select a consultation" when there is a list and nothing open.</summary>
+    public bool SelectHintVisible => !DetailOpen && !EmptyBecauseOff;
+
+    /// <summary>The wide layout folds the patient sheet under the note.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PatientVisible), nameof(PatientFoldGlyph))]
+    public partial bool PatientFolded { get; set; }
+
+    public bool PatientVisible => !PatientFolded;
+
+    public string PatientFoldGlyph => PatientFolded ? "\uE70D" : "\uE70E";
+
+    [RelayCommand]
+    private void TogglePatientFold() => PatientFolded = !PatientFolded;
+
+    /// <summary>The open session's label. Editing it renames the session.</summary>
     [ObservableProperty]
     public partial string DetailTitle { get; set; } = "";
 
@@ -67,17 +85,19 @@ public sealed partial class SessionsViewModel : ObservableObject
     public NoteViewModel Note => _consultation.Note;
 
     public SessionsViewModel(
-        IEngineClient engine, StatusBarViewModel status, ConsultationViewModel consultation,
-        AppPreferences? preferences = null)
+        IEngineApi engine, StatusBarViewModel status, ConsultationViewModel consultation,
+        IDialogService dialogs, INavigationService navigation, AppPreferences? preferences = null)
     {
         _engine = engine;
         _status = status;
         _consultation = consultation;
+        _dialogs = dialogs;
+        _navigation = navigation;
         _preferences = preferences;
     }
 
-    // True while a rename swaps the selected row for its retitled copy;
-    // that reselection must not reopen the session
+    // True while a rename swaps the selected row for its retitled copy.
+    // That reselection must not reopen the session
     private bool _retitling;
 
     partial void OnSelectedChanged(SessionRow? value)
@@ -93,37 +113,25 @@ public sealed partial class SessionsViewModel : ObservableObject
     {
         try
         {
-            var result = await _engine
-                .RequestAsync("session/list", null, RequestTimeout).ConfigureAwait(true);
+            var sessions = await _engine.ListSessionsAsync().ConfigureAwait(true);
             Selected = null;
             Sessions.Clear();
-            foreach (var session in result.GetProperty("sessions").EnumerateArray())
+            foreach (var session in sessions)
             {
-                var started = session.GetProperty("startedAt").GetString() ?? "";
-                var ended = session.GetProperty("endedAt").GetString() ?? "";
-                var label = session.TryGetProperty("label", out var l)
-                    ? l.GetString() ?? "" : "";
-                var edited = session.TryGetProperty("editedAt", out var e)
-                    && e.ValueKind == System.Text.Json.JsonValueKind.String
-                    ? e.GetString() ?? "" : "";
-                // No title beats a bad title: without a stored label the
+                var started = session.StartedAt;
+                var label = session.Label ?? "";
+                // Without a stored label the
                 // date and time are the row's name
                 var startedLabel = FormatStarted(started);
-                var audioSeconds = session.TryGetProperty("audioSeconds", out var a)
-                    ? a.GetDouble() : 0;
-                var demo = session.TryGetProperty("demo", out var d)
-                    && d.ValueKind == System.Text.Json.JsonValueKind.True;
-                var hasReflection = session.TryGetProperty("hasReflection", out var h)
-                    && h.ValueKind == System.Text.Json.JsonValueKind.True;
                 Sessions.Add(new SessionRow(
-                    session.GetProperty("id").GetString() ?? "",
+                    session.Id,
                     label.Length > 0 ? label : startedLabel,
                     startedLabel,
-                    FormatDuration(audioSeconds, started, ended),
-                    EditedStamp.Label(started, edited),
+                    FormatDuration(session.AudioSeconds, started, session.EndedAt),
+                    EditedStamp.Label(started, session.EditedAt ?? ""),
                     started,
-                    demo,
-                    hasReflection));
+                    session.Demo,
+                    session.HasReflection));
             }
 
             EmptyBecauseOff = Sessions.Count == 0
@@ -164,10 +172,7 @@ public sealed partial class SessionsViewModel : ObservableObject
 
         try
         {
-            _ = await _engine
-                .RequestAsync("session/label", new { id = Selected.Id, text = DetailTitle },
-                    RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.LabelSessionAsync(Selected.Id, DetailTitle).ConfigureAwait(true);
             var index = Sessions.IndexOf(Selected);
             var renamed = Selected with { Title = DetailTitle };
             _retitling = true;
@@ -187,17 +192,21 @@ public sealed partial class SessionsViewModel : ObservableObject
         }
     }
 
+    // Deletion is crypto-erase, so it is confirmed first
     [RelayCommand]
-    public Task DeleteSelectedAsync() => DeleteAsync(Selected);
+    private async Task Delete(SessionRow row)
+    {
+        if (await _dialogs.ConfirmAsync("Delete this consultation?",
+                "The transcript, note and patient sheet are erased and cannot be recovered.",
+                "Delete", "Keep").ConfigureAwait(true))
+        {
+            await DeleteAsync(row).ConfigureAwait(true);
+        }
+    }
 
     /// <summary>Deletes one row, closing its review first if open.</summary>
-    public async Task DeleteAsync(SessionRow? row)
+    public async Task DeleteAsync(SessionRow row)
     {
-        if (row is null)
-        {
-            return;
-        }
-
         try
         {
             if (Selected?.Id == row.Id)
@@ -206,9 +215,7 @@ public sealed partial class SessionsViewModel : ObservableObject
                 DetailOpen = false;
             }
 
-            _ = await _engine
-                .RequestAsync("session/delete", new { id = row.Id }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.DeleteSessionAsync(row.Id).ConfigureAwait(true);
             _status.Append("Session deleted");
             await RefreshAsync().ConfigureAwait(true);
         }
@@ -224,6 +231,13 @@ public sealed partial class SessionsViewModel : ObservableObject
         Selected = null;
         DetailOpen = false;
         return _consultation.CloseReviewAsync();
+    }
+
+    [RelayCommand]
+    private async Task Leave()
+    {
+        await LeaveAsync().ConfigureAwait(true);
+        _navigation.GoBack();
     }
 
     private string OptionsLabel()
@@ -244,7 +258,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             : startedAt;
 
     // The consultation's length is its audio, which a fast replay records in
-    // seconds of wall time; the wall clock is only the fallback
+    // seconds of wall time. The wall clock is only the fallback
     private static string FormatDuration(double audioSeconds, string startedAt, string endedAt)
     {
         var seconds = audioSeconds;
@@ -259,7 +273,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             seconds = (ended - started).TotalSeconds;
         }
 
-        // A duration, unmistakably not a second clock time
+        // Formatted as a duration so it does not read as a second clock time
         return seconds < 90 ? "1 min" : $"{(int)Math.Round(seconds / 60)} min";
     }
 }

@@ -1,14 +1,12 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Tests.Support;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 public class NoteRefusalTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     [Fact]
     public async Task ARefusalStaysOnTheRecordScreenSaysWhyAndOffersToWriteAnyway()
     {
@@ -40,7 +38,7 @@ public class NoteRefusalTest
     public async Task DoneAfterARefusalClosesTheSessionAndReturnsToIdle()
     {
         var (session, engine, note) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         await session.StartRecordingAsync();
         await session.StopRecordingAsync();
         engine.RaiseNotification("session/progress", Params(new { stage = "transcript" }));

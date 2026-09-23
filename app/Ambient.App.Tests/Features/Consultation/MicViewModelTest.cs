@@ -2,6 +2,7 @@ using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 
 namespace Ambient.App.Tests.Features.Consultation;
@@ -21,9 +22,9 @@ public class MicViewModelTest
     public async Task TheLabelNamesOneDeviceAsShortAsThatAllows()
     {
         var engine = new FakeEngineClient();
-        var mic = new MicViewModel(engine);
+        var mic = new MicViewModel(new EngineApi(engine));
 
-        // A single-microphone laptop - the common clinical case - reads cleanly
+        // A single-microphone laptop, the common clinical case, reads cleanly
         engine.AudioInputs = [Array()];
         await mic.RefreshAsync();
         Assert.Equal("Microphone Array", mic.Label);
@@ -49,7 +50,7 @@ public class MicViewModelTest
     {
         var preferences = TempPreferences();
         var engine = new FakeEngineClient();
-        var mic = new MicViewModel(engine, preferences);
+        var mic = new MicViewModel(new EngineApi(engine), preferences);
         engine.AudioInputs = [Array(), Jabra()];
         await mic.RefreshAsync();
 
@@ -73,7 +74,7 @@ public class MicViewModelTest
     public async Task NoMicrophoneSaysSoAndSendsNothing()
     {
         var engine = new FakeEngineClient();
-        var mic = new MicViewModel(engine);
+        var mic = new MicViewModel(new EngineApi(engine));
         await mic.RefreshAsync();
 
         Assert.False(mic.HasDevices);

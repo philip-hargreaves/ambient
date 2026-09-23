@@ -1,5 +1,6 @@
 using System.Globalization;
-using System.Text.Json;
+using Ambient.App.Core.Ports;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
 
@@ -12,16 +13,14 @@ public sealed record GuidanceRecommendation(
 {
     /// <summary>Labelled when the corpus manifest names its publisher for the chip.</summary>
     public static GuidanceRecommendation From(
-        JsonElement result, string sourceLabel, bool fromNote, bool labelled = false)
+        GuidanceResult result, string sourceLabel, bool fromNote, bool labelled = false)
     {
         return new(
-            Field(result, "corpus"), Field(result, "chunkId"), Field(result, "code"),
-            Field(result, "number"), Field(result, "title"), Field(result, "section"),
-            Field(result, "text").TrimEnd(), Field(result, "url"), Field(result, "lastUpdated"),
-            Field(result, "updateTag"), Field(result, "source"), Field(result, "citation"),
-            Field(result, "trigger"), sourceLabel, fromNote,
-            Integer(result, "document"), (int)Numeric(result, "page"),
-            (int)Numeric(result, "pages"), labelled);
+            result.Corpus ?? "", result.ChunkId ?? "", result.Code ?? "", result.Number ?? "",
+            result.Title ?? "", result.Section ?? "", (result.Text ?? "").TrimEnd(),
+            result.Url ?? "", result.LastUpdated ?? "", result.UpdateTag ?? "", result.Source ?? "",
+            result.Citation ?? "", result.Trigger ?? "", sourceLabel, fromNote,
+            result.Document, result.Page, result.Pages, labelled);
     }
 
     /// <summary>A passage from a document the clinician added.</summary>
@@ -67,9 +66,7 @@ public sealed record GuidanceRecommendation(
     public bool CanOpen => FromDocument || HasWebLink;
 
     /// <summary>A plain-text corpus carries a file name here, which nothing can open.</summary>
-    private bool HasWebLink =>
-        Uri.TryCreate(Link, UriKind.Absolute, out var uri)
-        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    private bool HasWebLink => WebLinks.IsWeb(Link);
 
     /// <summary>The citation, with the web address on its own line when there is one.</summary>
     public string CitationText => HasWebLink ? $"{Citation}\n{Link}" : Citation;
@@ -84,29 +81,6 @@ public sealed record GuidanceRecommendation(
     public string OpenName => FromDocument ? $"Open {Title}" : $"Open {Reference}";
 
     public string CopyName => $"Copy citation for {Reference}";
-
-    internal static string Field(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-        && element.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
-
-    internal static double Numeric(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-        && element.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.Number
-            ? value.GetDouble()
-            : 0;
-
-    // A document id is a random 63-bit number, past what a double keeps exactly
-    internal static long Integer(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-        && element.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.Number
-        && value.TryGetInt64(out var integer)
-            ? integer
-            : 0;
 }
 
 /// <summary>One guideline, or one document, with the recommendations found in it.</summary>
@@ -182,9 +156,6 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date)
             ? date.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
             : "";
-
-    internal static string Field(JsonElement element, string property) =>
-        GuidanceRecommendation.Field(element, property);
 
     /// <summary>"1 page", "12 pages".</summary>
     internal static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n:N0} {noun}s";

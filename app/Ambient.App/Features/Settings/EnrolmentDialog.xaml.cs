@@ -5,7 +5,7 @@ namespace Ambient.App.Features.Settings;
 
 /// <summary>
 /// The passage, the ring and the verdict. The primary button is Start, then
-/// Finish, then Done or Try again; Cancel stops a reading and keeps nothing.
+/// Finish, then Done or Try again. Cancel stops a reading and keeps nothing.
 /// </summary>
 public sealed partial class EnrolmentDialog : ContentDialog
 {
@@ -35,11 +35,7 @@ public sealed partial class EnrolmentDialog : ContentDialog
         }
     }
 
-    private void OnClose(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-    {
-        ViewModel.Dismiss();
-    }
-
+    // Closing covers the close button, Escape and a click outside
     private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
     {
         ViewModel.Dismiss();

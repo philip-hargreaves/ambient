@@ -1,55 +1,37 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Ports;
-using Ambient.App.Features.Appraisal;
-using Ambient.App.Features.Consultation;
-using Ambient.App.Features.Sessions;
-using Ambient.App.Features.Settings;
+using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Platform;
 
 /// <summary>
-/// Swaps the host's content between DI-resolved views, keeping a back stack of
-/// instances so returning to a surface restores it rather than rebuilding it.
-/// Views come from the container, so constructor injection holds throughout.
+/// Swaps the host's content between the page views, keeping a back stack so returning
+/// to a surface restores it. Pages are singletons, so a surface is built once and keeps
+/// its state.
 /// </summary>
-public sealed class NavigationService(IServiceProvider services) : INavigationService
+public sealed class NavigationService(IReadOnlyDictionary<string, Func<UIElement>> pages)
+    : INavigationService
 {
-    private static readonly Dictionary<string, Type> Pages = new()
-    {
-        ["consultation"] = typeof(ConsultationView),
-        ["sessions"] = typeof(SessionsView),
-        ["appraisals"] = typeof(AppraisalsView),
-        ["settings"] = typeof(SettingsView),
-    };
-
-    private readonly Stack<UIElement> _back = new();
+    private readonly NavigationHistory<UIElement> _stack = new();
     private ContentControl? _host;
 
-    public bool CanGoBack => _back.Count > 0;
+    public bool CanGoBack => _stack.CanGoBack;
 
     public void Attach(ContentControl host) => _host = host;
 
     public void NavigateTo(string pageKey)
     {
-        var host = Host();
-        if (host.Content is UIElement current)
-        {
-            _back.Push(current);
-        }
-
-        host.Content = services.GetRequiredService(Pages[pageKey]);
+        _stack.Show(pages[pageKey]());
+        Host().Content = _stack.Current;
     }
 
     public void GoBack()
     {
-        if (_back.Count == 0)
+        if (_stack.Back() is { } previous)
         {
-            return;
+            Host().Content = previous;
         }
-
-        Host().Content = _back.Pop();
     }
 
     private ContentControl Host() =>

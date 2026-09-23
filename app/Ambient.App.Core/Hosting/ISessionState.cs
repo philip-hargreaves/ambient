@@ -8,6 +8,6 @@ public interface ISessionState
 {
     bool ConsultationActive { get; }
 
-    /// <summary>Where the session was for the crash log; "" when unknown.</summary>
+    /// <summary>Where the session was, for the crash log. Empty when unknown.</summary>
     string SessionPhase => "";
 }

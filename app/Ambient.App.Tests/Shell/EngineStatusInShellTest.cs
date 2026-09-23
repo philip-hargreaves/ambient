@@ -32,18 +32,14 @@ public class EngineStatusInShellTest
     {
         var bar = new StatusBarViewModel();
 
-        bar.SetEngineState(
-            EngineStatus.Faulted, new EngineFault(EngineFaultKind.SessionInterrupted, -1));
-        Assert.Equal("A problem interrupted the consultation - recovering", bar.EngineStateLabel);
-        Assert.Equal("A problem interrupted the consultation - recovering", bar.LatestActivity);
-
         bar.SetEngineState(EngineStatus.Faulted, new EngineFault(EngineFaultKind.CrashLoop, -1));
         Assert.Equal("Recording is unavailable - please restart the app", bar.EngineStateLabel);
+        Assert.Equal("Recording is unavailable - please restart the app", bar.LatestActivity);
 
         bar.SetEngineState(EngineStatus.Faulted, new EngineFault(EngineFaultKind.LaunchFailed));
         Assert.Equal("Recording is unavailable - please restart the app", bar.EngineStateLabel);
 
-        Assert.Equal(3, bar.LogEntries.Count);
+        Assert.Equal(2, bar.LogEntries.Count);
     }
 
     [Fact]

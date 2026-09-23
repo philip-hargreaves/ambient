@@ -5,6 +5,7 @@ using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Guidance;
 
@@ -50,7 +51,10 @@ public class GuidanceViewModelTest
         };
 
     private static GuidanceRecommendation Found(object result) =>
-        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true, true);
+        GuidanceRecommendation.From(Parse(result), "NICE", true, true);
+
+    private static GuidanceResult Parse(object result) =>
+        Protocol.Parse<GuidanceResult>(JsonSerializer.SerializeToElement(result))!;
 
     private static readonly object DocumentCorpus = new
     {
@@ -231,7 +235,7 @@ public class GuidanceViewModelTest
         Assert.Equal("Matched: the note as a whole", cards[^1].Recommendations.Single().Matched);
         Assert.False(cards[1].Recommendations.Single().CanOpen);
 
-        guidance.ApplyCorpora(Fixtures.Load("guidance-corpora.json").GetProperty("result"));
+        guidance.ApplyCorpora(Protocol.Parse<CorporaStatus>(Fixtures.Load("guidance-corpora.json").GetProperty("result"))!);
         Assert.Equal(GuidanceReadiness.Ready, guidance.Readiness);
         Assert.Equal(
             "nice-2026-08-25: corpus.db sha256 does not match the manifest",
@@ -425,8 +429,7 @@ public class GuidanceViewModelTest
             FailNext = m => m == "guidance/corpora" ? new IOException("pipe closed") : null,
         };
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status);
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
 
         Assert.Equal(GuidanceReadiness.Unavailable, session.Guidance.Readiness);
         Assert.Contains(
@@ -494,7 +497,7 @@ public class GuidanceViewModelTest
     [Fact]
     public void EverySearchAnnouncesItsTimingEvenWhenTheTextRepeats()
     {
-        var guidance = new GuidanceViewModel();
+        var guidance = new GuidanceViewModel(new FakeLauncher(), new FakeClipboard(), new StatusBarViewModel());
         var announced = 0;
         guidance.PropertyChanged += (_, e) =>
         {
@@ -794,9 +797,7 @@ public class GuidanceViewModelTest
     public void ReadinessComesFromThePollThenTheNotification()
     {
         var engine = new FakeEngineClient(autoNotify: false) { GuidanceState = "loading" };
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel());
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), TestSession.Guidance(new StatusBarViewModel()));
         Assert.Equal(GuidanceReadiness.Loading, session.Guidance.Readiness);
 
         engine.GuidanceState = "ready";
@@ -815,8 +816,7 @@ public class GuidanceViewModelTest
             GuidanceDetail = "no model for embedding/default",
         };
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status);
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
 
         Assert.Equal(GuidanceReadiness.Unavailable, session.Guidance.Readiness);
         Assert.Contains(
@@ -833,9 +833,7 @@ public class GuidanceViewModelTest
         var engine = new FakeEngineClient(autoNotify: false);
         engine.GuidanceCorpora.Clear();
         engine.GuidanceCorpora.Add(new { id = "nice", unavailable = "sha256 differs" });
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel());
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), TestSession.Guidance(new StatusBarViewModel()));
 
         Assert.Equal(GuidanceReadiness.Ready, session.Guidance.Readiness);
         Assert.False(session.Guidance.SettingsLinkVisible);
@@ -886,8 +884,7 @@ public class GuidanceViewModelTest
         var whole = Found(Result("fx100-1_1_1", trigger: ""));
         Assert.Equal("Matched: the note as a whole", whole.Matched);
 
-        var typed = GuidanceRecommendation.From(
-            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE", false);
+        var typed = GuidanceRecommendation.From(Parse(Result("fx100-1_1_1", trigger: "")), "NICE", false);
         Assert.False(typed.MatchedVisible);
     }
 

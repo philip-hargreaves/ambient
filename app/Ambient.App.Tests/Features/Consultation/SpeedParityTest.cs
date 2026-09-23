@@ -1,4 +1,5 @@
 using Ambient.App.Core.Hosting;
+using Ambient.App.Platform;
 using Ambient.App.Tests.Support;
 using Ambient.Client;
 

@@ -1,67 +1,30 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Sessions;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
+using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Features.Sessions;
 
 public class SessionsViewModelTest
 {
     private static (SessionsViewModel Sessions, ConsultationViewModel Consultation,
-        RecordingEngineClient Engine, StatusBarViewModel Status) Create()
+        FakeEngineClient Engine, StatusBarViewModel Status) Create()
     {
-        var engine = new RecordingEngineClient();
+        var engine = new FakeEngineClient(autoNotify: false);
         var note = new NoteViewModel();
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), note, status);
-        return (new SessionsViewModel(engine, status, consultation), consultation, engine, status);
+            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
+            new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
+        return (new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), new RecordingNavigationService()), consultation, engine, status);
     }
 
-    /// <summary>Scripted responses per method; unscripted methods answer {}.</summary>
-    public sealed class RecordingEngineClient : Ambient.Client.IEngineClient
-    {
-        public Dictionary<string, object> Responses { get; } = [];
-
-        public List<(string Method, string Params)> Calls { get; } = [];
-
-        public HashSet<string> Failing { get; } = [];
-
-        public event Action<string, JsonElement>? NotificationReceived
-        {
-            add { }
-            remove { }
-        }
-
-        public event Action<bool>? ConnectedChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public bool Connected => true;
-
-        public Task<JsonElement> RequestAsync(
-            string method, object? parameters, TimeSpan timeout,
-            CancellationToken cancellationToken = default)
-        {
-            Calls.Add((method, parameters is null ? "" : JsonSerializer.Serialize(parameters)));
-            if (Failing.Contains(method))
-            {
-                throw new InvalidOperationException($"{method} refused");
-            }
-
-            return Task.FromResult(JsonSerializer.SerializeToElement(
-                Responses.TryGetValue(method, out var r) ? r : new { }));
-        }
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private static void ScriptOneSession(RecordingEngineClient engine)
+    private static void ScriptOneSession(FakeEngineClient engine)
     {
         engine.Responses["session/list"] = new
         {
@@ -167,10 +130,10 @@ public class SessionsViewModelTest
         await vm.RefreshAsync();
 
         vm.Selected = vm.Sessions[0];
-        await Task.Delay(50);
+        await WaitUntilAsync(() => vm.DetailOpen);
 
         Assert.True(vm.DetailOpen);
-        Assert.Contains(engine.Calls, c => c.Method == "session/open" && c.Params.Contains("abc"));
+        Assert.Contains(engine.Requests, c => c.Method == "session/open" && c.Params.Contains("abc"));
         Assert.Equal(SessionState.Review, consultation.State);
         Assert.Equal("the note", consultation.Note.ClinicalNoteText);
         Assert.Equal("the sheet", consultation.Note.PatientInfoText);
@@ -193,7 +156,7 @@ public class SessionsViewModelTest
         await vm.RefreshAsync();
 
         vm.Selected = vm.Sessions[0];
-        await Task.Delay(50);
+        await WaitUntilAsync(() => engine.Requests.Any(r => r.Method == "session/open"));
 
         Assert.False(vm.DetailOpen);
         Assert.Equal(SessionState.Idle, consultation.State);
@@ -206,17 +169,17 @@ public class SessionsViewModelTest
         ScriptOneSession(engine);
         await vm.RefreshAsync();
         vm.Selected = vm.Sessions[0];
-        await Task.Delay(50);
+        await WaitUntilAsync(() => vm.DetailOpen);
 
         vm.DetailTitle = "Left elbow bursitis";
         await vm.RenameAsync();
 
-        Assert.Contains(engine.Calls, c => c.Method == "session/label"
+        Assert.Contains(engine.Requests, c => c.Method == "session/label"
             && c.Params.Contains("Left elbow bursitis"));
         Assert.Equal("Left elbow bursitis", vm.Sessions[0].Title);
         Assert.Same(vm.Sessions[0], vm.Selected);
         Assert.True(vm.DetailOpen, "renaming must not close the open session");
-        Assert.Equal(1, engine.Calls.Count(c => c.Method == "session/open"));
+        Assert.Equal(1, engine.Requests.Count(c => c.Method == "session/open"));
     }
 
     [Fact]
@@ -226,14 +189,14 @@ public class SessionsViewModelTest
         ScriptOneSession(engine);
         await vm.RefreshAsync();
         vm.Selected = vm.Sessions[0];
-        await Task.Delay(50);
+        await WaitUntilAsync(() => vm.DetailOpen);
 
         consultation.Note.ClinicalNoteText = "the note, corrected";
         await vm.LeaveAsync();
 
-        Assert.Contains(engine.Calls, c => c.Method == "note/update"
+        Assert.Contains(engine.Requests, c => c.Method == "note/update"
             && c.Params.Contains("the note, corrected"));
-        Assert.Contains(engine.Calls, c => c.Method == "session/close");
+        Assert.Contains(engine.Requests, c => c.Method == "session/close");
         Assert.Equal(SessionState.Idle, consultation.State);
         Assert.False(vm.DetailOpen);
     }
@@ -245,14 +208,14 @@ public class SessionsViewModelTest
         ScriptOneSession(engine);
         await vm.RefreshAsync();
         vm.Selected = vm.Sessions[0];
-        await Task.Delay(50);
+        await WaitUntilAsync(() => vm.DetailOpen);
 
-        await vm.DeleteSelectedAsync();
+        await vm.DeleteCommand.ExecuteAsync(vm.Selected);
 
-        var close = engine.Calls.FindIndex(c => c.Method == "session/close");
-        var delete = engine.Calls.FindIndex(c => c.Method == "session/delete");
+        var close = engine.Requests.FindIndex(c => c.Method == "session/close");
+        var delete = engine.Requests.FindIndex(c => c.Method == "session/delete");
         Assert.True(close >= 0 && delete > close, "close precedes delete");
-        Assert.Equal(2, engine.Calls.Count(c => c.Method == "session/list"));
+        Assert.Equal(2, engine.Requests.Count(c => c.Method == "session/list"));
     }
 
     [Fact]
@@ -284,12 +247,12 @@ public class SessionsViewModelTest
     {
         var preferences = new AppPreferences(
             Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
-        var engine = new RecordingEngineClient();
+        var engine = new FakeEngineClient(autoNotify: false);
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            status);
-        var vm = new SessionsViewModel(engine, status, consultation, preferences);
+            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
+            status, new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
+        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), new RecordingNavigationService(), preferences);
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
 
         await vm.RefreshAsync();

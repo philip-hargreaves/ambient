@@ -4,15 +4,14 @@ namespace Ambient.Client.Tests.Contract;
 /// The session methods and the notifications they produce, against the real
 /// engine. Runs on a private pipe, so it is independent of the engine group.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class SessionContractTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
-    // The stopped session reports its transcript stage before the seal; the
-    // cancelled one reports nothing. No diariser is staged here, so no
-    // "speakers" stage
-    // The three finalise stages (transcript, speakers, turns), then the documents
+    // The stopped session reports the three finalise stages (transcript, speakers,
+    // turns), then the documents. The cancelled one reports nothing
     private static readonly string[] ExpectedNotifications =
         ["session/progress", "session/progress", "session/progress", "note/ready", "patient/ready"];
 
@@ -85,8 +84,8 @@ public class SessionContractTest
                 await patientReady.Task.WaitAsync(Timeout);
                 lock (notifications)
                 {
-                    // Sessions stream levels and the embedder announces itself once;
-                    // the pipeline ordering holds among the rest
+                    // Sessions stream levels and the embedder announces itself once.
+                    // The pipeline ordering holds among the rest
                     Assert.Contains("audio.level", notifications);
                     Assert.Equal(
                         ExpectedNotifications,
@@ -96,11 +95,11 @@ public class SessionContractTest
                 }
             }
 
-            // Disconnect ends ServeOneClient; supervised restarts rely on this exit
+            // Disconnect ends ServeOneClient, and supervised restarts rely on this exit
             Assert.Equal(0, await engine.WaitForExitAsync(Timeout));
 
             // Two sessions ran: the cancelled one left nothing, the stopped one
-            // is in the one database; the readback test checks its contents
+            // is in the one database. The readback test checks its contents
             Assert.True(File.Exists(Path.Combine(engine.StoreRoot, "ambient.db")));
             Assert.False(Directory.Exists(Path.Combine(engine.StoreRoot, "sessions")));
         }

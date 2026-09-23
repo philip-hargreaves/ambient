@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Ports;
@@ -11,31 +10,37 @@ namespace Ambient.App.Core.Features.Appraisal;
 /// <summary>
 /// One appraisal reflection: the case summary the engine writes and the three answers the clinician writes. Saved only when changed.
 /// </summary>
-public sealed partial class ReflectionViewModel : ObservableObject
+public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
-    private readonly IEngineClient _engine;
-    private readonly StatusBarViewModel? _status;
-    private readonly Action<string, JsonElement> _onNotification;
+    private readonly IEngineApi _engine;
+    private readonly IClipboard _clipboard;
+    private readonly IFilePicker _picker;
+    private readonly IDialogService _dialogs;
+    private readonly StatusBarViewModel _status;
+    private readonly Action<EngineNotification> _onNotification;
     private string _savedHappened = "";
     private string _savedLearned = "";
     private string _savedNext = "";
     private string _savedTitle = "";
+    private string _savedSummary = "";
 
     public ReflectionViewModel(
-        IEngineClient engine, IUiDispatcher dispatcher, StatusBarViewModel? status = null)
+        IEngineApi engine, IUiDispatcher dispatcher, IClipboard clipboard, IFilePicker picker,
+        IDialogService dialogs, StatusBarViewModel status)
     {
         _engine = engine;
+        _clipboard = clipboard;
+        _picker = picker;
+        _dialogs = dialogs;
         _status = status;
-        _onNotification = (method, parameters) =>
-            dispatcher.Post(() => HandleNotification(method, parameters));
+        _onNotification = notification => dispatcher.Post(() => HandleNotification(notification));
         _engine.NotificationReceived += _onNotification;
     }
 
     public string SessionId { get; private set; } = "";
 
-    /// <summary>The consultation's label; typing here renames the consultation.</summary>
+    /// <summary>The consultation's label. Typing here renames the consultation.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     public partial string Title { get; set; } = "";
@@ -82,7 +87,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasWarning))]
     public partial string Next { get; set; } = "";
 
-    /// <summary>What in the text may identify the patient; empty when nothing was found.</summary>
+    /// <summary>What in the text may identify the patient, empty when nothing was found.</summary>
     public string Warning => IdentifierCheck.Describe(Summary + "\n" + Happened + "\n" + Learned + "\n" + Next);
 
     public bool HasWarning => Warning.Length > 0;
@@ -94,24 +99,21 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
     public string ExportText => ReflectionExport.Format(Entry);
 
-    /// <summary>Loads the stored entry; asks for a summary when none exists yet.</summary>
+    /// <summary>Loads the stored entry and asks for a summary when none exists yet.</summary>
     public async Task LoadAsync(string sessionId, string startedAt = "")
     {
         SessionId = sessionId;
         Month = MonthLabel(startedAt);
         try
         {
-            var got = await _engine.RequestAsync("reflection/get", new { id = sessionId }, RequestTimeout)
-                .ConfigureAwait(true);
-            Title = _savedTitle = Text(got, "label");
-            Summary = got.TryGetProperty("summary", out var s) && s.ValueKind == JsonValueKind.Object
-                ? Text(s, "text")
-                : "";
-            if (got.TryGetProperty("reflection", out var r) && r.ValueKind == JsonValueKind.Object)
+            var got = await _engine.GetReflectionAsync(sessionId).ConfigureAwait(true);
+            Title = _savedTitle = got.Label ?? "";
+            Summary = _savedSummary = got.Summary?.Text ?? "";
+            if (got.Answers is { } answers)
             {
-                Happened = _savedHappened = Answer(Text(r, "happened"));
-                Learned = _savedLearned = Answer(Text(r, "learned"));
-                Next = _savedNext = Answer(Text(r, "next"));
+                Happened = _savedHappened = Answer(answers.Happened ?? "");
+                Learned = _savedLearned = Answer(answers.Learned ?? "");
+                Next = _savedNext = Answer(answers.Next ?? "");
             }
             else
             {
@@ -120,7 +122,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not open the reflection: {e.Message}");
+            _status.Append($"could not open the reflection: {e.Message}");
             return;
         }
 
@@ -141,8 +143,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         SummaryProblem = "";
         try
         {
-            _ = await _engine.RequestAsync("reflection/summary", new { id = SessionId }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.SummariseReflectionAsync(SessionId).ConfigureAwait(true);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -151,7 +152,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         }
     }
 
-    /// <summary>Writes the answers when they changed; a no-op otherwise.</summary>
+    /// <summary>Writes the answers only when they changed.</summary>
     public async Task SaveAsync()
     {
         // Whitespace-only answers are empty: a stray line break would hide the hint and count as writing
@@ -165,21 +166,18 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
         try
         {
-            _ = await _engine.RequestAsync("reflection/update",
-                    new { id = SessionId, happened = Happened, learned = Learned, next = Next },
-                    RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.UpdateReflectionAsync(SessionId, Happened, Learned, Next).ConfigureAwait(true);
             _savedHappened = Happened;
             _savedLearned = Learned;
             _savedNext = Next;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not save the reflection: {e.Message}");
+            _status.Append($"could not save the reflection: {e.Message}");
         }
     }
 
-    /// <summary>A retitle renames the consultation itself; blank keeps the old name.</summary>
+    /// <summary>A retitle renames the consultation itself. A blank title keeps the old name.</summary>
     public async Task SaveTitleAsync()
     {
         var title = Title.Trim();
@@ -190,55 +188,55 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
         try
         {
-            _ = await _engine.RequestAsync("session/label", new { id = SessionId, text = title }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.LabelSessionAsync(SessionId, title).ConfigureAwait(true);
             _savedTitle = title;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not rename: {e.Message}");
+            _status.Append($"could not rename: {e.Message}");
         }
     }
 
-    /// <summary>The clinician corrected the summary; kept as their wording.</summary>
+    /// <summary>The clinician corrected the summary, kept as their wording.</summary>
     public async Task SaveSummaryAsync()
     {
-        if (SessionId.Length == 0)
+        if (SessionId.Length == 0 || Summary == _savedSummary)
         {
             return;
         }
 
         try
         {
-            _ = await _engine.RequestAsync("reflection/update", new { id = SessionId, summary = Summary },
-                    RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.UpdateReflectionSummaryAsync(SessionId, Summary).ConfigureAwait(true);
+            _savedSummary = Summary;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not save the summary: {e.Message}");
+            _status.Append($"could not save the summary: {e.Message}");
         }
     }
 
-    public void Detach() => _engine.NotificationReceived -= _onNotification;
+    [RelayCommand]
+    private Task Copy() => _clipboard.CopyAsync(_status, ExportText, "Reflection");
 
-    private void HandleNotification(string method, JsonElement parameters)
+    [RelayCommand]
+    private Task SaveAsText() =>
+        ReflectionFile.SaveAsync(_dialogs, _picker, _status, ExportText, DisplayTitle);
+
+    public void Dispose() => _engine.NotificationReceived -= _onNotification;
+
+    private void HandleNotification(EngineNotification notification)
     {
-        if (parameters.ValueKind != JsonValueKind.Object || Text(parameters, "id") != SessionId)
+        switch (notification)
         {
-            return;
-        }
-
-        switch (method)
-        {
-            case "reflection/summary":
-                Summary = Text(parameters, "text");
+            case ReflectionSummaryReady ready when ready.Id == SessionId:
+                Summary = _savedSummary = ready.Text;
                 SummaryPending = false;
                 SummaryProblem = "";
                 break;
-            case "reflection/summaryFailed":
+            case ReflectionSummaryFailed failed when failed.Id == SessionId:
                 SummaryPending = false;
-                SummaryProblem = $"No summary: {Text(parameters, "detail")}";
+                SummaryProblem = $"No summary: {failed.Detail}";
                 break;
             default:
                 break;
@@ -255,10 +253,4 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
     private static string Answer(string text) => text.Trim().Length == 0 ? "" : text;
 
-    private static string Text(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty(property, out var value)
-            && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
 }

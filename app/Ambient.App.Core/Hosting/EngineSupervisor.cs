@@ -12,6 +12,7 @@ public sealed class EngineSupervisor(
     private readonly object _gate = new();
     private readonly List<DateTimeOffset> _crashes = [];
     private IEngineProcess? _process;
+    private ITimer? _relaunch;
     private DateTimeOffset _launchedAt;
 
     public event Action<EngineStatus>? StatusChanged;
@@ -41,6 +42,7 @@ public sealed class EngineSupervisor(
                 return;
             }
 
+            CancelRelaunchLocked();
             Fault = null;
             _crashes.Clear();
             LaunchLocked(changes);
@@ -60,6 +62,7 @@ public sealed class EngineSupervisor(
                 return;
             }
 
+            CancelRelaunchLocked();
             process = _process;
             _process = null;
             Fault = null;
@@ -122,8 +125,8 @@ public sealed class EngineSupervisor(
         var exitCode = process.ExitCode;
         process.Dispose();
 
-        // Exit 0 is the engine leaving on request - a stop, never a crash.
-        // Counting it burns restart budget and races a settings-driven
+        // Exit 0 is the engine leaving on request, so it is a stop.
+        // Counting it would burn restart budget and race a settings-driven
         // Shutdown/Start with a spurious supervisor relaunch
         if (exitCode == 0)
         {
@@ -135,26 +138,51 @@ public sealed class EngineSupervisor(
         _crashes.RemoveAll(crash => now - crash > RestartPolicy.StormWindow);
         _crashes.Add(now);
 
-        var action = RestartPolicy.Decide(session.ConsultationActive, _crashes, now);
+        var action = RestartPolicy.Decide(_crashes, now);
         crashLog.Record(new CrashReport(
             now, exitCode, now - _launchedAt, _crashes.Count, action, methodInFlight?.Invoke(),
             session.SessionPhase));
 
-        switch (action)
+        if (action == RecoveryAction.GiveUp)
         {
-            case RecoveryAction.Restart:
-                SetStatusLocked(EngineStatus.Restarting, changes);
-                LaunchLocked(changes);
-                break;
-            case RecoveryAction.Surface:
-                Fault = new EngineFault(EngineFaultKind.SessionInterrupted, exitCode);
-                SetStatusLocked(EngineStatus.Faulted, changes);
-                break;
-            default:
-                Fault = new EngineFault(EngineFaultKind.CrashLoop, exitCode);
-                SetStatusLocked(EngineStatus.Faulted, changes);
-                break;
+            Fault = new EngineFault(EngineFaultKind.CrashLoop, exitCode);
+            SetStatusLocked(EngineStatus.Faulted, changes);
+            return;
         }
+
+        SetStatusLocked(EngineStatus.Restarting, changes);
+        var wait = RestartPolicy.Backoff(_crashes.Count);
+        if (wait == TimeSpan.Zero)
+        {
+            LaunchLocked(changes);
+            return;
+        }
+
+        CancelRelaunchLocked();
+        _relaunch = clock.CreateTimer(_ => Relaunch(), null, wait, Timeout.InfiniteTimeSpan);
+    }
+
+    // The backoff elapsed. A Start or a Shutdown meanwhile has already settled it
+    private void Relaunch()
+    {
+        var changes = new List<EngineStatus>();
+        lock (_gate)
+        {
+            if (Status != EngineStatus.Restarting || _process is not null)
+            {
+                return;
+            }
+
+            LaunchLocked(changes);
+        }
+
+        Raise(changes);
+    }
+
+    private void CancelRelaunchLocked()
+    {
+        _relaunch?.Dispose();
+        _relaunch = null;
     }
 
     private void SetStatusLocked(EngineStatus status, List<EngineStatus> changes)

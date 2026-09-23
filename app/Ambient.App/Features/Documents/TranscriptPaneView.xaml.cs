@@ -12,7 +12,7 @@ public sealed partial class TranscriptPaneView : UserControl
         InitializeComponent();
         // Presentation only: keep the newest turn in view
         viewModel.Turns.CollectionChanged += OnTurnsChanged;
-        // Realised items keep old brushes; a theme change or re-attach after an
+        // Realised items keep old brushes. A theme change or re-attach after an
         // off-tree change re-realises the list
         SpeakerPalette.Theme = ActualTheme;
         ActualThemeChanged += (_, _) => RefreshStripes();

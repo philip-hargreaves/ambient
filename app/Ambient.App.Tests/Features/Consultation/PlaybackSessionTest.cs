@@ -6,14 +6,14 @@ using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 /// <summary>A stored consultation played back as a demo walks the real states.</summary>
 public class PlaybackSessionTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     private static readonly DemoMaster Elbow = new("s-real", 542);
 
     private static string MastersFile(params (string Name, string Id, double Seconds)[] masters)
@@ -29,9 +29,7 @@ public class PlaybackSessionTest
     {
         var engine = new FakeEngineClient(autoNotify: false);
         var demo = new DemoMode(null, MastersFile(masters), []);
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel(), demo: demo);
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), TestSession.Guidance(new StatusBarViewModel()), demo: demo);
         return (session, engine, demo);
     }
 

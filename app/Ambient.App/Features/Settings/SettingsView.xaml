@@ -44,8 +44,8 @@
                         Title="Theme">
                         <ComboBox
                             MinWidth="160"
-                            ItemsSource="{x:Bind ViewModel.ThemeOptions}"
-                            SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}" />
+                            ItemsSource="{x:Bind ViewModel.Appearance.ThemeOptions}"
+                            SelectedIndex="{x:Bind ViewModel.Appearance.ThemeIndex, Mode=TwoWay}" />
                     </views:SettingsRow>
                 </Border>
 
@@ -59,14 +59,14 @@
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Save consultation data"
-                                IsOn="{x:Bind ViewModel.KeepConsultations, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Privacy.KeepConsultations, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="Every stored consultation, with its notes and reflections. Cannot be undone."
                             Title="Delete all consultation data">
                             <Button
                                 MinWidth="160"
-                                Command="{x:Bind ViewModel.DeleteAllConsultationsCommand}"
+                                Command="{x:Bind ViewModel.Privacy.DeleteAllConsultationsCommand}"
                                 Content="Delete all"
                                 Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
                         </views:SettingsRow>
@@ -109,13 +109,13 @@
                     <StackPanel>
                         <views:SettingsRow
                             BorderThickness="0"
-                            Description="{x:Bind ViewModel.NoteModelCaption, Mode=OneWay}"
+                            Description="{x:Bind ViewModel.NoteModel.NoteModelCaption, Mode=OneWay}"
                             Title="Note model">
                             <ComboBox
                                 MinWidth="160"
-                                IsEnabled="{x:Bind ViewModel.NoteModelEnabled, Mode=OneWay}"
-                                ItemsSource="{x:Bind ViewModel.NoteModelOptions}"
-                                SelectedIndex="{x:Bind ViewModel.NoteModelIndex, Mode=TwoWay}" />
+                                IsEnabled="{x:Bind ViewModel.NoteModel.NoteModelEnabled, Mode=OneWay}"
+                                ItemsSource="{x:Bind ViewModel.NoteModel.NoteModelOptions}"
+                                SelectedIndex="{x:Bind ViewModel.NoteModel.NoteModelIndex, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="Runs speech recognition on the NPU to save battery. Transcripts may take a little longer."
@@ -123,7 +123,7 @@
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Low-power mode"
-                                IsOn="{x:Bind ViewModel.NpuTranscription, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Appearance.NpuTranscription, Mode=TwoWay}" />
                         </views:SettingsRow>
                     </StackPanel>
                 </Border>
@@ -131,17 +131,17 @@
                 <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="Guideline documents" />
                 <Border
                     Style="{StaticResource SettingsCard}"
-                    Visibility="{x:Bind ViewModel.GuidanceInstalledVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.Guidance.GuidanceInstalledVisible, Mode=OneWay}">
                     <StackPanel>
                         <Border
                             Padding="16,12"
-                            Visibility="{x:Bind ViewModel.GuidanceCaptionVisible, Mode=OneWay}">
+                            Visibility="{x:Bind ViewModel.Guidance.GuidanceCaptionVisible, Mode=OneWay}">
                             <TextBlock
                                 Margin="0"
                                 Style="{StaticResource SettingsDescription}"
-                                Text="{x:Bind ViewModel.GuidanceCaption, Mode=OneWay}" />
+                                Text="{x:Bind ViewModel.Guidance.GuidanceCaption, Mode=OneWay}" />
                         </Border>
-                        <ItemsControl ItemsSource="{x:Bind ViewModel.GuidanceCorpora}">
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Guidance.GuidanceCorpora}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CorpusRow">
                                     <StackPanel>
@@ -188,33 +188,33 @@
                                     <StackPanel Margin="0,4,0,0" Orientation="Horizontal" Spacing="12">
                                         <HyperlinkButton
                                             Padding="0"
-                                            Command="{x:Bind ViewModel.OpenFolderCommand}"
+                                            Command="{x:Bind ViewModel.Guidance.OpenFolderCommand}"
                                             Content="Open folder" />
                                         <HyperlinkButton
                                             Padding="0"
-                                            Command="{x:Bind ViewModel.RemoveAllDocumentsCommand}"
+                                            Command="{x:Bind ViewModel.Guidance.RemoveAllDocumentsCommand}"
                                             Content="Remove all"
-                                            Visibility="{x:Bind ViewModel.DocumentsPresent, Mode=OneWay}" />
+                                            Visibility="{x:Bind ViewModel.Guidance.DocumentsPresent, Mode=OneWay}" />
                                     </StackPanel>
                                     <TextBlock
                                         Foreground="{ThemeResource CautionBrush}"
                                         Style="{StaticResource SettingsDescription}"
                                         Text="The folder could not be reached. Nothing has been removed."
-                                        Visibility="{x:Bind ViewModel.FolderMissing, Mode=OneWay}" />
+                                        Visibility="{x:Bind ViewModel.Guidance.FolderMissing, Mode=OneWay}" />
                                     <TextBlock
                                         Style="{StaticResource SettingsDescription}"
                                         Text="This folder is inside OneDrive, so these documents sync to the cloud."
-                                        Visibility="{x:Bind ViewModel.FolderInOneDrive, Mode=OneWay}" />
+                                        Visibility="{x:Bind ViewModel.Guidance.FolderInOneDrive, Mode=OneWay}" />
                                     <TextBlock
                                         Style="{StaticResource SettingsDescription}"
-                                        Text="{x:Bind ViewModel.DocumentsCaption, Mode=OneWay}"
-                                        Visibility="{x:Bind ViewModel.DocumentsCaptionVisible, Mode=OneWay}" />
+                                        Text="{x:Bind ViewModel.Guidance.DocumentsCaption, Mode=OneWay}"
+                                        Visibility="{x:Bind ViewModel.Guidance.DocumentsCaptionVisible, Mode=OneWay}" />
                                 </StackPanel>
                                 <Button
                                     Grid.Column="1"
                                     MinWidth="160"
                                     VerticalAlignment="Center"
-                                    Command="{x:Bind ViewModel.AddDocumentsCommand}"
+                                    Command="{x:Bind ViewModel.Guidance.AddDocumentsCommand}"
                                     Content="Add documents"
                                     Style="{StaticResource AccentButtonStyle}" />
                             </Grid>
@@ -228,33 +228,33 @@
                             Background="Transparent"
                             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                             BorderThickness="0,1,0,0"
-                            Command="{x:Bind ViewModel.ToggleDocumentsCommand}"
+                            Command="{x:Bind ViewModel.Guidance.ToggleDocumentsCommand}"
                             CornerRadius="0"
-                            Visibility="{x:Bind ViewModel.DocumentsPresent, Mode=OneWay}">
+                            Visibility="{x:Bind ViewModel.Guidance.DocumentsPresent, Mode=OneWay}">
                             <Grid>
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     Style="{StaticResource SettingsDescription}"
-                                    Text="{x:Bind ViewModel.DocumentsSummary, Mode=OneWay}" />
+                                    Text="{x:Bind ViewModel.Guidance.DocumentsSummary, Mode=OneWay}" />
                                 <FontIcon
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     Glyph="&#xE70D;"
-                                    Visibility="{x:Bind ViewModel.DocumentsCollapsed, Mode=OneWay}" />
+                                    Visibility="{x:Bind ViewModel.Guidance.DocumentsCollapsed, Mode=OneWay}" />
                                 <FontIcon
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     FontSize="10"
                                     Glyph="&#xE70E;"
-                                    Visibility="{x:Bind ViewModel.DocumentsExpanded, Mode=OneWay}" />
+                                    Visibility="{x:Bind ViewModel.Guidance.DocumentsExpanded, Mode=OneWay}" />
                             </Grid>
                         </Button>
                         <ScrollViewer
                             MaxHeight="420"
                             VerticalScrollBarVisibility="Auto"
-                            Visibility="{x:Bind ViewModel.DocumentsExpanded, Mode=OneWay}">
-                        <ItemsControl ItemsSource="{x:Bind ViewModel.Documents}">
+                            Visibility="{x:Bind ViewModel.Guidance.DocumentsExpanded, Mode=OneWay}">
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Guidance.Documents}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:DocumentRow">
                                     <Border Style="{StaticResource SettingsRowChrome}">
@@ -310,24 +310,24 @@
                     AutomationProperties.Name="Developer tools"
                     Background="Transparent"
                     BorderThickness="0"
-                    Command="{x:Bind ViewModel.ToggleDeveloperToolsCommand}">
+                    Command="{x:Bind ViewModel.Appearance.ToggleDeveloperToolsCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Developer tools" />
                         <FontIcon
                             VerticalAlignment="Center"
                             FontSize="10"
                             Glyph="&#xE70D;"
-                            Visibility="{x:Bind ViewModel.DeveloperToolsCollapsed, Mode=OneWay}" />
+                            Visibility="{x:Bind ViewModel.Appearance.DeveloperToolsCollapsed, Mode=OneWay}" />
                         <FontIcon
                             VerticalAlignment="Center"
                             FontSize="10"
                             Glyph="&#xE70E;"
-                            Visibility="{x:Bind ViewModel.DeveloperToolsExpanded, Mode=OneWay}" />
+                            Visibility="{x:Bind ViewModel.Appearance.DeveloperToolsExpanded, Mode=OneWay}" />
                     </StackPanel>
                 </Button>
                 <Border
                     Style="{StaticResource SettingsCard}"
-                    Visibility="{x:Bind ViewModel.DeveloperToolsExpanded, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.Appearance.DeveloperToolsExpanded, Mode=OneWay}">
                     <StackPanel>
                         <views:SettingsRow
                             BorderThickness="0"
@@ -336,25 +336,25 @@
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Demo tray"
-                                IsOn="{x:Bind ViewModel.DemoTrayEnabled, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Appearance.DemoTrayEnabled, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
-                            Description="{x:Bind ViewModel.DemoModeCaption}"
+                            Description="{x:Bind ViewModel.Appearance.DemoModeCaption}"
                             Title="Demo mode">
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Demo mode"
-                                IsEnabled="{x:Bind ViewModel.DemoTracksAvailable}"
-                                IsOn="{x:Bind ViewModel.DemoModeEnabled, Mode=TwoWay}" />
+                                IsEnabled="{x:Bind ViewModel.Appearance.DemoTracksAvailable}"
+                                IsOn="{x:Bind ViewModel.Appearance.DemoModeEnabled, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="The consultation the record button plays back"
                             Title="Demo consultation"
-                            Visibility="{x:Bind ViewModel.DemoModeEnabled, Mode=OneWay}">
+                            Visibility="{x:Bind ViewModel.Appearance.DemoModeEnabled, Mode=OneWay}">
                             <ComboBox
                                 MinWidth="160"
-                                ItemsSource="{x:Bind ViewModel.DemoTrackOptions, Mode=OneWay}"
-                                SelectedIndex="{x:Bind ViewModel.DemoTrackIndex, Mode=TwoWay}" />
+                                ItemsSource="{x:Bind ViewModel.Appearance.DemoTrackOptions, Mode=OneWay}"
+                                SelectedIndex="{x:Bind ViewModel.Appearance.DemoTrackIndex, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="A year of consultations and reflections from PriMock57 recordings"
@@ -362,16 +362,16 @@
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Seed data"
-                                IsOn="{x:Bind ViewModel.SeedDataEnabled, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Privacy.SeedDataEnabled, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="Search the local research corpus, the NICE demo. Never ships"
                             Title="Include research guidance"
-                            Visibility="{x:Bind ViewModel.ResearchToggleVisible}">
+                            Visibility="{x:Bind ViewModel.Guidance.ResearchToggleVisible}">
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Include research guidance"
-                                IsOn="{x:Bind ViewModel.IncludeResearchGuidance, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Guidance.IncludeResearchGuidance, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="Model and speed figures in the status bar"
@@ -379,7 +379,7 @@
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Performance metrics"
-                                IsOn="{x:Bind ViewModel.ShowPerformanceMetrics, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Appearance.ShowPerformanceMetrics, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
                             Description="Timings to a local file, the audio and text are never included"
@@ -387,14 +387,14 @@
                             <ToggleSwitch
                                 MinWidth="0"
                                 AutomationProperties.Name="Collect performance data"
-                                IsOn="{x:Bind ViewModel.CollectPerformanceData, Mode=TwoWay}" />
+                                IsOn="{x:Bind ViewModel.Appearance.CollectPerformanceData, Mode=TwoWay}" />
                         </views:SettingsRow>
                         <views:SettingsRow
-                            Description="{x:Bind ViewModel.ExportDescription, Mode=OneWay}"
+                            Description="{x:Bind ViewModel.Appearance.ExportDescription, Mode=OneWay}"
                             Title="Export performance report">
                             <Button
                                 MinWidth="160"
-                                Command="{x:Bind ViewModel.ExportPerformanceReportCommand}"
+                                Command="{x:Bind ViewModel.Appearance.ExportPerformanceReportCommand}"
                                 Content="Export" />
                         </views:SettingsRow>
                     </StackPanel>

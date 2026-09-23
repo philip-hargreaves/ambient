@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Ambient.App.Core.Metrics;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Metrics;
 
@@ -23,7 +24,7 @@ public class PerformanceCollectorTest : IDisposable
     }
 
     private PerformanceCollector NewCollector(FakeEngineClient engine, bool enabled = true) =>
-        new(engine, () => enabled, () => null, _path);
+        new(new EngineApi(engine), () => enabled, () => null, _path);
 
     [Fact]
     public async Task AFinishedSessionAppendsOneLine()

@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Ambient.App.Core.Features.Documents;
 
-/// <summary>One transcript row; live turns carry no speaker until the seal.</summary>
+/// <summary>One transcript row. Live turns carry no speaker until the seal.</summary>
 public sealed record TranscriptTurnItem(string Speaker, string TimeLabel, string Text);
 
 public sealed partial class TranscriptViewModel : ObservableObject

@@ -3,9 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Features.Sessions;
-using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Features.Appraisal;
 using Ambient.App.Features.Documents;
 using Ambient.App.Features.Guidance;
 
@@ -26,8 +24,7 @@ public sealed partial class SessionsView : UserControl
     public SessionsView(
         SessionsViewModel viewModel, ShellViewModel shell,
         TranscriptPaneView transcript, NoteEditorView note, PatientEditorView patient,
-        ConsultationViewModel consultation, Ambient.Client.IEngineClient engine,
-        IUiDispatcher dispatcher, StatusBarViewModel status, PageView page)
+        ConsultationViewModel consultation, PageView page)
     {
         ViewModel = viewModel;
         Shell = shell;
@@ -47,32 +44,17 @@ public sealed partial class SessionsView : UserControl
         };
         NarrowTabs.Loaded += (_, _) => FitNarrow();
         NarrowTabs.SizeChanged += (_, _) => FitNarrow();
-        Loaded += (_, _) =>
-        {
-            _ = ViewModel.RefreshAsync();
-            consultation.OpenReflection = (id, startedAt) =>
-                ReflectionSheet.ShowAsync(XamlRoot, engine, dispatcher, status, id, startedAt);
-        };
-        ViewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(SessionsViewModel.DetailOpen)
-                or nameof(SessionsViewModel.EmptyBecauseOff))
-            {
-                Bindings.Update();
-            }
-        };
+        Loaded += (_, _) => _ = ViewModel.RefreshAsync();
     }
 
     public SessionsViewModel ViewModel { get; }
 
     public ShellViewModel Shell { get; }
 
-    public bool SelectHintVisible => !ViewModel.DetailOpen && !ViewModel.EmptyBecauseOff;
-
     private void OnDetailSizeChanged(object sender, SizeChangedEventArgs e) =>
         Place(e.NewSize.Width >= WideThreshold);
 
-    // The document views are shared with the live screen, so they are moved, not duplicated
+    // The document views are shared with the live screen, so they move between the two screens
     private void Place(bool wide)
     {
         if (_wide == wide)
@@ -107,7 +89,7 @@ public sealed partial class SessionsView : UserControl
         WideLayout.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
         NarrowLayout.Visibility = wide ? Visibility.Collapsed : Visibility.Visible;
         PlacePage();
-        // The wide column scrolls as a page; the tabs bound the editors
+        // The wide column scrolls as a page. The tabs bound the editors
         if (wide)
         {
             _note.FollowContent();
@@ -146,48 +128,6 @@ public sealed partial class SessionsView : UserControl
         }
     }
 
-    private void OnPatientFoldClick(object sender, RoutedEventArgs e)
-    {
-        var open = PatientHostWide.Visibility == Visibility.Visible;
-        PatientHostWide.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        PatientFoldGlyph.Glyph = open ? "" : "";
-    }
-
-    // Leaving the page ends the review: edits saved, the engine told
-    private async void OnBackClick(object sender, RoutedEventArgs e)
-    {
-        await ViewModel.LeaveAsync();
-        Shell.GoBackCommand.Execute(null);
-    }
-
-    // Push the text first: the two-way binding's order against this handler
-    // is not guaranteed
-    private async void OnTitleCommitted(object sender, RoutedEventArgs e)
-    {
-        ViewModel.DetailTitle = ((TextBox)sender).Text;
-        await ViewModel.RenameAsync();
-    }
-
-    // Deletion is crypto-erase, so the confirmation lives here, not in the VM
-    private async void OnDeleteClick(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is not SessionRow row)
-        {
-            return;
-        }
-
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = "Delete this consultation?",
-            Content = "The transcript, note and patient sheet are erased and cannot be recovered.",
-            PrimaryButtonText = "Delete",
-            CloseButtonText = "Keep",
-            DefaultButton = ContentDialogButton.Close,
-        };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-        {
-            await ViewModel.DeleteAsync(row);
-        }
-    }
+    // The box binds as the text changes, so the view model is current when focus leaves
+    private async void OnTitleCommitted(object sender, RoutedEventArgs e) => await ViewModel.RenameAsync();
 }

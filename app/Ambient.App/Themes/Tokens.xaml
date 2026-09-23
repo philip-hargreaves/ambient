@@ -6,7 +6,7 @@
     <!--
         Only colours WinUI does not supply: speakers and status, light values
         from Palette.xaml, dark chosen by hand (the light ones fail WCAG AA
-        on dark). Dark is keyed "Default" - that is where WinUI looks it up.
+        on dark). Dark is keyed "Default", where WinUI looks it up.
     -->
     <ResourceDictionary.ThemeDictionaries>
 

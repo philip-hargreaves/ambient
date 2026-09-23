@@ -1,3 +1,4 @@
+using System.Windows.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -13,8 +14,9 @@ public sealed partial class MonthMarkerView : UserControl
         nameof(Marker), typeof(MonthMarker), typeof(MonthMarkerView),
         new PropertyMetadata(null, (d, _) => ((MonthMarkerView)d).Bindings.Update()));
 
-    /// <summary>Set by the page: takes the month pressed, whether it has entries or not.</summary>
-    public static Action<MonthMarker>? Pressed { get; set; }
+    /// <summary>Takes the month pressed, whether it has entries or not.</summary>
+    public static readonly DependencyProperty CommandProperty = DependencyProperty.Register(
+        nameof(Command), typeof(ICommand), typeof(MonthMarkerView), new PropertyMetadata(null));
 
     public MonthMarkerView()
     {
@@ -25,6 +27,12 @@ public sealed partial class MonthMarkerView : UserControl
     {
         get => (MonthMarker?)GetValue(MarkerProperty);
         set => SetValue(MarkerProperty, value);
+    }
+
+    public ICommand? Command
+    {
+        get => (ICommand?)GetValue(CommandProperty);
+        set => SetValue(CommandProperty, value);
     }
 
     public bool Filled => Marker is { Filled: true };
@@ -46,18 +54,13 @@ public sealed partial class MonthMarkerView : UserControl
 
     public FontWeight Weight => Marker is { Current: true } ? FontWeights.SemiBold : FontWeights.Normal;
 
-    public string Tip => Marker is null
-        ? ""
-        : Marker.Count == 0 ? "No reflections"
-        : Marker.Selected ? "Show the whole year"
-        : Marker.Count == 1 ? "1 reflection, press to show only this month"
-        : $"{Marker.Count} reflections, press to show only this month";
+    public string Tip => Marker?.Tip ?? "";
 
     private void OnClick(object sender, RoutedEventArgs e)
     {
         if (Marker is { } marker)
         {
-            Pressed?.Invoke(marker);
+            Command?.Execute(marker);
         }
     }
 }

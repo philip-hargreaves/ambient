@@ -1,285 +1,102 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
-using Microsoft.Windows.Storage;
-using Ambient.App.Core.Features.Appraisal;
+using Ambient.App.Composition;
 using Ambient.App.Core.Features.Consultation;
-using Ambient.App.Core.Features.Demo;
-using Ambient.App.Core.Features.Documents;
-using Ambient.App.Core.Features.Guidance;
-using Ambient.App.Core.Features.Sessions;
-using Ambient.App.Core.Features.Settings;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
-using Ambient.App.Core.Preferences;
-using Ambient.App.Core.Shell;
-using Ambient.App.Features.Appraisal;
-using Ambient.App.Features.Consultation;
-using Ambient.App.Features.Demo;
-using Ambient.App.Features.Documents;
-using Ambient.App.Features.Guidance;
-using Ambient.App.Features.Sessions;
-using Ambient.App.Features.Settings;
 using Ambient.App.Platform;
 using Ambient.App.Shell;
-using Ambient.Client;
 
 namespace Ambient.App;
 
 public partial class App : Application
 {
     private Window? _window;
+    private bool _closing;
 
     public App()
     {
         InitializeComponent();
-        Services = ConfigureServices();
+        var paths = AppPaths.Default;
+        Services = new ServiceCollection()
+            .AddPlatform(paths)
+            .AddEngine(paths)
+            .AddViewModels(paths)
+            .AddViews()
+            .AddStartupTasks(paths)
+            .BuildServiceProvider();
     }
 
     public new static App Current => (App)Application.Current;
 
-    public IServiceProvider Services { get; }
-
-    /// <summary>The main window, for pickers that need an HWND.</summary>
-    public Window? Window => _window;
-
-    private static readonly TimeSpan EngineConnectTimeout = TimeSpan.FromSeconds(10);
-
-    private static ServiceProvider ConfigureServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddSingleton<IUiDispatcher, UiDispatcher>();
-
-        services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IEngineLauncher>(sp => new ProcessEngineLauncher(
-            Path.Combine(AppContext.BaseDirectory, "ambient_engine.exe"),
-            stderrPath: Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ambient", "engine.log"),
-            extraArguments: () =>
-            {
-                var prefs = sp.GetRequiredService<AppPreferences>();
-                var args = new List<string>();
-                if (prefs.NpuTranscription)
-                {
-                    args.Add("--asr-device NPU");
-                }
-#if DEBUG
-                if (prefs.IncludeResearchGuidance)
-                {
-                    args.Add("--include-research");
-                }
-#endif
-                return string.Join(" ", args);
-            }));
-        // Identity-free path: unpackaged runs have no ApplicationData
-        var localState = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ambient");
-        MigrateFromSotto(localState);
-        services.AddSingleton<ICrashLog>(_ => new FileCrashLog(
-            Path.Combine(localState, "crashes.jsonl")));
-        CrashDumps.Register(
-            Microsoft.Win32.Registry.CurrentUser, Path.Combine(localState, "dumps"),
-            "ambient_engine.exe", "ambient_note_host.exe");
-        services.AddSingleton<ISessionState>(sp => new DeferredSessionState(sp));
-        services.AddSingleton<IEngineHost>(sp => new EngineSupervisor(
-            sp.GetRequiredService<IEngineLauncher>(),
-            sp.GetRequiredService<ISessionState>(),
-            sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<ICrashLog>(),
-            () => sp.GetRequiredService<EngineConnection>().MethodInFlight));
-        services.AddSingleton(sp => new EngineConnection(
-            sp.GetRequiredService<IEngineHost>(),
-            static async (pid, ct) => await PipeTransport.ConnectAsync(
-                EngineInfo.PipeName, EngineConnectTimeout, pid, ct).ConfigureAwait(false)));
-        services.AddSingleton<IEngineClient>(sp => sp.GetRequiredService<EngineConnection>());
-
-        services.AddSingleton<NavigationService>();
-        services.AddSingleton<INavigationService>(sp => sp.GetRequiredService<NavigationService>());
-
-        services.AddSingleton(_ => AppPreferences.Load(
-            Path.Combine(localState, "preferences.json")));
-        services.AddSingleton<Core.Metrics.IMachineInfoProvider,
-            Core.Metrics.WmiMachineInfoProvider>();
-        services.AddSingleton(sp => new Core.Metrics.PerformanceCollector(
-            sp.GetRequiredService<IEngineClient>(),
-            () => sp.GetRequiredService<AppPreferences>().CollectPerformanceData,
-            () => sp.GetRequiredService<IEngineHost>().EnginePid,
-            Path.Combine(localState, "metrics.jsonl")));
-        services.AddSingleton<TranscriptViewModel>();
-        services.AddSingleton<NoteViewModel>();
-        services.AddSingleton<GuidanceViewModel>();
-        services.AddSingleton<StatusBarViewModel>();
-        services.AddSingleton<MicViewModel>();
-        services.AddSingleton(sp => new DemoMode(
-            sp.GetRequiredService<AppPreferences>(), Path.Combine(localState, "masters.json")));
-        services.AddSingleton<ConsultationViewModel>();
-        services.AddSingleton<SessionControlsViewModel>();
-        services.AddSingleton<ShellViewModel>();
-        services.AddSingleton<SettingsViewModel>();
-        services.AddSingleton<VoiceViewModel>();
-        services.AddSingleton<SessionsViewModel>();
-        services.AddSingleton<AppraisalsViewModel>();
-        services.AddSingleton<DemoTrayViewModel>();
-        services.AddSingleton<CreditsViewModel>();
-
-        services.AddTransient<SessionControlsView>();
-        services.AddTransient<DemoTrayView>();
-        services.AddTransient<TranscriptPaneView>();
-        services.AddTransient<GuidanceSectionView>();
-        services.AddTransient<PageView>();
-        services.AddTransient<NoteEditorView>();
-        services.AddTransient<PatientEditorView>();
-        services.AddTransient<NotePaneView>();
-        services.AddTransient<StatusBarView>();
-        services.AddTransient<ConsultationView>();
-        services.AddTransient<SessionsView>();
-        services.AddTransient<AppraisalsView>();
-        services.AddTransient<SettingsView>();
-        services.AddTransient<MainWindow>();
-
-        return services.BuildServiceProvider();
-    }
-
-    // One-time rename migration: sessions, preferences and the anchor move
-    // from the sotto identity. Per item and never overwriting, so a stray
-    // ambient folder (an engine run before the first app launch) cannot
-    // block the real data from carrying over
-    private static void MigrateFromSotto(string localState)
-    {
-        try
-        {
-            var old = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "sotto");
-            if (Directory.Exists(old))
-            {
-                var oldDb = Path.Combine(old, "store", "sotto.db");
-                if (File.Exists(oldDb))
-                {
-                    foreach (var suffix in new[] { "", "-wal", "-shm" })
-                    {
-                        var source = oldDb + suffix;
-                        if (File.Exists(source))
-                        {
-                            File.Move(source, Path.Combine(old, "store", "ambient.db" + suffix));
-                        }
-                    }
-                }
-
-                Merge(old, localState);
-                if (!Directory.EnumerateFileSystemEntries(old).Any())
-                {
-                    Directory.Delete(old);
-                }
-            }
-
-            foreach (var exe in new[] { "sotto_engine.exe", "sotto_note_host.exe" })
-            {
-                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(
-                    @"SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\" + exe,
-                    throwOnMissingSubKey: false);
-            }
-        }
-        catch (Exception)
-        {
-            // A failed migration starts fresh; whatever remains stays for a retry
-        }
-    }
-
-    private static void Merge(string from, string to)
-    {
-        Directory.CreateDirectory(to);
-        foreach (var entry in Directory.EnumerateFileSystemEntries(from))
-        {
-            var dest = Path.Combine(to, Path.GetFileName(entry));
-            if (Directory.Exists(entry))
-            {
-                if (Directory.Exists(dest))
-                {
-                    Merge(entry, dest);
-                    if (!Directory.EnumerateFileSystemEntries(entry).Any())
-                    {
-                        Directory.Delete(entry);
-                    }
-                }
-                else
-                {
-                    Directory.Move(entry, dest);
-                }
-            }
-            else if (!File.Exists(dest))
-            {
-                File.Move(entry, dest);
-            }
-        }
-    }
-
-    // The client, the host and the session state form a cycle, so the view
-    // model behind ISessionState is resolved on first read, not at build
-    private sealed class DeferredSessionState(IServiceProvider services) : ISessionState
-    {
-        public bool ConsultationActive =>
-            services.GetRequiredService<ConsultationViewModel>().ConsultationActive;
-
-        public string SessionPhase =>
-            services.GetRequiredService<ConsultationViewModel>().SessionPhase;
-    }
+    public ServiceProvider Services { get; }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // Subscribed here because a status-bar ctor dependency on the host
-        // would close a DI cycle: host -> session state -> status bar
-        var host = Services.GetRequiredService<IEngineHost>();
-        var dispatcher = Services.GetRequiredService<IUiDispatcher>();
-        var statusBar = Services.GetRequiredService<StatusBarViewModel>();
-        // Applied here, not in the settings view model: the bar must obey the
-        // saved preference before the settings page is ever opened
-        statusBar.MetricsVisible =
-            Services.GetRequiredService<AppPreferences>().ShowPerformanceMetrics;
-        host.StatusChanged += _ =>
-            dispatcher.Post(() => statusBar.SetEngineState(host.Status, host.Fault));
-
+        RunStartupTasks(StartupStage.BeforeWindow);
         _window = Services.GetRequiredService<MainWindow>();
-        // Applied before Activate so a dark preference never flashes light;
-        // ElementTheme.Default IS follow-the-OS, so "system" tracks it live
-        void ApplyTheme(string theme)
+        Services.GetRequiredService<WindowAccessor>().Window = _window;
+        RunStartupTasks(StartupStage.AfterWindow);
+        _window.AppWindow.Closing += (sender, e) =>
         {
-            if (_window?.Content is FrameworkElement root)
+            if (!_closing)
             {
-                root.RequestedTheme = theme switch
-                {
-                    "light" => ElementTheme.Light,
-                    "dark" => ElementTheme.Dark,
-                    _ => ElementTheme.Default,
-                };
+                e.Cancel = true;
+                _ = ShutdownAsync();
             }
-        }
-
-        ApplyTheme(Services.GetRequiredService<AppPreferences>().Theme);
-        Services.GetRequiredService<SettingsViewModel>().ApplyTheme = ApplyTheme;
-        _window.Closed += (_, _) => host.Shutdown();
+        };
         _window.Activate();
-        host.Start();
-        _ = RequestMicrophoneAccessAsync();
     }
 
-    // Registers the app on the Settings microphone page; enforcement is the
-    // engine's job
-    private static async Task RequestMicrophoneAccessAsync()
+    private void RunStartupTasks(StartupStage stage)
     {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362))
+        var logger = Services.GetRequiredService<ILogger<App>>();
+        foreach (var task in Services.GetServices<IStartupTask>().Where(t => t.Stage == stage))
+        {
+            try
+            {
+                task.Run();
+            }
+            catch (Exception e)
+            {
+                logger.StartupTaskFailed(e, task.Name);
+            }
+        }
+    }
+
+    // In order: the review's edits saved and the engine told, the connection closed, the
+    // engine stopped, then everything disposed. A recording is asked about first
+    private async Task ShutdownAsync()
+    {
+        if (_closing)
         {
             return;
         }
 
+        var session = Services.GetRequiredService<ConsultationViewModel>();
+        if (session.ConsultationActive && session.State is SessionState.Recording or SessionState.Finalising
+            && !await Services.GetRequiredService<IDialogService>().ConfirmAsync(
+                "Close during a consultation?",
+                "The recording so far is kept; the note will not be written.", "Close", "Keep recording"))
+        {
+            return;
+        }
+
+        _closing = true;
+        var logger = Services.GetRequiredService<ILogger<App>>();
         try
         {
-            await Windows.Security.Authorization.AppCapabilityAccess.AppCapability
-                .Create("microphone").RequestAccessAsync();
+            await session.CloseReviewAsync();
+            await Services.GetRequiredService<EngineConnection>().DisposeAsync();
+            Services.GetRequiredService<IEngineHost>().Shutdown();
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            // The toggle stays wherever it was; the engine still honours it
+            logger.ShutdownStepFailed(e);
         }
+
+        _window?.Close();
+        Services.Dispose();
     }
 }

@@ -2,13 +2,13 @@ using System.Text.Json;
 
 namespace Ambient.App.Core.Shell;
 
-/// <summary>One partner mark; Dark falls back to the light artwork.</summary>
+/// <summary>One partner mark. Dark falls back to the light artwork.</summary>
 public sealed record CreditMark(string Name, string LightPath, string DarkPath, double Height);
 
 /// <summary>
 /// The credits row, driven by Assets/logos/credits.json so a showcase can add
-/// or remove marks by editing the deployed folder, never the code. A missing
-/// file skips its mark; a missing or broken manifest yields an empty row.
+/// or remove marks by editing the deployed folder without a code change. A
+/// missing file skips its mark. A missing or broken manifest yields an empty row.
 /// </summary>
 public sealed class CreditsViewModel
 {

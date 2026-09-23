@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -7,17 +6,17 @@ using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Consultation;
 
-/// <summary>A capture endpoint as the engine listed it; the id is WASAPI's.</summary>
+/// <summary>A capture endpoint as the engine listed it. The id is WASAPI's.</summary>
 public sealed record MicDevice(string Id, string Name, string ShortName, bool IsDefault, bool Bluetooth);
 
 /// <summary>The microphone picker: the engine's list, fetched fresh per
-/// open; the choice is stored by id and falls back only while gone.</summary>
+/// open. The choice is stored by id and falls back only while the device is gone.</summary>
 public sealed partial class MicViewModel : ObservableObject
 {
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly AppPreferences? _preferences;
 
-    public MicViewModel(IEngineClient engine, AppPreferences? preferences = null,
+    public MicViewModel(IEngineApi engine, AppPreferences? preferences = null,
         IUiDispatcher? dispatcher = null)
     {
         _engine = engine;
@@ -88,7 +87,7 @@ public sealed partial class MicViewModel : ObservableObject
         return cut > 0 ? device.ShortName[..cut] : device.ShortName;
     }
 
-    /// <summary>Asks the engine what it can hear; called when the picker opens.</summary>
+    /// <summary>Asks the engine what it can hear. Called when the picker opens.</summary>
     public async Task RefreshAsync()
     {
         if (!_engine.Connected)
@@ -98,23 +97,18 @@ public sealed partial class MicViewModel : ObservableObject
 
         try
         {
-            var response = await _engine
-                .RequestAsync("audio/inputs", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            var inputs = await _engine.ListAudioInputsAsync().ConfigureAwait(true);
             Devices.Clear();
-            foreach (var device in response.GetProperty("devices").EnumerateArray())
+            foreach (var device in inputs)
             {
                 Devices.Add(new MicDevice(
-                    device.GetProperty("id").GetString() ?? "",
-                    device.GetProperty("name").GetString() ?? "Microphone",
-                    device.GetProperty("shortName").GetString() ?? "Microphone",
-                    device.GetProperty("isDefault").GetBoolean(),
-                    device.GetProperty("bluetooth").GetBoolean()));
+                    device.Id, device.Name ?? "Microphone", device.ShortName ?? "Microphone",
+                    device.IsDefault, device.Bluetooth));
             }
         }
         catch (Exception)
         {
-            // A failed refresh keeps the last list; the engine still resolves
+            // A failed refresh keeps the last list. The engine still resolves
         }
 
         Changed();

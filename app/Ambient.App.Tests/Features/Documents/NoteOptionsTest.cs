@@ -1,16 +1,14 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Documents;
 
 public class NoteOptionsTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     [Fact]
     public void PersistedOptionsAreAppliedAndPushedAtStartup()
     {

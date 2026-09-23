@@ -1,7 +1,9 @@
 using Ambient.App.Core.Hosting;
+using Ambient.App.Platform;
 
 namespace Ambient.App.Tests.Hosting;
 
+[Trait("Requires", "Processes")]
 public class ProcessEngineLauncherTest
 {
     private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(5);
@@ -47,10 +49,10 @@ public class ProcessEngineLauncherTest
     [Fact]
     public async Task ExtraArgumentsJoinTheCommandLine()
     {
-        // Split across base and extra; a mangled join exits at once
+        // Split across base and extra, so a mangled join exits at once
         using var launcher = new ProcessEngineLauncher(
             Path.Combine(Environment.SystemDirectory, "ping.exe"), "-n",
-            extraArguments: () => "60 127.0.0.1");
+            extraArguments: () => ["60", "127.0.0.1"]);
         using var process = launcher.Launch();
         var exited = WatchExit(process);
 

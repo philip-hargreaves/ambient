@@ -5,7 +5,7 @@ namespace Ambient.Client;
 /// <summary>Length-prefixed framing: 4-byte little-endian payload length, then the payload.</summary>
 public static class Framing
 {
-    // Pipe imposes no size limit; capped to prevent unbounded allocation
+    // The pipe imposes no size limit, so this cap prevents unbounded allocation
     public const int MaxFrameBytes = 4 * 1024 * 1024;
 
     public const int HeaderBytes = 4;

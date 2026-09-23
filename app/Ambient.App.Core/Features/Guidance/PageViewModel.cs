@@ -1,8 +1,9 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using static Ambient.App.Core.Features.Guidance.GuidanceRecommendation;
+using Ambient.App.Core.Ports;
+using Ambient.App.Core.Shell;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
 
@@ -11,10 +12,11 @@ public sealed record PageBox(double Left, double Top, double Width, double Heigh
 
 /// <summary>
 /// The page view beside the note: a page of an added document, opened on the cited
-/// passage with its lines marked and turnable from there. The consultation view model
-/// supplies the engine calls, the view supplies the file launcher and the clipboard.
+/// passage with its lines marked and turnable from there.
 /// </summary>
-public sealed partial class PageViewModel : ObservableObject
+public sealed partial class PageViewModel(
+    IEngineApi engine, ILauncher launcher, IClipboard clipboard, StatusBarViewModel status)
+    : ObservableObject
 {
     private static readonly TimeSpan SlowAfter = TimeSpan.FromMilliseconds(1500);
 
@@ -23,14 +25,6 @@ public sealed partial class PageViewModel : ObservableObject
     private int _pages;
     private List<(int Page, double Left, double Top, double Right, double Bottom)> _boxes = [];
     private int _load;
-
-    public Func<string, object, Task<JsonElement>>? Request { get; set; }
-
-    public Func<string, Task>? OpenFile { get; set; }
-
-    public Func<string, Task>? CopyText { get; set; }
-
-    public Action<string>? Report { get; set; }
 
     [ObservableProperty]
     public partial bool Visible { get; private set; }
@@ -103,24 +97,17 @@ public sealed partial class PageViewModel : ObservableObject
     /// <summary>A card's Open: the decrypted copy in the PDF viewer.</summary>
     public async Task OpenAsync(GuidanceRecommendation found)
     {
-        if (Request is null || OpenFile is null)
-        {
-            return;
-        }
-
         try
         {
-            var reply = await Request("guidance/documents/open", new { id = found.Document })
-                .ConfigureAwait(true);
-            var path = Field(reply, "path");
+            var path = await engine.OpenDocumentAsync(found.Document).ConfigureAwait(true);
             if (path.Length > 0)
             {
-                await OpenFile(path).ConfigureAwait(true);
+                await launcher.OpenFileAsync(path).ConfigureAwait(true);
             }
         }
         catch (Exception)
         {
-            Report?.Invoke("The document could not be opened");
+            status.Append("The document could not be opened");
         }
     }
 
@@ -144,25 +131,20 @@ public sealed partial class PageViewModel : ObservableObject
     /// guidance/page: the bitmap, its size and the passage's boxes. The boxes come whole
     /// each time, so a page without any is a page the passage is not on.
     /// </summary>
-    public void Apply(JsonElement reply)
+    public void Apply(GuidancePage reply)
     {
-        Width = Numeric(reply, "width");
-        Height = Numeric(reply, "height");
-        ImagePath = Field(reply, "path");
-        var pages = (int)Numeric(reply, "pages");
-        if (pages > 0)
+        Width = reply.Width;
+        Height = reply.Height;
+        ImagePath = reply.Path ?? "";
+        if (reply.Pages > 0)
         {
-            _pages = pages;
+            _pages = reply.Pages;
         }
 
         _boxes = [];
-        if (reply.TryGetProperty("boxes", out var boxes) && boxes.ValueKind == JsonValueKind.Array)
+        foreach (var box in reply.Boxes)
         {
-            foreach (var box in boxes.EnumerateArray())
-            {
-                _boxes.Add(((int)Numeric(box, "page"), Numeric(box, "left"), Numeric(box, "top"),
-                    Numeric(box, "right"), Numeric(box, "bottom")));
-            }
+            _boxes.Add((box.Page, box.Left, box.Top, box.Right, box.Bottom));
         }
 
         Boxes.Clear();
@@ -186,7 +168,7 @@ public sealed partial class PageViewModel : ObservableObject
 
     private async Task LoadAsync()
     {
-        if (_shown is null || Request is null)
+        if (_shown is null)
         {
             return;
         }
@@ -205,8 +187,7 @@ public sealed partial class PageViewModel : ObservableObject
         _ = MarkSlowAsync(load);
         try
         {
-            var reply = await Request("guidance/page",
-                new { id = _shown.Document, page = _page, chunkId = _shown.ChunkId })
+            var reply = await engine.PageAsync(_shown.Document, _page, _shown.ChunkId)
                 .ConfigureAwait(true);
             if (load == _load)
             {
@@ -220,7 +201,7 @@ public sealed partial class PageViewModel : ObservableObject
                 Failed = true;
                 Loading = false;
                 Slow = false;
-                Report?.Invoke($"The page could not be shown: {e.Message}");
+                status.Append($"The page could not be shown: {e.Message}");
             }
         }
     }
@@ -265,5 +246,5 @@ public sealed partial class PageViewModel : ObservableObject
     private Task OpenDocument() => _shown is null ? Task.CompletedTask : OpenAsync(_shown);
 
     [RelayCommand]
-    private Task CopyCitation() => CopyText?.Invoke(Citation) ?? Task.CompletedTask;
+    private Task CopyCitation() => clipboard.CopyAsync(status, Citation, "Citation");
 }

@@ -143,7 +143,7 @@ public class ReportBuilderTest
 
         var html = ReportBuilder.Build(Machine, [session], DateTimeOffset.UtcNow);
 
-        // The separator is HTML-encoded; assert the three facts
+        // The separator is HTML-encoded, so assert the three facts
         var machine = html.Split("<h2>Machine</h2>")[1].Split("</table>")[0];
         Assert.Contains("performance mode", machine);
         Assert.Contains("mains", machine);

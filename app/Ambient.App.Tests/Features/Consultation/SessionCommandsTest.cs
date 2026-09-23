@@ -3,6 +3,8 @@ using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
+using static Ambient.App.Tests.Support.Wire;
 
 
 namespace Ambient.App.Tests.Features.Consultation;
@@ -13,7 +15,7 @@ public class SessionCommandsTest
     public async Task CanExecuteFollowsTheSessionState()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
 
         Assert.True(controls.StartRecordingCommand.CanExecute(null));
         Assert.False(controls.StopRecordingCommand.CanExecute(null));
@@ -33,7 +35,7 @@ public class SessionCommandsTest
     public async Task MicPickerAndNewConsultationNeverShareTheHeaderCell()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
 
         Assert.True(controls.MicPickerVisible);
         Assert.True(controls.MicPickerEnabled);
@@ -53,7 +55,7 @@ public class SessionCommandsTest
     public void RecordingWaitsForTheEngine()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
 
         engine.SetConnected(false);
         Assert.False(controls.StartRecordingCommand.CanExecute(null));
@@ -66,7 +68,7 @@ public class SessionCommandsTest
     public async Task StatePropertyRaisesChangeNotification()
     {
         var (session, _, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         var raised = false;
         controls.PropertyChanged += (_, e) =>
         {
@@ -86,7 +88,7 @@ public class SessionCommandsTest
     public async Task CommandsDriveTheMachine()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
 
         await controls.StartRecordingCommand.ExecuteAsync(null);
         Assert.Equal(SessionState.Recording, session.State);
@@ -102,7 +104,7 @@ public class SessionCommandsTest
     public async Task VisibilityFollowsTheState()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
 
         Assert.True(controls.IdleVisible);
         Assert.True(controls.CentreStageVisible);
@@ -133,10 +135,10 @@ public class SessionCommandsTest
     [Fact]
     public async Task AThinRecordingOpensThePanesOnTheCannedNote()
     {
-        // No partial ever streams for a thin recording; note/ready must open
-        // the panes on its own, or the centre would spin forever
+        // No partial streams for a thin recording, so note/ready must open
+        // the panes on its own or the centre would spin forever
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         await session.StartRecordingAsync();
         await session.StopRecordingAsync();
         Assert.True(controls.CentreStageVisible);
@@ -151,7 +153,7 @@ public class SessionCommandsTest
     public async Task TheClockFormatsDeliveredAudio()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         await session.StartRecordingAsync();
 
         for (var i = 0; i < 754; i++)
@@ -168,10 +170,8 @@ public class SessionCommandsTest
     {
         var engine = new FakeEngineClient(autoNotify: false) { FirstUse = true, ModelsCompiled = false };
         var bar = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            bar, readinessPollInterval: TimeSpan.FromMilliseconds(1));
-        var controls = new SessionControlsViewModel(session);
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), bar, new FakeDialogService(), TestSession.Page(engine, bar), TestSession.Guidance(bar), readinessPollInterval: TimeSpan.FromMilliseconds(1));
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         bar.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running, null);
         bar.SetEngineReady(true);
 
@@ -203,7 +203,7 @@ public class SessionCommandsTest
     public void AWarmNoteModelLoadNeitherHoldsRecordingNorSaysSo()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         session.Status.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running, null);
         session.Status.SetEngineReady(true);
 
@@ -224,7 +224,7 @@ public class SessionCommandsTest
     public async Task FinaliseStagesNameTheCentreSpinner()
     {
         var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         var phases = new List<FinalisePhase>();
         session.PropertyChanged += (_, e) =>
         {
@@ -253,7 +253,7 @@ public class SessionCommandsTest
             Assert.Equal("Writing transcript", controls.FinalisingLabel);  // unknown: unchanged
             engine.RaiseNotification("session/progress", Params(new { stage = "speakers" }));
             Assert.Equal("Labelling speakers", controls.FinalisingLabel);
-            // The per-turn re-decode is transcript work again - and on the
+            // The per-turn re-decode is transcript work again, and on the
             // NPU the longest stage, so the spinner says what it is doing
             engine.RaiseNotification("session/progress", Params(new { stage = "turns" }));
             Assert.Equal("Writing transcript", controls.FinalisingLabel);
@@ -266,7 +266,7 @@ public class SessionCommandsTest
         Assert.Equal("Preparing note", controls.FinalisingLabel);
         engine.RaiseNotification("session/progress", Params(new { stage = "transcript" }));
         Assert.Equal(FinalisePhase.Note, session.Phase);
-        // Start resets to None; the stop then walks forward only
+        // Start resets to None, then the stop walks forward only
         Assert.Collection(phases.SkipWhile(p => p == FinalisePhase.None),
             p => Assert.Equal(FinalisePhase.Sealing, p),
             p => Assert.Equal(FinalisePhase.Transcript, p),
@@ -285,9 +285,6 @@ public class SessionCommandsTest
         await session.StopRecordingAsync();
         Assert.Equal(FinalisePhase.Note, session.Phase);
     }
-
-    private static System.Text.Json.JsonElement Params(object value) =>
-        System.Text.Json.JsonSerializer.SerializeToElement(value);
 
     [Fact]
     public async Task ARestartedEngineResumesTheLiveSession()
@@ -359,7 +356,7 @@ public class SessionCommandsTest
     public void TheRingFollowsTheMicrophoneLevel()
     {
         var (session, _, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         var raised = 0;
         controls.PropertyChanged += (_, e) =>
         {

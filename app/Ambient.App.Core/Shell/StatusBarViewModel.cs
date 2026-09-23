@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
 using Ambient.Client;
@@ -19,7 +19,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     public partial string LatestActivity { get; private set; } = "";
 
     // One status on screen, replaced as things happen: abnormal readiness
-    // outranks activity, activity outranks Ready; Busy drives the one ring
+    // outranks activity, activity outranks Ready. Busy drives the one ring
     public string DisplayLabel =>
         !_ready || _status != EngineStatus.Running ? EngineStateLabel
         : LatestActivity.Length > 0 ? LatestActivity
@@ -32,10 +32,18 @@ public sealed partial class StatusBarViewModel : ObservableObject
     // The two models a clinician's machine actually works for, each with its
     // live number: "Whisper Turbo · GPU · 33× RT", "Qwen3.5 9B · GPU · 14.2 tok/s"
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AsrChipVisible))]
     public partial string AsrChip { get; private set; } = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoteChipVisible))]
     public partial string NoteChip { get; private set; } = "";
+
+    public bool AsrChipVisible => MetricsVisible && AsrChip.Length > 0;
+
+    public bool NoteChipVisible => MetricsVisible && NoteChip.Length > 0;
+
+    public bool MemoryChipVisible => MetricsVisible && MemoryChip.Length > 0;
 
     private string _asrName = "";
     private string _noteName = "";
@@ -43,7 +51,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     private string _noteDevice = "";
 
     /// <summary>Fallback when a manifest has no display name: "whisper-turbo-int8"
-    /// reads as "Whisper Turbo"; precision suffix dropped, size tokens kept.</summary>
+    /// reads as "Whisper Turbo". The precision suffix is dropped, size tokens kept.</summary>
     public static string FriendlyModelName(string id)
     {
         var words = id.Split('-')
@@ -55,7 +63,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     }
 
     private static string ShortDevice(string device) =>
-        device.Split('.')[0];  // "GPU.0" is a build detail; "GPU" is the fact
+        device.Split('.')[0];  // the device index is a build detail
 
     private async Task LoadModelsAsync()
     {
@@ -66,36 +74,29 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
         try
         {
-            var response = await _engine
-                .RequestAsync("engine/models", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
-            // The chip names the model the engine marks active for the role, not
-            // the first listed; older engines send no flag, so the default tier is assumed
+            var models = await _engine.ListModelsAsync().ConfigureAwait(true);
+            // The chip names the model the engine marks active for the role.
+            // Older engines send no flag, so the default tier is assumed
             _asrName = _noteName = "";
-            foreach (var model in response.GetProperty("models").EnumerateArray()
-                         .OrderBy(m => m.TryGetProperty("active", out var active)
-                                       && active.ValueKind == JsonValueKind.True ? 0
-                             : m.GetProperty("tier").GetString() == "default" ? 1 : 2))
+            foreach (var model in models.OrderBy(m => m.Active ? 0 : m.Tier == "default" ? 1 : 2))
             {
-                var task = model.GetProperty("task").GetString();
-                var id = model.GetProperty("id").GetString() ?? "";
-                var name = model.TryGetProperty("name", out var given)
-                           && !string.IsNullOrWhiteSpace(given.GetString())
-                    ? given.GetString()!
-                    : FriendlyModelName(id);
-                var device = ShortDevice(model.GetProperty("device").GetString() ?? "");
-                if (task == "asr" && _asrName.Length == 0)
+                var name = string.IsNullOrWhiteSpace(model.Name)
+                    ? FriendlyModelName(model.Id)
+                    : model.Name;
+                var device = ShortDevice(model.Device);
+                if (model.Task == "asr" && _asrName.Length == 0)
                 {
                     (_asrName, _asrDevice) = (name, device);
                 }
-                else if (task == "note" && _noteName.Length == 0)
+                else if (model.Task == "note" && _noteName.Length == 0)
                 {
                     (_noteName, _noteDevice) = (name, device);
                 }
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log($"engine/models failed: {e.Message}");
         }
 
         RecomputeChips();
@@ -108,14 +109,14 @@ public sealed partial class StatusBarViewModel : ObservableObject
     public bool NoteActive => TokensStreaming;
 
     // The resting dot and healthy text are the visible-inverse halves of the
-    // colour pairs the view swaps; XAML gets properties, never functions
+    // colour pairs the view swaps, exposed as properties for XAML binding
     public bool AsrResting => !AsrActive;
 
     public bool NoteResting => !NoteActive;
 
     public bool RealtimeHealthy => !RealtimeLow;
 
-    // Live figures are unlabelled and move; settled ones say "Averaged" - the
+    // Live figures are unlabelled and move. Settled ones say "Averaged": the
     // session's true average, held through review for reading after a run
     private void RecomputeChips()
     {
@@ -149,10 +150,11 @@ public sealed partial class StatusBarViewModel : ObservableObject
         }
     }
 
-    private readonly IEngineClient? _engine;
+    private readonly IEngineApi? _engine;
+    private readonly ILogger? _logger;
     private readonly TimeProvider _time = TimeProvider.System;
     private readonly ThroughputMeter _meter = new();
-    private readonly Func<double> _memoryGb = ReadMemoryGb;
+    private readonly Func<double> _memoryGb = () => 0;
     private readonly long _started;
 
     public StatusBarViewModel()
@@ -163,12 +165,13 @@ public sealed partial class StatusBarViewModel : ObservableObject
     /// With an engine, the bar meters generation live: one partial per token
     /// from whichever lane streams, so the number moves with every token.
     /// </summary>
-    public StatusBarViewModel(IEngineClient engine, IUiDispatcher dispatcher,
-        TimeProvider? time = null, Func<double>? memoryGb = null)
+    public StatusBarViewModel(IEngineApi engine, IUiDispatcher dispatcher,
+        TimeProvider? time = null, Func<double>? memoryGb = null, ILogger? logger = null)
     {
         _engine = engine;
+        _logger = logger;
         _time = time ?? TimeProvider.System;
-        _memoryGb = memoryGb ?? ReadMemoryGb;
+        _memoryGb = memoryGb ?? (() => 0);
         _started = _time.GetTimestamp();
         engine.ConnectedChanged += connected => dispatcher.Post(() =>
         {
@@ -184,27 +187,25 @@ public sealed partial class StatusBarViewModel : ObservableObject
             StartPolling();
         }
 
-        engine.NotificationReceived += (method, parameters) => dispatcher.Post(() =>
+        engine.NotificationReceived += notification => dispatcher.Post(() =>
         {
-            switch (method)
+            switch (notification)
             {
-                case "note/partial" or "patient/partial" or "translate/partial":
+                case NotePartial or PatientPartial or TranslationPartial:
                     _meter.Token(Now());
-                    PublishThroughput(SourceRate(parameters));
+                    PublishThroughput(SourceRate(notification));
                     break;
-                case "note/ready" or "patient/ready" or "translate/ready":
+                case NoteReady or PatientReady or TranslationReady:
                     _meter.End(Now());
                     // The ready event carries the whole-generation average
-                    PublishThroughput(SourceRate(parameters));
+                    PublishThroughput(SourceRate(notification));
                     break;
-                case "note/failed" or "patient/failed" or "translate/failed":
+                case NoteFailed or PatientFailed or TranslationFailed:
                     _meter.End(Now());
                     PublishThroughput(null);
                     break;
                 // A tier switch changes which model the chip names
-                case "note/model" when parameters.ValueKind == JsonValueKind.Object
-                    && parameters.TryGetProperty("state", out var laneState)
-                    && laneState.GetString() == "ready":
+                case NoteModelState { State: "ready" }:
                     _ = LoadModelsAsync();
                     break;
                 default:
@@ -217,12 +218,8 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
     // The engine measures at the source, before its notification throttle,
     // so its figure beats the local arrival count whenever it is present
-    private static double? SourceRate(JsonElement parameters) =>
-        parameters.ValueKind == JsonValueKind.Object
-            && parameters.TryGetProperty("tokensPerSecond", out var rate)
-            && rate.ValueKind == JsonValueKind.Number
-        ? rate.GetDouble()
-        : null;
+    private static double? SourceRate(EngineNotification notification) =>
+        (notification as IMetered)?.TokensPerSecond;
 
     private void PublishThroughput(double? sourceRate = null)
     {
@@ -231,7 +228,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
         RecomputeChips();
     }
 
-    /// <summary>Rolling tokens per second; holds its last value after a stream ends.</summary>
+    /// <summary>Rolling tokens per second. Holds its last value after a stream ends.</summary>
     [ObservableProperty]
     public partial double TokensPerSecond { get; private set; }
 
@@ -246,13 +243,13 @@ public sealed partial class StatusBarViewModel : ObservableObject
         PublishThroughput();
     }
 
-    /// <summary>Transcription speed as a multiple of real time; 0 when unknown.</summary>
+    /// <summary>Transcription speed as a multiple of real time, 0 when unknown.</summary>
     [ObservableProperty]
     public partial double RealtimeFactor { get; private set; }
 
     /// <summary>
     /// True from stop until the sealed transcript loads: the finalise tail
-    /// decode - the NPU's longest stage - keeps the RT figure on screen.
+    /// decode, the NPU's longest stage, keeps the RT figure on screen.
     /// </summary>
     [ObservableProperty]
     public partial bool DecodeActive { get; private set; }
@@ -279,43 +276,21 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
     /// <summary>"Memory · 5.1 GB": the product's whole working set.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MemoryChipVisible))]
     public partial string MemoryChip { get; private set; } = "";
 
-    /// <summary>The chips are for testing, not GPs: off unless opted in.</summary>
+    /// <summary>The chips are for testing: off unless opted in.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AsrChipVisible), nameof(NoteChipVisible), nameof(MemoryChipVisible))]
     public partial bool MetricsVisible { get; set; }
 
-    // Shell + engine + note host: the honest on-device footprint. By name
-    // because the note host is the engine's child, not the shell's
-    private static double ReadMemoryGb()
-    {
-        try
-        {
-            var bytes = Environment.WorkingSet;
-            foreach (var name in new[] { "ambient_engine", "ambient_note_host" })
-            {
-                foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
-                {
-                    using (process)
-                    {
-                        bytes += process.WorkingSet64;
-                    }
-                }
-            }
-
-            return bytes / (1024.0 * 1024 * 1024);
-        }
-        catch (Exception)
-        {
-            return 0;
-        }
-    }
-
-    // Polled at 1 Hz while recording - the factor updates per decoded
-    // window, so that IS its native rate. Failures leave the last value.
+    // Shell, engine and note host: the whole on-device footprint, found by
+    // name because the note host is the engine's child process. Polled at
+    // 1 Hz while recording, the rate the factor updates at. Failures leave
+    // the last value.
     public async Task PollMetricsOnceAsync()
     {
-        var memory = _memoryGb();
+        var memory = await Task.Run(_memoryGb).ConfigureAwait(true);
         MemoryChip = memory > 0
             ? $"Memory · {memory.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture)} GB"
             : "";
@@ -327,33 +302,22 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
         try
         {
-            var metrics = await _engine
-                .RequestAsync("engine/metrics", null, TimeSpan.FromSeconds(2))
-                .ConfigureAwait(true);
-            if (metrics.TryGetProperty("asrRealtimeFactor", out var factor)
-                && factor.ValueKind == JsonValueKind.Number)
+            var metrics = await _engine.MetricsAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            if (metrics.AsrRealtimeFactor is { } factor)
             {
-                RealtimeFactor = factor.GetDouble();
+                RealtimeFactor = factor;
             }
 
-            if (metrics.TryGetProperty("devices", out var devices)
-                && devices.ValueKind == JsonValueKind.Object)
+            if (metrics.Devices is { } devices)
             {
-                if (devices.TryGetProperty("asr", out var asr))
-                {
-                    _asrDevice = ShortDevice(asr.GetString() ?? _asrDevice);
-                }
-
-                if (devices.TryGetProperty("note", out var note))
-                {
-                    _noteDevice = ShortDevice(note.GetString() ?? _noteDevice);
-                }
-
+                _asrDevice = ShortDevice(devices.Asr ?? _asrDevice);
+                _noteDevice = ShortDevice(devices.Note ?? _noteDevice);
                 RecomputeChips();
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log($"engine/metrics failed: {e.Message}");
         }
     }
 
@@ -373,7 +337,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     [ObservableProperty]
     public partial bool MicVisible { get; private set; }
 
-    /// <summary>Demo mode is on, or a demo record is on screen; shown beside the app name.</summary>
+    /// <summary>Demo mode is on, or a demo record is on screen. Shown beside the app name.</summary>
     [ObservableProperty]
     public partial bool Demo { get; set; }
 
@@ -430,7 +394,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     private EngineFault? _fault;
     private bool _ready;
 
-    /// <summary>True in every transient state; the status ring spins on it.</summary>
+    /// <summary>True in every transient state. The status ring spins on it.</summary>
     [ObservableProperty]
     public partial bool EngineStarting { get; private set; }
 
@@ -440,7 +404,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
         _fault = fault;
         Recompute();
 
-        // Silent restarts stay out of the activity log; faults go in
+        // Silent restarts stay out of the activity log. Faults go in
         if (status == EngineStatus.Faulted)
         {
             Append(EngineStateLabel);
@@ -462,21 +426,17 @@ public sealed partial class StatusBarViewModel : ObservableObject
             EngineStatus.Running when !_ready => "Starting up",
             EngineStatus.Running => "Ready",
             EngineStatus.Restarting => "Recovering",
-            EngineStatus.Faulted => _fault?.Kind switch
-            {
-                EngineFaultKind.SessionInterrupted =>
-                    "A problem interrupted the consultation - recovering",
-                _ => "Recording is unavailable - please restart the app",
-            },
+            EngineStatus.Faulted => "Recording is unavailable - please restart the app",
             _ => "Not running",
         };
         OnPropertyChanged(nameof(DisplayLabel));
         OnPropertyChanged(nameof(Busy));
     }
 
-    /// <summary>Log-only detail; the displayed status stays concise.</summary>
+    /// <summary>Log-only detail, to the file and the developer panel. The displayed status stays concise.</summary>
     public void Log(string line)
     {
+        _logger?.Line(line);
         LogEntries.Add(line);
         while (LogEntries.Count > MaxLogEntries)
         {

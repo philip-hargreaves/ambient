@@ -5,6 +5,7 @@ namespace Ambient.Client.Tests.Contract;
 /// <summary>
 /// The engine/models method against the real engine.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class ModelsContractTest
 {

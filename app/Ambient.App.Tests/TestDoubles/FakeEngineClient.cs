@@ -7,7 +7,7 @@ namespace Ambient.App.Tests.TestDoubles;
 /// Test-double engine. After session/stop it pushes note/ready then
 /// patient/ready, like the real pipeline.
 /// </summary>
-public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
+public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
 {
     private static readonly JsonElement Empty = JsonSerializer.SerializeToElement(new { });
 
@@ -28,7 +28,13 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
     /// <summary>Every request, as (method, serialised params).</summary>
     public List<(string Method, string Params)> Requests { get; } = [];
 
-    /// <summary>Thrown by the next matching request, once; null answers normally.</summary>
+    /// <summary>A scripted reply per method, served before anything below.</summary>
+    public Dictionary<string, object> Responses { get; } = [];
+
+    /// <summary>Methods that refuse every time.</summary>
+    public HashSet<string> Failing { get; } = [];
+
+    /// <summary>Thrown by the next matching request, once. Null answers normally.</summary>
     public Func<string, Exception?>? FailNext { get; set; }
 
     /// <summary>
@@ -49,7 +55,16 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
             return Task.FromException<JsonElement>(failure);
         }
 
+        if (Failing.Contains(method))
+        {
+            return Task.FromException<JsonElement>(new InvalidOperationException($"{method} refused"));
+        }
+
         BeforeReply?.Invoke(method);
+        if (Responses.TryGetValue(method, out var scripted))
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(scripted));
+        }
 
         if (method == "engine/hello")
         {
@@ -252,6 +267,16 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
                 style = "",
                 detail = "",
                 generatedAt = "2026-09-13T00:00:00Z",
+                editedAt = StoredNoteEditedAt,
+            }));
+        }
+
+        if (method == "session/patient" && StoredPatient is not null)
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                text = StoredPatient,
+                generatedAt = StoredPatientGeneratedAt,
                 editedAt = (string?)null,
             }));
         }
@@ -331,7 +356,7 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
 
     public string? GuidanceDetail { get; set; }
 
-    /// <summary>The corpora guidance/corpora lists; one loaded fixture corpus by default.</summary>
+    /// <summary>The corpora guidance/corpora lists, one loaded fixture corpus by default.</summary>
     public List<object> GuidanceCorpora { get; } =
     [
         new
@@ -342,21 +367,28 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
         },
     ];
 
-    /// <summary>Served by session/note when set; the stored note is empty otherwise.</summary>
+    /// <summary>Served by session/note when set, otherwise the stored note is empty.</summary>
     public string? StoredNote { get; set; }
 
-    /// <summary>Served by session/guidance; null until a record is stored.</summary>
+    public string? StoredNoteEditedAt { get; set; }
+
+    /// <summary>Served by session/patient when set.</summary>
+    public string? StoredPatient { get; set; }
+
+    public string? StoredPatientGeneratedAt { get; set; }
+
+    /// <summary>Served by session/guidance, null until a record is stored.</summary>
     public JsonElement? StoredGuidance { get; set; }
 
     /// <summary>Turns served by session/transcript after a stop.</summary>
     public List<(string Speaker, string Text)> Transcript { get; } = [];
 
-    /// <summary>Served by engine/metrics; healthy by default.</summary>
+    /// <summary>Served by engine/metrics, healthy by default.</summary>
     public double MetricsRealtimeFactor { get; set; } = 33.4;
 
     public List<Ambient.App.Core.Features.Consultation.MicDevice> AudioInputs { get; set; } = [];
 
-    /// <summary>Served by anchor/status; nothing learned by default.</summary>
+    /// <summary>Served by anchor/status, nothing learned by default.</summary>
     public string AnchorOrigin { get; set; } = "none";
 
     public int AnchorSessions { get; set; }
@@ -366,13 +398,13 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
     /// <summary>Note models beyond the 9B that engine/models lists: (id, name, tier).</summary>
     public List<(string Id, string Name, string Tier)> ExtraNoteModels { get; } = [];
 
-    /// <summary>The tier the engine's note lane is on; note/tier moves it.</summary>
+    /// <summary>The tier the engine's note lane is on. note/tier moves it.</summary>
     public string NoteTier { get; set; } = "default";
 
     /// <summary>The lane state note/tier answers with.</summary>
     public string NoteTierReply { get; set; } = "loading";
 
-    /// <summary>Served by engine/readiness; warm and compiled by default.</summary>
+    /// <summary>Served by engine/readiness, warm and compiled by default.</summary>
     public bool FirstUse { get; set; }
 
     public bool ModelsCompiled { get; set; } = true;
@@ -380,10 +412,10 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
     /// <summary>Served by reflection/get: the consultation's label.</summary>
     public string ReflectionLabel { get; set; } = "Elbow swelling";
 
-    /// <summary>Served by reflection/get; null until a summary was written.</summary>
+    /// <summary>Served by reflection/get, null until a summary was written.</summary>
     public string? ReflectionSummary { get; set; }
 
-    /// <summary>Served by reflection/get; null until the clinician wrote something.</summary>
+    /// <summary>Served by reflection/get, null until the clinician wrote something.</summary>
     public (string Happened, string Learned, string Next)? ReflectionAnswers { get; set; }
 
     /// <summary>What reflection/summary produces, as the notification.</summary>
@@ -397,13 +429,13 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
     /// <summary>Which of Reflections are seeded samples.</summary>
     public HashSet<string> DemoReflections { get; } = [];
 
-    /// <summary>Whether demo/seed has run; demo/clear resets it.</summary>
+    /// <summary>Whether demo/seed has run. demo/clear resets it.</summary>
     public bool SamplesSeeded { get; set; }
 
     /// <summary>Real consultations in the store, counted by session/deleteAll.</summary>
     public int StoredSessions { get; set; }
 
-    /// <summary>Served by engine/readiness; no wedged note process by default.</summary>
+    /// <summary>Served by engine/readiness, no wedged note process by default.</summary>
     public bool StrayNoteHost { get; set; }
 
     public void RaiseNotification(string method, JsonElement parameters = default) =>

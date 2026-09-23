@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Consultation;
+using Ambient.App.Core.Ports;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Demo;
 
@@ -13,10 +15,13 @@ public sealed partial class DemoTrayViewModel : ObservableObject
     private static readonly double[] Speeds = [1, 4, 8, 16];
 
     private readonly ConsultationViewModel _session;
+    private readonly IFilePicker _picker;
 
-    public DemoTrayViewModel(ConsultationViewModel session, IReadOnlyList<DemoTrack>? tracks = null)
+    public DemoTrayViewModel(
+        ConsultationViewModel session, IFilePicker picker, IReadOnlyList<DemoTrack>? tracks = null)
     {
         _session = session;
+        _picker = picker;
         Tracks = new List<DemoTrack>(tracks ?? DemoTracks.Load());
         SelectedTrack = Tracks.FirstOrDefault();
         _session.PropertyChanged += (_, e) =>
@@ -37,13 +42,6 @@ public sealed partial class DemoTrayViewModel : ObservableObject
                 case nameof(ConsultationViewModel.AudioSeconds):
                     OnPropertyChanged(nameof(ProgressFraction));
                     OnPropertyChanged(nameof(ProgressText));
-                    // A replay finishes itself; nobody presses stop in a demo
-                    if (IsReplaying && _durationSeconds > 0
-                        && _session.AudioSeconds >= _durationSeconds - 0.05)
-                    {
-                        _ = _session.StopRecordingAsync();
-                    }
-
                     break;
                 default:
                     break;
@@ -60,13 +58,23 @@ public sealed partial class DemoTrayViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
     public partial DemoTrack? SelectedTrack { get; set; }
 
-    // Read once per selection, not on every progress tick
+    // Read once per selection, so progress ticks do not reread it
     private double _durationSeconds;
 
     partial void OnSelectedTrackChanged(DemoTrack? value) =>
         _durationSeconds = value is null ? 0 : DemoTracks.DurationSeconds(value.Path);
 
     public string TrackName => SelectedTrack?.Name ?? "no track";
+
+    [RelayCommand]
+    private async Task Browse()
+    {
+        var path = await _picker.PickFileAsync(".wav").ConfigureAwait(true);
+        if (path is not null)
+        {
+            UseTrack(path);
+        }
+    }
 
     /// <summary>A browsed file becomes a selectable track named after itself.</summary>
     public void UseTrack(string path)
@@ -77,7 +85,7 @@ public sealed partial class DemoTrayViewModel : ObservableObject
         SelectedTrack = track;
     }
 
-    // ---- speed: cycles 1 -> 4 -> 8 -> 16; anything over 1x is smoke-only
+    // ---- speed: cycles 1 -> 4 -> 8 -> 16. Anything over 1x is for smoke tests only
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SpeedLabel))]

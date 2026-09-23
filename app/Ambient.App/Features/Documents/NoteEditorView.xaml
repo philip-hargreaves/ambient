@@ -6,8 +6,8 @@
 
     <Grid Padding="0,10,0,8" RowSpacing="10">
         <!-- The note sizes to its text (capped in code where a host bounds
-             the editor) and guidance takes what is left, scrolling inside;
-             a page that scrolls leaves both to their content -->
+             the editor) and guidance takes what is left, scrolling inside.
+             A page that scrolls leaves both to their content -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,7 +15,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top right produces the document; bottom left takes it away;
+        <!-- Top right produces the document, bottom left takes it away,
              bottom right is the edit lifecycle -->
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
@@ -58,24 +58,19 @@
                     SelectedIndex="{x:Bind ViewModel.ExampleCaseIndex, Mode=TwoWay}"
                     Visibility="{x:Bind ViewModel.ExampleCasesVisible, Mode=OneWay}" />
                 <ComboBox
-                    x:Name="StyleBox"
                     MinWidth="104"
                     AutomationProperties.Name="Note style"
+                    DisplayMemberPath="Name"
                     IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
-                    SelectionChanged="OnStyleChanged">
-                    <ComboBoxItem Content="Prose" Tag="prose" />
-                    <ComboBoxItem Content="SOAP" Tag="soap" />
-                </ComboBox>
+                    ItemsSource="{x:Bind ViewModel.StyleOptions}"
+                    SelectedIndex="{x:Bind ViewModel.StyleIndex, Mode=TwoWay}" />
                 <ComboBox
-                    x:Name="DetailBox"
                     MinWidth="118"
                     AutomationProperties.Name="Note detail"
+                    DisplayMemberPath="Name"
                     IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
-                    SelectionChanged="OnDetailChanged">
-                    <ComboBoxItem Content="Concise" Tag="concise" />
-                    <ComboBoxItem Content="Standard" Tag="standard" />
-                    <ComboBoxItem Content="Detailed" Tag="detailed" />
-                </ComboBox>
+                    ItemsSource="{x:Bind ViewModel.DetailOptions}"
+                    SelectedIndex="{x:Bind ViewModel.DetailIndex, Mode=TwoWay}" />
                 <Button x:Name="RegenerateButton"
                         Command="{x:Bind ViewModel.RegenerateCommand}"
                         ToolTipService.ToolTip="Rewrite the note with the chosen style and detail">
@@ -87,7 +82,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- The clinician's document; editable in place. The minimum keeps
+        <!-- The clinician's document, editable in place. The minimum keeps
              it a document when short or hosted in an unbounded column -->
         <TextBox
             x:Name="NoteBox"
@@ -102,14 +97,14 @@
 
         <Grid Grid.Row="2" Margin="0,2,0,0">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Click="OnCopyNote"
+                <Button Command="{x:Bind Export.CopyNoteCommand}"
                         IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="14" Glyph="&#xE8C8;" />
                         <TextBlock Text="Copy" />
                     </StackPanel>
                 </Button>
-                <Button Click="OnExportNote"
+                <Button Command="{x:Bind Export.ExportNoteCommand}"
                         IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.NoteViewing, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -127,7 +122,7 @@
                     </StackPanel>
                 </Button>
             </StackPanel>
-            <!-- Read-only until an explicit Edit; Save commits, Discard restores -->
+            <!-- Read-only until an explicit Edit. Save commits, Discard restores -->
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
                 <Button
                     Command="{x:Bind ViewModel.EditNoteCommand}"
@@ -160,7 +155,7 @@
             HorizontalContentAlignment="Stretch"
             VerticalContentAlignment="Stretch" />
 
-        <!-- An edited note is the clinician's wording; Regenerate asks
+        <!-- An edited note is the clinician's wording, so Regenerate asks
              before replacing it -->
         <TeachingTip
             Title="Replace your edits?"

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Hosting;
@@ -21,7 +20,7 @@ public enum EnrolmentState
 /// </summary>
 public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
 {
-    /// <summary>A cap the reader never sees; Finish is how a reading ends.</summary>
+    /// <summary>A cap the reader never sees. Finish is how a reading ends.</summary>
     public const double DefaultSeconds = 120;
 
     /// <summary>What the engine needs before it will make a print.</summary>
@@ -39,14 +38,14 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         + "check your blood pressure and listen to your chest, and then we can talk about what "
         + "happens next. Do you have any questions before we start?";
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly IUiDispatcher? _dispatcher;
     private readonly string _micId;
     private readonly double _seconds;
     private readonly TaskCompletionSource<bool> _outcome =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    public EnrolmentViewModel(IEngineClient engine, string micId = "",
+    public EnrolmentViewModel(IEngineApi engine, string micId = "",
         double seconds = DefaultSeconds, IUiDispatcher? dispatcher = null)
     {
         _engine = engine;
@@ -116,7 +115,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         _ => "Cancel",
     };
 
-    /// <summary>True once a print was made; false on cancel, failure or dismissal.</summary>
+    /// <summary>True once a print was made. False on cancel, failure or dismissal.</summary>
     public Task<bool> Outcome => _outcome.Task;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
@@ -128,9 +127,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         Detail = "";
         try
         {
-            await _engine.RequestAsync("anchor/enrol",
-                new { seconds = _seconds, mic = new { id = _micId } },
-                TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+            await _engine.StartEnrolmentAsync(_seconds, _micId).ConfigureAwait(true);
         }
         catch (Exception e)
         {
@@ -146,8 +143,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
     {
         try
         {
-            await _engine.RequestAsync("anchor/enrol/cancel", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            await _engine.CancelEnrolmentAsync().ConfigureAwait(true);
         }
         catch (Exception)
         {
@@ -163,8 +159,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
     {
         try
         {
-            await _engine.RequestAsync("anchor/enrol/finish", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            await _engine.FinishEnrolmentAsync().ConfigureAwait(true);
         }
         catch (Exception e)
         {
@@ -172,7 +167,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The dialog was dismissed; a reading in flight is cancelled.</summary>
+    /// <summary>The dialog was dismissed. A reading in flight is cancelled.</summary>
     public void Dismiss()
     {
         if (State == EnrolmentState.Recording)
@@ -189,48 +184,47 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         _outcome.TrySetResult(State == EnrolmentState.Succeeded);
     }
 
-    private void OnNotification(string method, JsonElement parameters)
+    private void OnNotification(EngineNotification notification)
     {
-        if (method is not ("anchor/progress" or "anchor/enrolled"))
+        if (notification is not (EnrolmentProgress or EnrolmentDone))
         {
             return;
         }
 
-        var snapshot = parameters.Clone();
         if (_dispatcher is null)
         {
-            Apply(method, snapshot);
+            Apply(notification);
         }
         else
         {
-            _dispatcher.Post(() => Apply(method, snapshot));
+            _dispatcher.Post(() => Apply(notification));
         }
     }
 
-    private void Apply(string method, JsonElement parameters)
+    private void Apply(EngineNotification notification)
     {
-        if (method == "anchor/progress")
+        if (notification is EnrolmentProgress progress)
         {
             if (State != EnrolmentState.Recording)
             {
                 return;
             }
 
-            Level = parameters.GetProperty("level").GetDouble();
-            Elapsed = parameters.GetProperty("elapsed").GetDouble();
-            Speech = parameters.GetProperty("speech").GetDouble();
+            Level = progress.Level;
+            Elapsed = progress.Elapsed;
+            Speech = progress.Speech;
             return;
         }
 
         Level = 0;
-        if (parameters.GetProperty("ok").GetBoolean())
+        if (notification is EnrolmentDone { Ok: true })
         {
             State = EnrolmentState.Succeeded;
             _outcome.TrySetResult(true);
         }
         else
         {
-            Fail(parameters.GetProperty("detail").GetString() ?? "");
+            Fail((notification as EnrolmentDone)?.Detail ?? "");
         }
     }
 

@@ -1,6 +1,7 @@
 using Ambient.App.Core.Features.Appraisal;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 
 namespace Ambient.App.Tests.Features.Appraisal;
@@ -15,7 +16,7 @@ public class AppraisalsViewModelTest
         engine.Reflections.Add(("c", "2026-06-20T10:00:00Z", "Back pain", "", "A patient in their sixties with back pain."));
         engine.Reflections.Add(("d", "2025-11-03T10:00:00Z", "", "listen longer", ""));
         engine.DemoReflections.Add("c");
-        return (new AppraisalsViewModel(engine, new InlineDispatcher(), new StatusBarViewModel()), engine);
+        return (new AppraisalsViewModel(new EngineApi(engine), new InlineDispatcher(), new StatusBarViewModel(), new FakeClipboard(), new FakeFilePicker(), new FakeDialogService(), new RecordingNavigationService()), engine);
     }
 
     [Fact]
@@ -53,7 +54,7 @@ public class AppraisalsViewModelTest
         Assert.Equal(9, page.MonthFilter);
         Assert.Equal(["a", "b"], page.Cards.Select(c => c.Id));
         Assert.True(page.Months[8].Selected);
-        Assert.Equal("3 reflections", page.CountLabel);  // the year's count, not the month's
+        Assert.Equal("3 reflections", page.CountLabel);  // the count covers the whole year
 
         page.ToggleMonth(6);
         Assert.Equal(["c"], page.Cards.Select(c => c.Id));
@@ -188,7 +189,7 @@ public class AppraisalsViewModelTest
     public async Task NothingWrittenYetIsSaidPlainly()
     {
         var engine = new FakeEngineClient();
-        var page = new AppraisalsViewModel(engine, new InlineDispatcher(), new StatusBarViewModel());
+        var page = new AppraisalsViewModel(new EngineApi(engine), new InlineDispatcher(), new StatusBarViewModel(), new FakeClipboard(), new FakeFilePicker(), new FakeDialogService(), new RecordingNavigationService());
 
         await page.RefreshAsync();
 

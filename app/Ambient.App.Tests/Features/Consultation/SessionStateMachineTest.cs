@@ -10,7 +10,7 @@ namespace Ambient.App.Tests.Features.Consultation;
 
 public class SessionStateMachineTest
 {
-    private sealed class TimingOutClient : IEngineClient
+    private sealed class TimingOutClient : IEngineTransport
     {
         public event Action<string, JsonElement>? NotificationReceived
         {
@@ -36,7 +36,7 @@ public class SessionStateMachineTest
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class RefusingClient : IEngineClient
+    private sealed class RefusingClient : IEngineTransport
     {
         public event Action<string, JsonElement>? NotificationReceived
         {
@@ -65,9 +65,7 @@ public class SessionStateMachineTest
     public async Task AFailedStartStaysIdleWithTheReasonLogged()
     {
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            new RefusingClient(), new InlineDispatcher(), new TranscriptViewModel(),
-            new NoteViewModel(), status);
+        var session = new ConsultationViewModel(new EngineApi(new RefusingClient()), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(new FakeEngineClient(), status), TestSession.Guidance(status));
 
         await session.StartRecordingAsync();
 
@@ -79,9 +77,7 @@ public class SessionStateMachineTest
     public async Task ATimedOutStopRecoversToIdle()
     {
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            new TimingOutClient(), new InlineDispatcher(), new TranscriptViewModel(),
-            new NoteViewModel(), status);
+        var session = new ConsultationViewModel(new EngineApi(new TimingOutClient()), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(new FakeEngineClient(), status), TestSession.Guidance(status));
         await session.StartRecordingAsync();
 
         await session.StopRecordingAsync();

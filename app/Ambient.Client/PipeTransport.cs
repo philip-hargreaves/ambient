@@ -11,7 +11,7 @@ namespace Ambient.Client;
 /// failure is terminal: pending and future requests observe it, and the
 /// connection does not recover.
 /// </summary>
-public sealed class PipeTransport : IEngineClient
+public sealed class PipeTransport : IEngineTransport
 {
     private readonly NamedPipeClientStream _pipe;
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pending = new();
@@ -24,7 +24,7 @@ public sealed class PipeTransport : IEngineClient
 
     public event Action<string, JsonElement>? NotificationReceived;
 
-    // A raw transport is connected until it faults; EngineConnection is the
+    // A raw transport is connected until it faults. EngineConnection is the
     // layer that raises transitions
     public bool Connected => Volatile.Read(ref _fault) is null && Volatile.Read(ref _disposed) == 0;
 
@@ -53,8 +53,8 @@ public sealed class PipeTransport : IEngineClient
             cts.CancelAfter(timeout);
             await pipe.ConnectAsync(cts.Token).ConfigureAwait(false);
 
-            // The caller that spawned the engine knows its pid; refuse any other
-            // process that may have claimed the pipe name first.
+            // The caller that spawned the engine knows its pid. Any other
+            // process that may have claimed the pipe name first is refused.
             if (expectedServerProcessId is uint expected)
             {
                 var actual = ServerVerifier.GetServerProcessId(pipe);
@@ -128,7 +128,7 @@ public sealed class PipeTransport : IEngineClient
     private async Task SendAsync(object message, CancellationToken cancellationToken)
     {
         var frame = Framing.Encode(JsonSerializer.SerializeToUtf8Bytes(message, Protocol.JsonOptions));
-        // One token governs the send; a cancelled write desyncs the stream, so
+        // One token governs the send. A cancelled write desyncs the stream, so
         // it is terminal
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken, _closed.Token);
@@ -202,7 +202,7 @@ public sealed class PipeTransport : IEngineClient
         }
 
         // Build the outcome before completing: a malformed response must fault its
-        // own request, never leave the removed completion stranded.
+        // own request so the removed completion is not left stranded.
         try
         {
             if (root.TryGetProperty("error", out var error))
@@ -225,7 +225,7 @@ public sealed class PipeTransport : IEngineClient
 
     private void Fault(Exception cause)
     {
-        // First fault wins; the transport is terminal thereafter.
+        // First fault wins. The transport is terminal thereafter.
         if (Interlocked.CompareExchange(ref _fault, cause, null) is not null)
         {
             return;

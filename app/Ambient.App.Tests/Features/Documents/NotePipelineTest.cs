@@ -163,7 +163,7 @@ public class NotePipelineTest
         note.SelectedLanguage = "French";
 
         // The sheet is still streaming: text exists in the pane, but the
-        // engine has stored nothing yet - a request now would error
+        // engine has stored nothing yet, so a request now would error
         engine.RaiseNotification("patient/partial", System.Text.Json.JsonSerializer
             .SerializeToElement(new { text = "Your appointment" }));
         Assert.False(note.TranslateCommand.CanExecute(null));
