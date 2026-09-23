@@ -54,7 +54,7 @@ public class AppraisalsViewModelTest
         Assert.Equal(9, page.MonthFilter);
         Assert.Equal(["a", "b"], page.Cards.Select(c => c.Id));
         Assert.True(page.Months[8].Selected);
-        Assert.Equal("3 reflections", page.CountLabel);  // the year's count, not the month's
+        Assert.Equal("3 reflections", page.CountLabel);  // the count covers the whole year
 
         page.ToggleMonth(6);
         Assert.Equal(["c"], page.Cards.Select(c => c.Id));

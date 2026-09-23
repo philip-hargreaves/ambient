@@ -5,7 +5,7 @@ using Ambient.App.Core.Hosting;
 namespace Ambient.App.Core.Preferences;
 
 /// <summary>
-/// One small json document of app preferences; absent means defaults, unreadable means
+/// One small json document of app preferences. Absent means defaults, unreadable means
 /// defaults and a log line. Values the shell cannot render or the engine would refuse never
 /// leave the load boundary.
 /// </summary>
@@ -71,10 +71,10 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
     /// <summary>Demo mode: Record plays a saved run back. A developer control.</summary>
     public bool DemoMode { get; set; }
 
-    /// <summary>The track whose saved run demo mode plays; empty means the first.</summary>
+    /// <summary>The track whose saved run demo mode plays. Empty means the first.</summary>
     public string DemoTrack { get; set; } = "";
 
-    /// <summary>Seed data in the store; off by default.</summary>
+    /// <summary>Seed data in the store, off by default.</summary>
     public bool SeedDataEnabled { get; set; }
 
     public bool NpuTranscription { get; set; }
@@ -87,7 +87,7 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
     /// </summary>
     public bool KeepConsultations { get; set; }
 
-    /// <summary>Off by default: the status-bar chips are for testing, not GPs.</summary>
+    /// <summary>Off by default: the status-bar chips are for testing.</summary>
     public bool ShowPerformanceMetrics { get; set; }
 
     /// <summary>Whether the Developer tools group in Settings is open.</summary>
@@ -102,10 +102,10 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
     /// </summary>
     public bool IncludeResearchGuidance { get; set; }
 
-    /// <summary>The chosen microphone's endpoint id; empty means the default.</summary>
+    /// <summary>The chosen microphone's endpoint id. Empty means the default.</summary>
     public string MicId { get; set; } = "";
 
-    /// <summary>"system" follows the OS; "light" and "dark" override it.</summary>
+    /// <summary>"system" follows the OS, while "light" and "dark" override it.</summary>
     public string Theme { get; set; } = Themes[0];
 
     public string NoteStyle { get; set; } = NoteStyles[0];
@@ -114,7 +114,7 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
 
     /// <summary>
     /// Which note model the engine loads, as a role ("default", "accuracy",
-    /// "constrained"); the engine's store resolves it to a model.
+    /// "constrained"). The engine's store resolves it to a model.
     /// </summary>
     public string NoteTier { get; set; } = "default";
 
@@ -137,7 +137,7 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
         }
         catch (Exception e)
         {
-            // A corrupt document means defaults; the next save replaces it
+            // A corrupt document means defaults. The next save replaces it
             logger?.PreferencesUnreadable(e.Message);
             return preferences;
         }
@@ -147,7 +147,7 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
             return preferences;
         }
 
-        // A newer document is read for what this build knows; a save rewrites it at this schema
+        // A newer document is read for what this build knows. A save rewrites it at this schema
         preferences.DemoTrayEnabled = stored.DemoTrayEnabled;
         preferences.DemoMode = stored.DemoMode;
         preferences.DemoTrack = stored.DemoTrack ?? "";

@@ -34,8 +34,8 @@ public class ReplaySessionTest
         var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(directory);
         var wav = SessionContractWav.Write(seconds: 5);
-        // Real models when present: startup cost and code paths must match
-        // the shipped app, not a scripted stand-in
+        // Real models when present, so startup cost and code paths match
+        // the shipped app
         var models = FindModels();
         using var launcher = new ProcessEngineLauncher(
             FindEngine(),
@@ -64,8 +64,7 @@ public class ReplaySessionTest
             }
             var pidAtStart = host.EnginePid;
 
-            // The idle window between launch and play is where the silent
-            // connection death lived
+            // The connection must survive the idle window between launch and play
             await Task.Delay(TimeSpan.FromSeconds(20));
             Assert.Equal(pidAtStart, host.EnginePid);
 
@@ -100,7 +99,7 @@ public class ReplaySessionTest
             }
             catch (IOException)
             {
-                // The engine may still hold the store for a beat; temp cleans itself
+                // The engine may still hold the store for a moment, and temp cleans itself
             }
         }
     }
@@ -279,7 +278,7 @@ public class ReplaySessionTest
             var stop = await connection.RequestAsync("session/stop", null, TimeSpan.FromSeconds(240));
             Assert.Equal(secondId, stop.GetProperty("sessionId").GetString());
 
-            // The transcript covers the whole consult, not just the tail
+            // The transcript covers the whole consult, including the audio before the kill
             var transcript = await connection.RequestAsync(
                 "session/transcript", new { id = secondId }, Timeout);
             var labelled = transcript.GetProperty("turns").EnumerateArray()
@@ -336,8 +335,8 @@ public class ReplaySessionTest
             Assert.Equal(SessionState.Recording, session.State);
             await WaitUntilAsync(() => session.AudioSeconds > 3, TimeSpan.FromSeconds(20));
 
-            // Two kills in quick succession, the second mid-resume - the
-            // double-crash sequence observed in the field
+            // Two kills in quick succession, the second mid-resume, as in the
+            // double crash observed in the field
             var atKill = session.AudioSeconds;
             var firstPid = host.EnginePid!.Value;
             Process.GetProcessById(firstPid).Kill();

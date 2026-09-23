@@ -9,6 +9,6 @@ public interface IFilePicker
     /// <summary>One file of the given extension, or null when cancelled.</summary>
     Task<string?> PickFileAsync(string extension);
 
-    /// <summary>Any number of files of the given extensions; empty when cancelled.</summary>
+    /// <summary>Any number of files of the given extensions, empty when cancelled.</summary>
     Task<IReadOnlyList<string>> PickFilesAsync(IReadOnlyList<string> extensions);
 }

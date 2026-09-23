@@ -76,7 +76,7 @@ public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
         }
     }
 
-    // Appended across launches, rotated once per run; the handle is marked
+    // Appended across launches, rotated once per run. The handle is marked
     // inheritable for the child
     private FileStream? OpenStderr()
     {

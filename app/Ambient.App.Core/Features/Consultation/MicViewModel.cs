@@ -6,11 +6,11 @@ using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Consultation;
 
-/// <summary>A capture endpoint as the engine listed it; the id is WASAPI's.</summary>
+/// <summary>A capture endpoint as the engine listed it. The id is WASAPI's.</summary>
 public sealed record MicDevice(string Id, string Name, string ShortName, bool IsDefault, bool Bluetooth);
 
 /// <summary>The microphone picker: the engine's list, fetched fresh per
-/// open; the choice is stored by id and falls back only while gone.</summary>
+/// open. The choice is stored by id and falls back only while the device is gone.</summary>
 public sealed partial class MicViewModel : ObservableObject
 {
     private readonly IEngineApi _engine;
@@ -87,7 +87,7 @@ public sealed partial class MicViewModel : ObservableObject
         return cut > 0 ? device.ShortName[..cut] : device.ShortName;
     }
 
-    /// <summary>Asks the engine what it can hear; called when the picker opens.</summary>
+    /// <summary>Asks the engine what it can hear. Called when the picker opens.</summary>
     public async Task RefreshAsync()
     {
         if (!_engine.Connected)
@@ -108,7 +108,7 @@ public sealed partial class MicViewModel : ObservableObject
         }
         catch (Exception)
         {
-            // A failed refresh keeps the last list; the engine still resolves
+            // A failed refresh keeps the last list. The engine still resolves
         }
 
         Changed();

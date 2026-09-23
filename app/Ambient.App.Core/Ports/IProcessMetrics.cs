@@ -7,7 +7,7 @@ public interface IProcessMetrics
 
     long? PeakCommitMb(int pid);
 
-    /// <summary>The largest peak among the processes of that name; null when none runs.</summary>
+    /// <summary>The largest peak among the processes of that name, null when none runs.</summary>
     long? PeakWorkingSetMbOf(string processName);
 
     /// <summary>This process plus every process of the named images, in GB.</summary>

@@ -34,7 +34,7 @@ public class AnchorContractTest
     public async Task EnrolmentReportsProgressAndAnHonestRefusal()
     {
         // Two seconds of silence stand in for the microphone: the window elapses,
-        // no speech is heard, and the outcome says so rather than seeding a print
+        // no speech is heard, and the outcome reports it with no print seeded
         var wav = SessionContractTest.WriteSilenceWav();
         try
         {

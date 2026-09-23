@@ -46,7 +46,7 @@ public sealed partial class SessionsViewModel : ObservableObject
     /// <summary>
     /// Keep consultations is off and nothing is stored: the page explains
     /// itself instead of showing a bare empty list. Existing history always
-    /// shows; only the clinician empties it.
+    /// shows, and only the clinician empties it.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
@@ -75,7 +75,7 @@ public sealed partial class SessionsViewModel : ObservableObject
     [RelayCommand]
     private void TogglePatientFold() => PatientFolded = !PatientFolded;
 
-    /// <summary>The open session's label; editing it renames the session.</summary>
+    /// <summary>The open session's label. Editing it renames the session.</summary>
     [ObservableProperty]
     public partial string DetailTitle { get; set; } = "";
 
@@ -96,8 +96,8 @@ public sealed partial class SessionsViewModel : ObservableObject
         _preferences = preferences;
     }
 
-    // True while a rename swaps the selected row for its retitled copy;
-    // that reselection must not reopen the session
+    // True while a rename swaps the selected row for its retitled copy.
+    // That reselection must not reopen the session
     private bool _retitling;
 
     partial void OnSelectedChanged(SessionRow? value)
@@ -120,7 +120,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             {
                 var started = session.StartedAt;
                 var label = session.Label ?? "";
-                // No title beats a bad title: without a stored label the
+                // Without a stored label the
                 // date and time are the row's name
                 var startedLabel = FormatStarted(started);
                 Sessions.Add(new SessionRow(
@@ -258,7 +258,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             : startedAt;
 
     // The consultation's length is its audio, which a fast replay records in
-    // seconds of wall time; the wall clock is only the fallback
+    // seconds of wall time. The wall clock is only the fallback
     private static string FormatDuration(double audioSeconds, string startedAt, string endedAt)
     {
         var seconds = audioSeconds;
@@ -273,7 +273,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             seconds = (ended - started).TotalSeconds;
         }
 
-        // A duration, unmistakably not a second clock time
+        // Formatted as a duration so it does not read as a second clock time
         return seconds < 90 ? "1 min" : $"{(int)Math.Round(seconds / 60)} min";
     }
 }

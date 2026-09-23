@@ -40,7 +40,7 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
 
     public string SessionId { get; private set; } = "";
 
-    /// <summary>The consultation's label; typing here renames the consultation.</summary>
+    /// <summary>The consultation's label. Typing here renames the consultation.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     public partial string Title { get; set; } = "";
@@ -87,7 +87,7 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(HasWarning))]
     public partial string Next { get; set; } = "";
 
-    /// <summary>What in the text may identify the patient; empty when nothing was found.</summary>
+    /// <summary>What in the text may identify the patient, empty when nothing was found.</summary>
     public string Warning => IdentifierCheck.Describe(Summary + "\n" + Happened + "\n" + Learned + "\n" + Next);
 
     public bool HasWarning => Warning.Length > 0;
@@ -99,7 +99,7 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
 
     public string ExportText => ReflectionExport.Format(Entry);
 
-    /// <summary>Loads the stored entry; asks for a summary when none exists yet.</summary>
+    /// <summary>Loads the stored entry and asks for a summary when none exists yet.</summary>
     public async Task LoadAsync(string sessionId, string startedAt = "")
     {
         SessionId = sessionId;
@@ -152,7 +152,7 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Writes the answers when they changed; a no-op otherwise.</summary>
+    /// <summary>Writes the answers only when they changed.</summary>
     public async Task SaveAsync()
     {
         // Whitespace-only answers are empty: a stray line break would hide the hint and count as writing
@@ -177,7 +177,7 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>A retitle renames the consultation itself; blank keeps the old name.</summary>
+    /// <summary>A retitle renames the consultation itself. A blank title keeps the old name.</summary>
     public async Task SaveTitleAsync()
     {
         var title = Title.Trim();
@@ -197,7 +197,7 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The clinician corrected the summary; kept as their wording.</summary>
+    /// <summary>The clinician corrected the summary, kept as their wording.</summary>
     public async Task SaveSummaryAsync()
     {
         if (SessionId.Length == 0 || Summary == _savedSummary)

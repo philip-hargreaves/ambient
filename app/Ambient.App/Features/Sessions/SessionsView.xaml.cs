@@ -54,7 +54,7 @@ public sealed partial class SessionsView : UserControl
     private void OnDetailSizeChanged(object sender, SizeChangedEventArgs e) =>
         Place(e.NewSize.Width >= WideThreshold);
 
-    // The document views are shared with the live screen, so they are moved, not duplicated
+    // The document views are shared with the live screen, so they move between the two screens
     private void Place(bool wide)
     {
         if (_wide == wide)
@@ -89,7 +89,7 @@ public sealed partial class SessionsView : UserControl
         WideLayout.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
         NarrowLayout.Visibility = wide ? Visibility.Collapsed : Visibility.Visible;
         PlacePage();
-        // The wide column scrolls as a page; the tabs bound the editors
+        // The wide column scrolls as a page. The tabs bound the editors
         if (wide)
         {
             _note.FollowContent();

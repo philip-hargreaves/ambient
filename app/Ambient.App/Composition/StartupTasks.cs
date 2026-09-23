@@ -24,7 +24,7 @@ internal static class StartupTasks
         return services;
     }
 
-    // Runs before the preferences and the store are read; a failure logs and the app starts fresh
+    // Runs before the preferences and the store are read. A failure logs and the app starts fresh
     private sealed class MigrateSottoData(AppPaths paths, ILogger logger) : IStartupTask
     {
         public string Name => "migrate sotto data";
@@ -101,7 +101,7 @@ internal static class StartupTasks
         }
     }
 
-    // Registers the app on the Settings microphone page; enforcement is the engine's job
+    // Registers the app on the Settings microphone page. Enforcement is the engine's job
     private sealed class RequestMicrophoneAccess(ILogger<RequestMicrophoneAccess> logger) : IStartupTask
     {
         public string Name => "request microphone access";
@@ -126,7 +126,7 @@ internal static class StartupTasks
             }
             catch (Exception e)
             {
-                // The toggle stays wherever it was; the engine still honours it
+                // The toggle stays wherever it was. The engine still honours it
                 logger.StepFailed("microphone access request", e.Message);
             }
         }

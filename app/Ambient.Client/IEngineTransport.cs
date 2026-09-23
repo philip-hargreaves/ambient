@@ -4,13 +4,13 @@ namespace Ambient.Client;
 
 /// <summary>
 /// The raw JSON-RPC link to the engine. PipeTransport is the production
-/// implementation; tests use a fake. The shell speaks through IEngineApi.
+/// implementation and tests use a fake. The shell speaks through IEngineApi.
 /// </summary>
 public interface IEngineTransport : IAsyncDisposable
 {
     event Action<string, JsonElement>? NotificationReceived;
 
-    /// <summary>True while a verified transport is up; requests can succeed.</summary>
+    /// <summary>True while a verified transport is up and requests can succeed.</summary>
     bool Connected { get; }
 
     event Action<bool>? ConnectedChanged;

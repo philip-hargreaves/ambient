@@ -52,7 +52,7 @@ public sealed class EngineApi : IEngineApi
     public Task<IReadOnlyList<AudioInput>> ListAudioInputsAsync() =>
         ListAsync<AudioInput>("audio/inputs", "devices");
 
-    // The engine pins the microphone; an empty id means the default
+    // The engine pins the microphone. An empty id means the default
     public Task<string> StartSessionAsync(bool retain, string micId) =>
         StartAsync(new { retain, micId }, StartTimeout);
 

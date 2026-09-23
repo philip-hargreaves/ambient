@@ -295,7 +295,7 @@
                                                                     ToolTipService.ToolTip="{x:Bind Path}"
                                                                     Visibility="{x:Bind PathVisible}" />
                                                             </Grid>
-                                                            <!-- The recommendation as written, never trimmed -->
+                                                            <!-- The full recommendation text -->
                                                             <TextBlock
                                                                 IsTextSelectionEnabled="True"
                                                                 Style="{StaticResource RecommendationText}"

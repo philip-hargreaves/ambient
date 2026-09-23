@@ -2,9 +2,8 @@ namespace Ambient.App.Core.Hosting;
 
 /// <summary>
 /// The one-time rename migration: sessions, preferences and the anchor move from the
-/// sotto folder to the ambient one. Per item and never overwriting, so a stray ambient
-/// folder (an engine run before the first app launch) cannot block the real data from
-/// carrying over, and a failure part way leaves every file where it can be found.
+/// sotto folder to the ambient one. Per item and without overwriting, so a stray ambient folder cannot
+/// block the real data, and a failure part way leaves every file where it can be found.
 /// </summary>
 public static class SottoMigration
 {
@@ -51,7 +50,7 @@ public static class SottoMigration
         }
     }
 
-    /// <summary>Moves what does not already exist at the destination; a folder present on both sides merges.</summary>
+    /// <summary>Moves what does not already exist at the destination. A folder present on both sides merges.</summary>
     public static void Merge(string from, string to)
     {
         Directory.CreateDirectory(to);

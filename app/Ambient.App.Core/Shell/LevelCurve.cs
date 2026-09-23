@@ -2,8 +2,8 @@ namespace Ambient.App.Core.Shell;
 
 /// <summary>
 /// How the level ring answers the microphone: a soft glow that brightens and reaches further
-/// with the level, one hairline ring that eases outward. Restrained on purpose: it should read
-/// as alive, never as an alarm.
+/// with the level, one hairline ring that eases outward. Restrained on purpose, so it reads
+/// as alive without alarming.
 /// </summary>
 public static class LevelCurve
 {

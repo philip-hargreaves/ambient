@@ -38,7 +38,7 @@ public sealed class ThroughputMeter(double windowSeconds = 2.0)
 
     public bool Streaming => _streaming;
 
-    /// <summary>0 when nothing has streamed; the frozen value after End.</summary>
+    /// <summary>0 when nothing has streamed, the frozen value after End.</summary>
     public double TokensPerSecond(double now)
     {
         if (!_streaming)
@@ -50,8 +50,8 @@ public sealed class ThroughputMeter(double windowSeconds = 2.0)
         return Live(now);
     }
 
-    // Rate over what the window still holds. One token is not a rate yet;
-    // a stalled stream decays to zero as the window empties
+    // Rate over what the window still holds. One token is not a rate yet.
+    // A stalled stream decays to zero as the window empties
     private double Live(double now)
     {
         if (_stamps.Count < 2)

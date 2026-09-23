@@ -22,7 +22,7 @@ public sealed partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     public partial string TranslationText { get; set; } = "";
 
-    /// <summary>What the translation is, e.g. "Polish"; heads the output box.</summary>
+    /// <summary>What the translation is, e.g. "Polish". It heads the output box.</summary>
     [ObservableProperty]
     public partial string TranslationLanguage { get; set; } = "";
 
@@ -40,7 +40,7 @@ public sealed partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ExampleCasesVisible { get; set; }
 
-    /// <summary>The picker's selection; -1 shows its placeholder. Choosing applies the case.</summary>
+    /// <summary>The picker's selection, where -1 shows its placeholder. Choosing applies the case.</summary>
     [ObservableProperty]
     public partial int ExampleCaseIndex { get; set; } = -1;
 
@@ -71,7 +71,7 @@ public sealed partial class NoteViewModel : ObservableObject
     public IReadOnlyList<NoteOption> DetailOptions { get; } =
         [new("concise", "Concise"), new("standard", "Standard"), new("detailed", "Detailed")];
 
-    // The combos select by index; an unknown stored value shows the first option
+    // The combos select by index. An unknown stored value shows the first option
     public int StyleIndex
     {
         get => Math.Max(0, IndexOf(StyleOptions, Style));
@@ -108,10 +108,10 @@ public sealed partial class NoteViewModel : ObservableObject
 
     public Func<Task>? RegenerateRequested { get; set; }
 
-    /// <summary>The clinician overrides a refusal; the session view model wires it.</summary>
+    /// <summary>The clinician overrides a refusal. The session view model wires it.</summary>
     public Func<Task>? WriteAnywayRequested { get; set; }
 
-    /// <summary>Why the model refused, in its words; empty unless refused.</summary>
+    /// <summary>Why the model refused, in its words, empty unless refused.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NoteRefused))]
     public partial string RefusalReason { get; set; } = "";
@@ -139,7 +139,7 @@ public sealed partial class NoteViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ReflectCommand))]
     public partial bool ReflectAvailable { get; set; } = true;
 
-    /// <summary>True once an appraisal entry exists; the button then reads Open.</summary>
+    /// <summary>True once an appraisal entry exists. The button then reads Open.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ReflectLabel))]
     public partial bool HasReflection { get; set; }
@@ -173,14 +173,14 @@ public sealed partial class NoteViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(TranslateCommand))]
     public partial bool TranslationRunning { get; set; }
 
-    /// <summary>"Edited 10:31" when a person changed the stored note; empty otherwise.</summary>
+    /// <summary>"Edited 10:31" when a person changed the stored note, empty otherwise.</summary>
     [ObservableProperty]
     public partial string EditedStamp { get; set; } = "";
 
     /// <summary>
     /// The note has been edited since the sheet was written from it, so the
     /// sheet may no longer say what the note says. Cleared when the sheet is
-    /// rewritten; the fix lands with the sheet-grounding work.
+    /// rewritten.
     /// </summary>
     [ObservableProperty]
     public partial bool PatientStale { get; set; }
@@ -214,11 +214,11 @@ public sealed partial class NoteViewModel : ObservableObject
     }
 
     // The engine translates the stored sheet, which exists only once the
-    // pipeline reports it ready - text alone streams in earlier
+    // pipeline reports it ready. Text alone streams in earlier
     private bool CanTranslate() => SelectedLanguage is not null && TranslateRequested is not null
         && PipelineState == NotePipelineState.AllReady && !TranslationRunning && !AnyEditing;
 
-    // An edited note is the clinician's wording; regenerating replaces it,
+    // An edited note is the clinician's wording. Regenerating replaces it,
     // so it asks first. An unedited note regenerates straight away.
     [RelayCommand(CanExecute = nameof(CanRegenerate))]
     private Task Regenerate()
@@ -232,14 +232,14 @@ public sealed partial class NoteViewModel : ObservableObject
         return RegenerateRequested!();
     }
 
-    // Any settled review state can regenerate, including a failed note -
-    // regenerating IS the recovery. The engine refuses what it cannot do.
+    // Any settled review state can regenerate, including a failed note,
+    // since regenerating is the recovery. The engine refuses what it cannot do.
     private bool CanRegenerate() => RegenerateRequested is not null && !AnyEditing
         && PipelineState is NotePipelineState.AllReady or NotePipelineState.PatientFailed
         or NotePipelineState.NoteFailed;
 
     // The editing gate: a document mutates only between an explicit Edit and
-    // its Save; Discard restores the snapshot taken at Edit
+    // its Save. Discard restores the snapshot taken at Edit
     [ObservableProperty]
     public partial bool NoteEditing { get; private set; }
 
@@ -323,7 +323,7 @@ public sealed partial class NoteViewModel : ObservableObject
 
     private bool CanSavePatient() => SavePatientRequested is not null && PatientDocumentReady;
 
-    /// <summary>True once the document is sealed; gates save and copy.</summary>
+    /// <summary>True once the document is sealed. Gates save and copy.</summary>
     public bool NoteDocumentReady =>
         PipelineState is NotePipelineState.AllReady or NotePipelineState.PatientFailed;
 
@@ -404,7 +404,7 @@ public sealed partial class NoteViewModel : ObservableObject
     }
 
     // The panes show a quiet affordance while a document is being prepared
-    // and nothing has streamed yet; computed here so it is testable
+    // and nothing has streamed yet. Computed here so it is testable
     public bool NotePreparing =>
         PipelineState == NotePipelineState.NoteWriting && ClinicalNoteText.Length == 0;
 
@@ -472,7 +472,7 @@ public sealed partial class NoteViewModel : ObservableObject
     partial void OnPatientInfoTextChanged(string value) =>
         OnPropertyChanged(nameof(PatientPreparing));
 
-    /// <summary>Applies an engine-reported event; out-of-order events are refused.</summary>
+    /// <summary>Applies an engine-reported event. Out-of-order events are refused.</summary>
     public bool Apply(NotePipelineEvent pipelineEvent)
     {
         var next = (PipelineState, pipelineEvent) switch

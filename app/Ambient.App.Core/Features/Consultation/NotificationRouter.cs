@@ -47,7 +47,7 @@ public sealed class NotificationRouter
             case SessionProgress progress:
                 _recorder.AdvancePhase(progress.Stage);
                 break;
-            // Writing is claimed only once tokens stream; Review included because
+            // Writing is claimed only once tokens stream. Review is included because
             // a regenerate streams there
             case NotePartial chunk when State is SessionState.Finalising or SessionState.Review:
                 if (_note.ClinicalNoteText.Length == 0)
@@ -80,8 +80,8 @@ public sealed class NotificationRouter
 
                 break;
             // Too short or not a consultation: nothing to review, so the record
-            // region says why and offers the override (unless it was too short);
-            // a refusal while already reviewing shows in the note pane instead
+            // region says why and offers the override (unless it was too short).
+            // A refusal while already reviewing shows in the note pane instead
             case NoteRefused refused when State is SessionState.Finalising or SessionState.Review:
                 _note.RefusalReason = refused.Reason;
                 _note.WriteAnywayAvailable = refused.Overridable;

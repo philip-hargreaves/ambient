@@ -6,8 +6,8 @@
 
     <Grid Padding="0,10,0,8" RowSpacing="10">
         <!-- The note sizes to its text (capped in code where a host bounds
-             the editor) and guidance takes what is left, scrolling inside;
-             a page that scrolls leaves both to their content -->
+             the editor) and guidance takes what is left, scrolling inside.
+             A page that scrolls leaves both to their content -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,7 +15,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top right produces the document; bottom left takes it away;
+        <!-- Top right produces the document, bottom left takes it away,
              bottom right is the edit lifecycle -->
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
@@ -82,7 +82,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- The clinician's document; editable in place. The minimum keeps
+        <!-- The clinician's document, editable in place. The minimum keeps
              it a document when short or hosted in an unbounded column -->
         <TextBox
             x:Name="NoteBox"
@@ -122,7 +122,7 @@
                     </StackPanel>
                 </Button>
             </StackPanel>
-            <!-- Read-only until an explicit Edit; Save commits, Discard restores -->
+            <!-- Read-only until an explicit Edit. Save commits, Discard restores -->
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
                 <Button
                     Command="{x:Bind ViewModel.EditNoteCommand}"
@@ -155,7 +155,7 @@
             HorizontalContentAlignment="Stretch"
             VerticalContentAlignment="Stretch" />
 
-        <!-- An edited note is the clinician's wording; Regenerate asks
+        <!-- An edited note is the clinician's wording, so Regenerate asks
              before replacing it -->
         <TeachingTip
             Title="Replace your edits?"

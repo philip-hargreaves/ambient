@@ -135,8 +135,8 @@ public class SessionCommandsTest
     [Fact]
     public async Task AThinRecordingOpensThePanesOnTheCannedNote()
     {
-        // No partial ever streams for a thin recording; note/ready must open
-        // the panes on its own, or the centre would spin forever
+        // No partial streams for a thin recording, so note/ready must open
+        // the panes on its own or the centre would spin forever
         var (session, engine, _) = TestSession.Create();
         var controls = new SessionControlsViewModel(session, TestSession.Mic());
         await session.StartRecordingAsync();
@@ -253,7 +253,7 @@ public class SessionCommandsTest
             Assert.Equal("Writing transcript", controls.FinalisingLabel);  // unknown: unchanged
             engine.RaiseNotification("session/progress", Params(new { stage = "speakers" }));
             Assert.Equal("Labelling speakers", controls.FinalisingLabel);
-            // The per-turn re-decode is transcript work again - and on the
+            // The per-turn re-decode is transcript work again, and on the
             // NPU the longest stage, so the spinner says what it is doing
             engine.RaiseNotification("session/progress", Params(new { stage = "turns" }));
             Assert.Equal("Writing transcript", controls.FinalisingLabel);
@@ -266,7 +266,7 @@ public class SessionCommandsTest
         Assert.Equal("Preparing note", controls.FinalisingLabel);
         engine.RaiseNotification("session/progress", Params(new { stage = "transcript" }));
         Assert.Equal(FinalisePhase.Note, session.Phase);
-        // Start resets to None; the stop then walks forward only
+        // Start resets to None, then the stop walks forward only
         Assert.Collection(phases.SkipWhile(p => p == FinalisePhase.None),
             p => Assert.Equal(FinalisePhase.Sealing, p),
             p => Assert.Equal(FinalisePhase.Transcript, p),

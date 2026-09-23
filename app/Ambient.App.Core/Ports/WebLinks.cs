@@ -1,6 +1,6 @@
 namespace Ambient.App.Core.Ports;
 
-/// <summary>What the launcher will open in the browser: an absolute http or https address, nothing else.</summary>
+/// <summary>What the launcher will open in the browser: only an absolute http or https address.</summary>
 public static class WebLinks
 {
     public static bool IsWeb(string link) =>

@@ -84,10 +84,10 @@ public sealed partial class EngineReadiness : ObservableObject
         }
     }
 
-    /// <summary>The note lane's model changed; a first-use compile gates recording while it runs.</summary>
+    /// <summary>The note lane's model changed. A first-use compile gates recording while it runs.</summary>
     public void NoteModelChanged(NoteModelState model)
     {
-        // A warm model load never blocks recording; only the first-use compile does
+        // Only the first-use compile blocks recording
         if (_recorder.State != SessionState.Idle)
         {
             return;
@@ -126,7 +126,7 @@ public sealed partial class EngineReadiness : ObservableObject
     }
 
     // Engine options are per process: resent after a restart. The tier is a
-    // role; the engine's store resolves it
+    // role, which the engine's store resolves
     private async Task PushNoteOptionsAsync()
     {
         if (_engine.Connected)
@@ -138,11 +138,11 @@ public sealed partial class EngineReadiness : ObservableObject
         }
     }
 
-    // First launch only: poll until the one-off compiles finish, then never
-    // again. Fails open - a readiness error must not brick recording.
+    // First launch only: poll until the one-off compiles finish.
+    // Fails open, so a readiness error cannot block recording.
     private async Task CheckReadinessAsync()
     {
-        // Every reconnect calls this; one poll loop at a time
+        // Every reconnect calls this. One poll loop runs at a time
         if (_checking)
         {
             return;
@@ -152,7 +152,7 @@ public sealed partial class EngineReadiness : ObservableObject
         try
         {
             var readiness = await _engine.ReadinessAsync().ConfigureAwait(true);
-            // A note host wedged in the GPU driver outlives the engine; only a reboot ends it
+            // A note host wedged in the GPU driver outlives the engine. Only a reboot ends it
             if (readiness.StrayNoteHost)
             {
                 _status.Append("A previous note process is stuck in the graphics driver - restart the computer");

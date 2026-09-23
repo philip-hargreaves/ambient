@@ -6,7 +6,7 @@ namespace Ambient.Client.Tests.Contract;
 
 /// <summary>
 /// The real shell client against the real engine process. This is the evidence
-/// the two halves agree on the wire, not just against fixtures.
+/// the two halves agree on the wire as well as against fixtures.
 /// </summary>
 [Collection("engine")]
 [Trait("Requires", "Engine")]
@@ -71,7 +71,7 @@ public class ContractTest
             HandleInheritability.None);
         await raw.ConnectAsync((int)Timeout.TotalMilliseconds);
 
-        // A well-framed body that is not JSON: dropped, not fatal
+        // A well-framed body that is not JSON is dropped and the connection survives
         var junk = "not json at all"u8.ToArray();
         await raw.WriteAsync(BitConverter.GetBytes((uint)junk.Length));
         await raw.WriteAsync(junk);
@@ -92,7 +92,7 @@ public class ContractTest
         Assert.True(engine.IsRunning);
     }
 
-    // The embedder may announce itself on a fresh connection first; the reply carries the id
+    // The embedder may announce itself on a fresh connection first. The reply carries the id
     private static async Task<JsonDocument> ReadReplyAsync(Stream raw)
     {
         while (true)
@@ -120,8 +120,8 @@ public class ContractTest
         await using var second = EngineProcess.Start();
         var exitCode = await second.WaitForExitAsync(Timeout);
 
-        // Exit code 1 alone is shared by any startup failure; the message proves
-        // it was the first-instance guard, not an unrelated crash.
+        // Exit code 1 alone is shared by any startup failure. The message proves
+        // it was the first-instance guard.
         Assert.Equal(1, exitCode);
         Assert.Contains("pipe name already claimed", second.StandardError, StringComparison.Ordinal);
     }

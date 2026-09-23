@@ -46,7 +46,7 @@ public sealed class EngineConnection : IEngineTransport
         }
     }
 
-    // The last request started, for the crash report; not an accounting system
+    // The last request started, for the crash report
     public string? MethodInFlight => _methodInFlight;
 
     public EngineConnection(
@@ -148,8 +148,8 @@ public sealed class EngineConnection : IEngineTransport
 
     private async Task ConnectAsync(int generation)
     {
-        // Redial until installed or superseded; a silent give-up here was
-        // once a permanently dead connection
+        // Redial until installed or superseded. Giving up here would leave
+        // the connection dead for good
         while (Volatile.Read(ref _disposed) == 0 && !_disposal.IsCancellationRequested)
         {
             lock (_gate)
@@ -215,7 +215,7 @@ public sealed class EngineConnection : IEngineTransport
             transport.NotificationReceived += OnInnerNotification;
             lock (_gate)
             {
-                // A newer status event owns the connection now; stand down
+                // A newer status event owns the connection now, so stand down
                 if (_generation == generation && _disposed == 0)
                 {
                     _transport = transport;

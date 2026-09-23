@@ -125,8 +125,8 @@ public sealed class EngineSupervisor(
         var exitCode = process.ExitCode;
         process.Dispose();
 
-        // Exit 0 is the engine leaving on request - a stop, never a crash.
-        // Counting it burns restart budget and races a settings-driven
+        // Exit 0 is the engine leaving on request, so it is a stop.
+        // Counting it would burn restart budget and race a settings-driven
         // Shutdown/Start with a spurious supervisor relaunch
         if (exitCode == 0)
         {
@@ -162,7 +162,7 @@ public sealed class EngineSupervisor(
         _relaunch = clock.CreateTimer(_ => Relaunch(), null, wait, Timeout.InfiniteTimeSpan);
     }
 
-    // The backoff elapsed; a Start or a Shutdown meanwhile has already settled it
+    // The backoff elapsed. A Start or a Shutdown meanwhile has already settled it
     private void Relaunch()
     {
         var changes = new List<EngineStatus>();

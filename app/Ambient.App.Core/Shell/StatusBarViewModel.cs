@@ -19,7 +19,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     public partial string LatestActivity { get; private set; } = "";
 
     // One status on screen, replaced as things happen: abnormal readiness
-    // outranks activity, activity outranks Ready; Busy drives the one ring
+    // outranks activity, activity outranks Ready. Busy drives the one ring
     public string DisplayLabel =>
         !_ready || _status != EngineStatus.Running ? EngineStateLabel
         : LatestActivity.Length > 0 ? LatestActivity
@@ -51,7 +51,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     private string _noteDevice = "";
 
     /// <summary>Fallback when a manifest has no display name: "whisper-turbo-int8"
-    /// reads as "Whisper Turbo"; precision suffix dropped, size tokens kept.</summary>
+    /// reads as "Whisper Turbo". The precision suffix is dropped, size tokens kept.</summary>
     public static string FriendlyModelName(string id)
     {
         var words = id.Split('-')
@@ -63,7 +63,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     }
 
     private static string ShortDevice(string device) =>
-        device.Split('.')[0];  // "GPU.0" is a build detail; "GPU" is the fact
+        device.Split('.')[0];  // the device index is a build detail
 
     private async Task LoadModelsAsync()
     {
@@ -75,8 +75,8 @@ public sealed partial class StatusBarViewModel : ObservableObject
         try
         {
             var models = await _engine.ListModelsAsync().ConfigureAwait(true);
-            // The chip names the model the engine marks active for the role, not
-            // the first listed; older engines send no flag, so the default tier is assumed
+            // The chip names the model the engine marks active for the role.
+            // Older engines send no flag, so the default tier is assumed
             _asrName = _noteName = "";
             foreach (var model in models.OrderBy(m => m.Active ? 0 : m.Tier == "default" ? 1 : 2))
             {
@@ -109,14 +109,14 @@ public sealed partial class StatusBarViewModel : ObservableObject
     public bool NoteActive => TokensStreaming;
 
     // The resting dot and healthy text are the visible-inverse halves of the
-    // colour pairs the view swaps; XAML gets properties, never functions
+    // colour pairs the view swaps, exposed as properties for XAML binding
     public bool AsrResting => !AsrActive;
 
     public bool NoteResting => !NoteActive;
 
     public bool RealtimeHealthy => !RealtimeLow;
 
-    // Live figures are unlabelled and move; settled ones say "Averaged" - the
+    // Live figures are unlabelled and move. Settled ones say "Averaged": the
     // session's true average, held through review for reading after a run
     private void RecomputeChips()
     {
@@ -228,7 +228,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
         RecomputeChips();
     }
 
-    /// <summary>Rolling tokens per second; holds its last value after a stream ends.</summary>
+    /// <summary>Rolling tokens per second. Holds its last value after a stream ends.</summary>
     [ObservableProperty]
     public partial double TokensPerSecond { get; private set; }
 
@@ -243,13 +243,13 @@ public sealed partial class StatusBarViewModel : ObservableObject
         PublishThroughput();
     }
 
-    /// <summary>Transcription speed as a multiple of real time; 0 when unknown.</summary>
+    /// <summary>Transcription speed as a multiple of real time, 0 when unknown.</summary>
     [ObservableProperty]
     public partial double RealtimeFactor { get; private set; }
 
     /// <summary>
     /// True from stop until the sealed transcript loads: the finalise tail
-    /// decode - the NPU's longest stage - keeps the RT figure on screen.
+    /// decode, the NPU's longest stage, keeps the RT figure on screen.
     /// </summary>
     [ObservableProperty]
     public partial bool DecodeActive { get; private set; }
@@ -279,15 +279,15 @@ public sealed partial class StatusBarViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(MemoryChipVisible))]
     public partial string MemoryChip { get; private set; } = "";
 
-    /// <summary>The chips are for testing, not GPs: off unless opted in.</summary>
+    /// <summary>The chips are for testing: off unless opted in.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AsrChipVisible), nameof(NoteChipVisible), nameof(MemoryChipVisible))]
     public partial bool MetricsVisible { get; set; }
 
-    // Shell + engine + note host: the honest on-device footprint. By name
-    // because the note host is the engine's child, not the shell's
-    // Polled at 1 Hz while recording - the factor updates per decoded
-    // window, so that IS its native rate. Failures leave the last value.
+    // Shell, engine and note host: the whole on-device footprint, found by
+    // name because the note host is the engine's child process. Polled at
+    // 1 Hz while recording, the rate the factor updates at. Failures leave
+    // the last value.
     public async Task PollMetricsOnceAsync()
     {
         var memory = await Task.Run(_memoryGb).ConfigureAwait(true);
@@ -337,7 +337,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     [ObservableProperty]
     public partial bool MicVisible { get; private set; }
 
-    /// <summary>Demo mode is on, or a demo record is on screen; shown beside the app name.</summary>
+    /// <summary>Demo mode is on, or a demo record is on screen. Shown beside the app name.</summary>
     [ObservableProperty]
     public partial bool Demo { get; set; }
 
@@ -394,7 +394,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     private EngineFault? _fault;
     private bool _ready;
 
-    /// <summary>True in every transient state; the status ring spins on it.</summary>
+    /// <summary>True in every transient state. The status ring spins on it.</summary>
     [ObservableProperty]
     public partial bool EngineStarting { get; private set; }
 
@@ -404,7 +404,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
         _fault = fault;
         Recompute();
 
-        // Silent restarts stay out of the activity log; faults go in
+        // Silent restarts stay out of the activity log. Faults go in
         if (status == EngineStatus.Faulted)
         {
             Append(EngineStateLabel);
@@ -433,7 +433,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
         OnPropertyChanged(nameof(Busy));
     }
 
-    /// <summary>Log-only detail, to the file and the developer panel; the displayed status stays concise.</summary>
+    /// <summary>Log-only detail, to the file and the developer panel. The displayed status stays concise.</summary>
     public void Log(string line)
     {
         _logger?.Line(line);

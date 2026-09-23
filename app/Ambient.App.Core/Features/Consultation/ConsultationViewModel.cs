@@ -76,7 +76,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         }
 
         Note.OptionsChanged = Readiness.NoteOptionsChanged;
-        // Off the transport's thread; a handler that throws must not take the others with it
+        // Off the transport's thread. A handler that throws must not take the others with it
         _engine.NotificationReceived += notification => dispatcher.Post(() =>
         {
             try
@@ -88,7 +88,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Status.Log($"{notification.GetType().Name} handler failed: {e.Message}");
             }
         });
-        // The status-bar label carries readiness; only the loss is log-worthy
+        // The status-bar label carries readiness. Only the loss is logged
         _engine.ConnectedChanged += connected => dispatcher.Post(() =>
         {
             EngineReady = connected;
@@ -103,7 +103,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             else
             {
                 // Whatever activity a restart interrupted ("switching
-                // transcription...") is over; resume overwrites this
+                // transcription...") is over. Resume overwrites this
                 Status.Append("Ready");
                 Readiness.Connected();
                 if (State == SessionState.Recording)

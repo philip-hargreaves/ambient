@@ -25,7 +25,7 @@ public sealed partial class SessionRecorder : ObservableObject
     private readonly AppPreferences? _preferences;
     private readonly DemoMode? _demo;
 
-    // A replay stops itself at the end of its file; 0 when the length is unknown
+    // A replay stops itself at the end of its file. Zero when the length is unknown
     private double _replayEndSeconds;
 
     public SessionRecorder(
@@ -49,8 +49,8 @@ public sealed partial class SessionRecorder : ObservableObject
 
     /// <summary>
     /// Where a stop has got to. The centre stage holds until the note streams,
-    /// so the pause of the note prefill is spent on a spinner that says so,
-    /// not on an empty document. Advances only forwards within one stop.
+    /// so the note prefill pause shows a spinner that says so.
+    /// Advances only forwards within one stop.
     /// </summary>
     [ObservableProperty]
     public partial FinalisePhase Phase { get; private set; } = FinalisePhase.None;
@@ -63,11 +63,11 @@ public sealed partial class SessionRecorder : ObservableObject
     [ObservableProperty]
     public partial double AudioSeconds { get; private set; }
 
-    /// <summary>The active session's replay request; null for a microphone.</summary>
+    /// <summary>The active session's replay request, null for a microphone.</summary>
     [ObservableProperty]
     public partial ReplayRequest? ActiveReplay { get; private set; }
 
-    /// <summary>The saved run being played back; null unless a demo plays.</summary>
+    /// <summary>The saved run being played back, null unless a demo plays.</summary>
     [ObservableProperty]
     public partial DemoMaster? ActivePlayback { get; private set; }
 
@@ -77,7 +77,7 @@ public sealed partial class SessionRecorder : ObservableObject
     /// <summary>The session the engine is recording into, for a resume after a restart.</summary>
     public string? RecordingSessionId { get; private set; }
 
-    /// <summary>A stop sealed this session; the review takes it over.</summary>
+    /// <summary>A stop sealed this session. The review takes it over.</summary>
     public event Action<string>? Sealed;
 
     public void ShowDemo(bool record)
@@ -116,14 +116,14 @@ public sealed partial class SessionRecorder : ObservableObject
     public void Refuse() =>
         State = State == SessionState.Finalising ? SessionState.Refused : SessionState.Review;
 
-    /// <summary>The review or the refusal was left; the panes are the caller's to clear.</summary>
+    /// <summary>The review or the refusal was left. The caller clears the panes.</summary>
     public void Idle()
     {
         Phase = FinalisePhase.None;
         State = SessionState.Idle;
     }
 
-    /// <summary>A finalise stage from the engine; a late stage cannot move the phase backwards.</summary>
+    /// <summary>A finalise stage from the engine. A late stage cannot move the phase backwards.</summary>
     public void AdvancePhase(string stage)
     {
         if (State != SessionState.Finalising || Phase >= FinalisePhase.Note)
@@ -143,7 +143,7 @@ public sealed partial class SessionRecorder : ObservableObject
     /// <summary>The first note token: the panes open on it.</summary>
     public void NoteStreaming() => Phase = FinalisePhase.Streaming;
 
-    /// <summary>The session ended without a stop; the recording is kept.</summary>
+    /// <summary>The session ended without a stop. The recording is kept.</summary>
     public void Interrupt(string? detail)
     {
         State = SessionState.Idle;
@@ -160,7 +160,7 @@ public sealed partial class SessionRecorder : ObservableObject
             : "Recording interrupted - session kept");
     }
 
-    /// <summary>A level reading; a playback's carries the position its clock has reached.</summary>
+    /// <summary>A level reading. A playback's reading carries the position its clock has reached.</summary>
     public void OnAudioLevel(AudioLevel level)
     {
         _status.SetMicLevel(level.Level, level.Clipped);
@@ -195,7 +195,7 @@ public sealed partial class SessionRecorder : ObservableObject
         }
 
         // Keep consultations off: the engine erases the session once it is left.
-        // An empty mic id means the default; one that has gone falls back there, logged
+        // An empty mic id means the default. One that has gone falls back there, logged
         var retain = _preferences?.KeepConsultations ?? true;
         var start = replay is null
             ? () => _engine.StartSessionAsync(retain, _preferences?.MicId ?? "")
@@ -213,7 +213,7 @@ public sealed partial class SessionRecorder : ObservableObject
 
     /// <summary>
     /// A stored consultation played back as a demo: the same states, sped up,
-    /// nothing generated. Never a performance measurement.
+    /// nothing generated. Not used for performance measurement.
     /// </summary>
     public async Task StartPlaybackAsync(DemoMaster playback)
     {
@@ -348,7 +348,7 @@ public sealed partial class SessionRecorder : ObservableObject
             .ConfigureAwait(true);
         if (stopped is null)
         {
-            // A failed stop must not wedge the UI; the recording is safe in
+            // A failed stop must not wedge the UI. The recording is safe in
             // the store either way
             State = SessionState.Idle;
             _note.Reset();
@@ -360,7 +360,7 @@ public sealed partial class SessionRecorder : ObservableObject
         }
 
         // The finalised transcript carries the speaker labels the live feed
-        // could not; it replaces the pane once the engine has sealed it
+        // could not. It replaces the pane once the engine has sealed it
         if (stopped.Length > 0)
         {
             Sealed?.Invoke(stopped);
@@ -373,7 +373,7 @@ public sealed partial class SessionRecorder : ObservableObject
         if (string.IsNullOrEmpty(id))
         {
             _status.SetDecodeActive(false);
-            Phase = FinalisePhase.Note;  // nothing to fetch; the panes still open
+            Phase = FinalisePhase.Note;  // nothing to fetch, the panes still open
             return;
         }
 

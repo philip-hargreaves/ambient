@@ -57,7 +57,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         _initialising = false;
     }
 
-    /// <summary>"system", "light" or "dark"; the shell applies it live.</summary>
+    /// <summary>"system", "light" or "dark". The shell applies it live.</summary>
     [ObservableProperty]
     public partial string Theme { get; set; } = "system";
 
@@ -86,7 +86,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         set => Theme = AppPreferences.Themes[Math.Clamp(value, 0, AppPreferences.Themes.Count - 1)];
     }
 
-    /// <summary>Runs transcription on the NPU; the engine restarts to apply.</summary>
+    /// <summary>Runs transcription on the NPU. The engine restarts to apply it.</summary>
     [ObservableProperty]
     public partial bool NpuTranscription { get; set; }
 
@@ -144,7 +144,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         }
     }
 
-    /// <summary>Shows the replay tray. A developer control, never clinical.</summary>
+    /// <summary>Shows the replay tray. A developer control.</summary>
     [ObservableProperty]
     public partial bool DemoTrayEnabled { get; set; }
 
@@ -180,7 +180,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         ? "Record plays the chosen saved run back in seconds; nothing is transcribed or written"
         : "No saved runs yet: record them with tools/demo/record_masters.py";
 
-    /// <summary>The chosen track as the picker's selection; unknown falls back to the first.</summary>
+    /// <summary>The chosen track as the picker's selection. An unknown track falls back to the first.</summary>
     public int DemoTrackIndex
     {
         get => Math.Max(0, DemoTrackOptions.ToList().IndexOf(_demo?.Track ?? ""));
@@ -216,7 +216,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         }
     }
 
-    /// <summary>Local performance collection; numbers and device names only.</summary>
+    /// <summary>Local performance collection: numbers and device names only.</summary>
     [ObservableProperty]
     public partial bool CollectPerformanceData { get; set; }
 

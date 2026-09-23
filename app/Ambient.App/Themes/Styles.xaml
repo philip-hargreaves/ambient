@@ -44,8 +44,8 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- Mica is level 1, layer fill 2, inner cards 3; lift comes from fill
-         difference, never the border -->
+    <!-- Mica is level 1, layer fill 2, inner cards 3. Lift comes from the fill
+         difference alone -->
     <Style x:Key="CardSurface" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
@@ -181,7 +181,7 @@
         <Setter Property="Margin" Value="0,2,0,0" />
     </Style>
 
-    <!-- Chip base; the role's colours apply at the usage site -->
+    <!-- Chip base. The role's colours apply at the usage site -->
     <Style x:Key="ChipBorder" TargetType="Border">
         <Setter Property="CornerRadius" Value="10" />
         <Setter Property="Padding" Value="9,3" />

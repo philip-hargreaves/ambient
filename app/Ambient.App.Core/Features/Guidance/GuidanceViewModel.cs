@@ -46,7 +46,7 @@ public sealed partial class GuidanceViewModel : ObservableObject
         _status = status;
     }
 
-    /// <summary>The section folded to its heading; the review's patient sheet folds the same way.</summary>
+    /// <summary>The section folded to its heading. The review's patient sheet folds the same way.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BodyVisible), nameof(FoldGlyph))]
     public partial bool Folded { get; set; }

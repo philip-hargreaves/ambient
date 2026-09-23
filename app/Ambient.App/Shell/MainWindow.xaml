@@ -17,7 +17,7 @@
         <TitleBar x:Name="AppTitleBar" Title="Ambient" />
 
         <!-- Beside the name: demo mode is on, or a demo record is on screen. Laid over the
-             bar, since its content slot centres and makes the bar tall; drags pass through -->
+             bar, since its content slot centres and makes the bar tall. Drags pass through -->
         <TextBlock
             Margin="64,0,0,0"
             HorizontalAlignment="Left"

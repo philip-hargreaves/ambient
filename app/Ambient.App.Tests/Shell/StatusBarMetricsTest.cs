@@ -39,8 +39,8 @@ public class StatusBarMetricsTest
         var (status, engine) = Create();
         await WaitUntilAsync(() => status.NoteChip.Length > 0);
 
-        // The engine meters at the source, before its 12 Hz throttle: the
-        // shell shows that figure, not how often notifications arrived
+        // The engine meters at the source, before its 12 Hz throttle, and the
+        // shell shows that figure
         engine.RaiseNotification("note/partial",
             Params(new { text = "The", tokensPerSecond = 15.3 }));
         Assert.Equal(15.3, status.TokensPerSecond);
@@ -145,7 +145,7 @@ public class StatusBarMetricsTest
         engine.RaiseNotification("note/partial", Params(new { text = "The patient" }));
         engine.RaiseNotification("note/ready");
 
-        // Frozen value survives the stream's end; a new consultation clears it
+        // The frozen value survives the stream's end. A new consultation clears it
         var frozen = status.NoteChip;
         status.ResetThroughput();
         Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
@@ -204,7 +204,7 @@ public class StatusBarMetricsTest
         await status.PollMetricsOnceAsync();
         Assert.Equal("Memory · 5.1 GB", status.MemoryChip);
 
-        reading = 0;  // the provider failed; no figure beats a wrong one
+        reading = 0;  // the provider failed, so no figure shows
         await status.PollMetricsOnceAsync();
         Assert.Equal("", status.MemoryChip);
     }

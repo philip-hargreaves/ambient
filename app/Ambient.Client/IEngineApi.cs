@@ -7,7 +7,7 @@ namespace Ambient.Client;
 /// </summary>
 public interface IEngineApi
 {
-    /// <summary>True while a verified transport is up; requests can succeed.</summary>
+    /// <summary>True while a verified transport is up and requests can succeed.</summary>
     bool Connected { get; }
 
     event Action<bool>? ConnectedChanged;
@@ -59,7 +59,7 @@ public interface IEngineApi
 
     Task DeleteSessionAsync(string id);
 
-    /// <summary>Erases every stored consultation; how many went.</summary>
+    /// <summary>Erases every stored consultation and returns how many went.</summary>
     Task<int> DeleteAllSessionsAsync();
 
     // Notes
@@ -125,7 +125,7 @@ public interface IEngineApi
 
     Task DeleteReflectionAsync(string id);
 
-    // Demo data; how many consultations were added or removed
+    // Demo data. Each call returns how many consultations were added or removed
     Task<int> SeedDemoAsync();
 
     Task<int> ClearDemoAsync();

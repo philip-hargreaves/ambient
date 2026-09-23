@@ -3,7 +3,7 @@ using Ambient.App.Core.Ports;
 
 namespace Ambient.App.Platform;
 
-/// <summary>Memory figures through System.Diagnostics; a process that has gone reads as null.</summary>
+/// <summary>Memory figures through System.Diagnostics, where a process that has exited reads as null.</summary>
 public sealed class ProcessMetrics : IProcessMetrics
 {
     public long? PeakWorkingSetMb(int pid) => Of(pid, p => p.PeakWorkingSet64);

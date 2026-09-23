@@ -20,7 +20,7 @@ public static class CrashDumps
                 using var key = hive.CreateSubKey($@"{LocalDumps}\{exe}");
                 key.SetValue("DumpFolder", dumpFolder, RegistryValueKind.ExpandString);
                 key.SetValue("DumpCount", 3, RegistryValueKind.DWord);
-                key.SetValue("DumpType", 1, RegistryValueKind.DWord);  // mini, not full
+                key.SetValue("DumpType", 1, RegistryValueKind.DWord);  // minidump
             }
             catch (Exception)
             {

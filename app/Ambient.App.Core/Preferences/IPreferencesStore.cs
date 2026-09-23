@@ -1,6 +1,6 @@
 namespace Ambient.App.Core.Preferences;
 
-/// <summary>Where the preferences json lives; a file in production, memory in a test.</summary>
+/// <summary>Where the preferences json lives: a file in production, memory in a test.</summary>
 public interface IPreferencesStore
 {
     /// <summary>The stored json, or null when nothing has been saved yet.</summary>

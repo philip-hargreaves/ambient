@@ -3,7 +3,7 @@ using Ambient.App.Core.Metrics;
 
 namespace Ambient.App.Platform;
 
-/// <summary>The machine as the registry and WMI describe it; queried once.</summary>
+/// <summary>The machine as the registry and WMI describe it, queried once.</summary>
 public sealed class WmiMachineInfoProvider : IMachineInfoProvider
 {
     private MachineInfo? _cached;
@@ -17,7 +17,7 @@ public sealed class WmiMachineInfoProvider : IMachineInfoProvider
             "ProcessorNameString", null) as string ?? "unknown";
         var ramGb = (int)Math.Round(
             GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024 * 1024));
-        // ProductName still says "Windows 10" on Windows 11; the build says
+        // ProductName still says "Windows 10" on Windows 11, so the build decides
         const string versionKey =
             @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion";
         var product = Registry.GetValue(versionKey, "ProductName", "Windows") as string

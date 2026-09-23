@@ -6,7 +6,7 @@
 
     <StackPanel Spacing="14">
 
-        <!-- The title is the consultation's label; a journal card shows it in its header instead -->
+        <!-- The title is the consultation's label. A journal card shows it in its header instead -->
         <StackPanel Spacing="2" Visibility="{x:Bind ShowHeading}">
             <TextBox
                 AutomationProperties.Name="Reflection title"
@@ -21,7 +21,7 @@
             <TextBlock Style="{StaticResource CaptionText}" Text="{x:Bind ViewModel.Month, Mode=OneWay}" />
         </StackPanel>
 
-        <!-- The case study; the clinician may correct it -->
+        <!-- The case study, which the clinician may correct -->
         <Border Style="{StaticResource InnerCardSurface}" Padding="14,10,14,12">
             <StackPanel Spacing="6">
                 <Grid>
@@ -100,7 +100,7 @@
                 TextWrapping="Wrap" />
         </StackPanel>
 
-        <!-- Copy and Save as text; Remove only in a journal card -->
+        <!-- Copy and Save as text. Remove only in a journal card -->
         <Grid>
             <HyperlinkButton
                 Padding="0"

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Ambient.Client;
 
 // Replies as the engine sends them. Every field has a default so a sparse or
-// empty reply still parses; a null string is one the engine left out
+// empty reply still parses. A null string is one the engine left out
 
 public sealed record EngineReadiness(bool FirstUse = false, bool Ready = true, bool StrayNoteHost = false);
 
@@ -92,7 +92,7 @@ public sealed record GuidanceResult(
     string? LastUpdated = null, string? UpdateTag = null, string? Source = null,
     string? Citation = null, string? Trigger = null, long Document = 0, int Page = 0, int Pages = 0);
 
-/// <summary>A corpus the search covered; labelled when its manifest names a publisher.</summary>
+/// <summary>A corpus the search covered, labelled when its manifest names a publisher.</summary>
 public sealed record SearchedCorpus(string Id = "", string Name = "", string? Label = null);
 
 /// <summary>

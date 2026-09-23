@@ -11,8 +11,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <!-- Opened to a star share in code when a translation exists;
-                 a collapsed star row would still claim its share -->
+            <!-- Opened to a star share in code when a translation exists.
+                 A collapsed star row would still claim its share -->
             <RowDefinition x:Name="TranslationRow" Height="0" />
         </Grid.RowDefinitions>
 
@@ -55,7 +55,7 @@
                 </HyperlinkButton>
             </StackPanel>
             </StackPanel>
-            <!-- Only the sheet is translated - the note is the clinical
+            <!-- Only the sheet is translated. The note is the clinical
                  record and stays in English -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                 <ComboBox
@@ -143,7 +143,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <!-- Says what it is: "Polish translation", never a bare box -->
+            <!-- Labelled by language, for example "Polish translation" -->
             <TextBlock
                 Style="{StaticResource CaptionText}"
                 Text="{x:Bind ViewModel.TranslationCaption, Mode=OneWay}" />

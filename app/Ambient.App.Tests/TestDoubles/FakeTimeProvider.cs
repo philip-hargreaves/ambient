@@ -1,6 +1,6 @@
 namespace Ambient.App.Tests.TestDoubles;
 
-/// <summary>A clock the test moves; timers fire when it passes their due time.</summary>
+/// <summary>A clock the test moves. Timers fire when it passes their due time.</summary>
 internal sealed class FakeTimeProvider : TimeProvider
 {
     private readonly List<FakeTimer> _timers = [];

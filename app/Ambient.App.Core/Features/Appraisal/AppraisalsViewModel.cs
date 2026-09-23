@@ -24,7 +24,7 @@ public sealed partial class ReflectionCard : ObservableObject
         Next = next;
     }
 
-    /// <summary>Searched, not shown.</summary>
+    /// <summary>Used only for search.</summary>
     [ObservableProperty]
     public partial string Happened { get; set; }
 
@@ -51,7 +51,7 @@ public sealed partial class ReflectionCard : ObservableObject
 
     public string MonthLabel => Started.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
-    /// <summary>Searched, not shown.</summary>
+    /// <summary>Used only for search.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Line))]
     public partial string Learned { get; set; }
@@ -126,7 +126,7 @@ public sealed partial class AppraisalsViewModel : ObservableObject
         _navigation = navigation;
     }
 
-    // A month with entries filters to it; an empty one says so
+    // A month with entries filters to it. An empty one says so
     [RelayCommand]
     private void PressMonth(MonthMarker month)
     {
@@ -186,7 +186,7 @@ public sealed partial class AppraisalsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Pressing a month narrows the year to it; pressing it again shows the year.</summary>
+    /// <summary>Pressing a month narrows the year to it. Pressing it again shows the year.</summary>
     public void ToggleMonth(int month)
     {
         if (_all.All(c => c.Started.Year != Year || c.Started.Month != month))

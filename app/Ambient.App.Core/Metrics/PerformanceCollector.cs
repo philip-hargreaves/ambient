@@ -11,7 +11,7 @@ namespace Ambient.App.Core.Metrics;
 /// Appends one JSON line per finished session to metrics.jsonl: the engine's
 /// metrics snapshot plus shell-side timings for the clinical note and the
 /// patient note, the note model, and memory peaks. Numbers and device names
-/// only, never content. Writes nothing unless enabled.
+/// only, with no content. Writes nothing unless enabled.
 /// </summary>
 public sealed class PerformanceCollector(
     IEngineApi engine, Func<bool> enabled, Func<int?> enginePid, string path,
@@ -42,7 +42,7 @@ public sealed class PerformanceCollector(
 
     public string Path { get; } = path;
 
-    /// <summary>The note model the engine reports resident; remembered across sessions.</summary>
+    /// <summary>The note model the engine reports resident, remembered across sessions.</summary>
     public void NoteModel(string? name, string? tier, double? loadSeconds)
     {
         _modelName = name;
@@ -82,7 +82,7 @@ public sealed class PerformanceCollector(
         }
     }
 
-    /// <summary>The clinical note is complete; the patient note's clock starts here.</summary>
+    /// <summary>The clinical note is complete. The patient note's clock starts here.</summary>
     public void NoteReady(double? tokensPerSecond = null)
     {
         if (_stopClock is not null)

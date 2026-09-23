@@ -3,7 +3,7 @@ namespace Ambient.App.Tests.Support;
 /// <summary>
 /// Locates the engine binary for real-engine tests: an explicit override,
 /// else the release build, else the newest binary under any preset. Release
-/// is preferred to match the shipped app — and because OpenVINO's debug GPU
+/// is preferred to match the shipped app, and because OpenVINO's debug GPU
 /// plugin asserts on the second generation of the note/patient lane.
 /// </summary>
 public static class EnginePath

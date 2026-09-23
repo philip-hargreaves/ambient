@@ -1,7 +1,7 @@
 namespace Ambient.App.Core.Features.Documents;
 
 /// <summary>
-/// Generation is sequential, so the pipeline has exactly these states; a
+/// Generation is sequential, so the pipeline has exactly these states. A
 /// patient leaflet without a clinical note cannot be represented.
 /// </summary>
 public enum NotePipelineState
@@ -15,7 +15,7 @@ public enum NotePipelineState
     NoteRefused,
 }
 
-/// <summary>Engine-reported progress; the view model projects, never sequences.</summary>
+/// <summary>Engine-reported progress. The view model only projects it.</summary>
 public enum NotePipelineEvent
 {
     NoteWritingStarted,

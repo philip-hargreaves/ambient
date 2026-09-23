@@ -11,7 +11,7 @@ namespace Ambient.App.Core.Metrics;
 /// </summary>
 public static class ReportBuilder
 {
-    // Shorter than this is an accidental click, not a consultation
+    // Shorter than this is treated as an accidental click
     private const double MinAudioSeconds = 30;
 
     private sealed record Consultation(
@@ -342,7 +342,7 @@ public static class ReportBuilder
             Row(html, "OpenVINO", openvino);
         }
 
-        // Power mode and throttling decide the finalise floor; the last
+        // Power mode and throttling decide the finalise floor. The last
         // session's state stands for the report
         var power = sessions.Select(s => Find(s, "power"))
             .LastOrDefault(p => p is { ValueKind: JsonValueKind.Object });
@@ -369,7 +369,7 @@ public static class ReportBuilder
         html.Append("</table>");
     }
 
-    // The driver names every Intel NPU "AI Boost"; the architecture code is
+    // The driver names every Intel NPU "AI Boost". The architecture code is
     // the actual model, so translate it to the generation
     private static string NpuGeneration(string name)
     {

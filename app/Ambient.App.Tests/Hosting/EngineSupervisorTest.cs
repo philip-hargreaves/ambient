@@ -13,7 +13,7 @@ public class EngineSupervisorTest
 
         public bool HasExited { get; private set; } = stillborn;
 
-        // A process dead at launch crashed; only a requested exit is 0
+        // A process dead at launch crashed. Only a requested exit is 0
         public int ExitCode { get; private set; } = stillborn ? 1 : 0;
 
         public bool Killed { get; private set; }

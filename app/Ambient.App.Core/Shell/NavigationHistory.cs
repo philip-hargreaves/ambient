@@ -21,7 +21,7 @@ public sealed class NavigationHistory<T>
         Current = surface;
     }
 
-    /// <summary>The previous surface, now current again; null when there is none.</summary>
+    /// <summary>The previous surface, now current again, null when there is none.</summary>
     public T? Back()
     {
         if (_back.Count == 0)

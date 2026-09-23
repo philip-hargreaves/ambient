@@ -310,11 +310,11 @@ public class SettingsViewModelTest
         Assert.Equal(["Qwen3.5 4B", "Qwen3.5 9B", "Qwen3.6 35B"], settings.NoteModel.NoteModelOptions);
         Assert.Equal(2, settings.NoteModel.NoteModelIndex);
         Assert.True(settings.NoteModel.NoteModelEnabled);
-        Assert.DoesNotContain(engine.Requests, r => r.Method == "note/tier");  // restoring is not choosing
+        Assert.DoesNotContain(engine.Requests, r => r.Method == "note/tier");  // restoring a saved tier sends no request
     }
 
-    // A reconnect re-reads the store; the same models must not rebuild the bound
-    // collection under the control, only a changed store does
+    // A reconnect re-reads the store. Only a changed store rebuilds the bound
+    // collection under the control
     [Fact]
     public void AReconnectWithTheSameModelsLeavesTheCollectionAlone()
     {

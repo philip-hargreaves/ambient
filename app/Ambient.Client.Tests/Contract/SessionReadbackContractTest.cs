@@ -20,7 +20,7 @@ public class SessionReadbackContractTest
             await using var engine =
                 EngineProcess.Start($"LOCAL\\ambient-readback-{Guid.NewGuid():N}", wav);
             await using var client = await engine.ConnectAsync();
-            // The note and sheet follow the seal on their own thread; wait for them
+            // The note and sheet follow the seal on their own thread, so wait for them
             var patientReady = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             client.NotificationReceived += (method, _) =>
@@ -51,7 +51,7 @@ public class SessionReadbackContractTest
             Assert.StartsWith("Scripted turn 0", turns[0].GetProperty("text").GetString());
             Assert.Equal(0, turns[0].GetProperty("firstFrame").GetInt64());
             // Stop may land before the fast replay finishes, so the tail holds
-            // whatever had arrived; two seconds of audio is the ceiling
+            // whatever had arrived. Two seconds of audio is the ceiling
             Assert.InRange(turns[0].GetProperty("frameCount").GetInt64(), 1, 32000);
 
             // The CI engine has no note model: the record starts empty, with
@@ -77,9 +77,9 @@ public class SessionReadbackContractTest
             Assert.Equal("Elbow swelling", row.GetProperty("label").GetString());
             Assert.False(string.IsNullOrEmpty(row.GetProperty("editedAt").GetString()));
 
-            // Review: a past session reopens for regeneration; the CI engine
-            // has no note model, so regenerate is refused cleanly rather than
-            // crashing, and close ends the review
+            // Review: a past session reopens for regeneration. The CI engine
+            // has no note model, so regenerate is refused cleanly, and close
+            // ends the review
             await client.RequestAsync("session/open", new { id }, Timeout);
             await Assert.ThrowsAnyAsync<Exception>(
                 () => client.RequestAsync(
@@ -94,7 +94,7 @@ public class SessionReadbackContractTest
             Assert.Equal(0, after.GetProperty("sessions").GetArrayLength());
 
             // Keep consultations off: readable by id until the consultation
-            // is left, but never in history - and erased at close
+            // is left, absent from history, and erased at close
             await client.RequestAsync("session/start", new { retain = false }, Timeout);
             var unretainedId = (await client.RequestAsync("session/stop", null, Timeout))
                 .GetProperty("sessionId").GetString()!;

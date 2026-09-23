@@ -14,9 +14,9 @@
 
         <TextBlock Style="{StaticResource PaneHeaderText}" Text="Transcript" />
 
-        <!-- Each turn is a card, and the card IS the item container, so the
+        <!-- Each turn is a card, and the card is the item container, so the
              platform's hover and theme behaviour stay underneath. The
-             speaker's colour is a rounded edge, not a tint. -->
+             speaker's colour is a rounded edge. -->
         <ListView
             x:Name="TurnList"
             Grid.Row="1"

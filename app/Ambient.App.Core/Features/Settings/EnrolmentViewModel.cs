@@ -20,7 +20,7 @@ public enum EnrolmentState
 /// </summary>
 public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
 {
-    /// <summary>A cap the reader never sees; Finish is how a reading ends.</summary>
+    /// <summary>A cap the reader never sees. Finish is how a reading ends.</summary>
     public const double DefaultSeconds = 120;
 
     /// <summary>What the engine needs before it will make a print.</summary>
@@ -115,7 +115,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         _ => "Cancel",
     };
 
-    /// <summary>True once a print was made; false on cancel, failure or dismissal.</summary>
+    /// <summary>True once a print was made. False on cancel, failure or dismissal.</summary>
     public Task<bool> Outcome => _outcome.Task;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
@@ -167,7 +167,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The dialog was dismissed; a reading in flight is cancelled.</summary>
+    /// <summary>The dialog was dismissed. A reading in flight is cancelled.</summary>
     public void Dismiss()
     {
         if (State == EnrolmentState.Recording)

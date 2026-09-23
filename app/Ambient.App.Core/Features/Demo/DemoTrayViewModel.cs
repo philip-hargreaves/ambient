@@ -58,7 +58,7 @@ public sealed partial class DemoTrayViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
     public partial DemoTrack? SelectedTrack { get; set; }
 
-    // Read once per selection, not on every progress tick
+    // Read once per selection, so progress ticks do not reread it
     private double _durationSeconds;
 
     partial void OnSelectedTrackChanged(DemoTrack? value) =>
@@ -85,7 +85,7 @@ public sealed partial class DemoTrayViewModel : ObservableObject
         SelectedTrack = track;
     }
 
-    // ---- speed: cycles 1 -> 4 -> 8 -> 16; anything over 1x is smoke-only
+    // ---- speed: cycles 1 -> 4 -> 8 -> 16. Anything over 1x is for smoke tests only
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SpeedLabel))]

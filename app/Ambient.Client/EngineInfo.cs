@@ -5,7 +5,7 @@ public static class EngineInfo
     public const string Name = "ambient";
     public const string Version = "0.1.0";
 
-    // The engine's default; main.cpp holds the native side of this constant
+    // The engine's default, mirrored on the native side in main.cpp
     public const string PipeName = "LOCAL\\ambient-engine";
 }
 

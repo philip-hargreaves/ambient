@@ -5,7 +5,7 @@ namespace Ambient.App.Features.Settings;
 
 /// <summary>
 /// The passage, the ring and the verdict. The primary button is Start, then
-/// Finish, then Done or Try again; Cancel stops a reading and keeps nothing.
+/// Finish, then Done or Try again. Cancel stops a reading and keeps nothing.
 /// </summary>
 public sealed partial class EnrolmentDialog : ContentDialog
 {

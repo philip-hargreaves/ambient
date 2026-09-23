@@ -46,7 +46,7 @@ public sealed partial class NoteModelSettings : ObservableObject
     [ObservableProperty]
     public partial bool NoteModelEnabled { get; set; }
 
-    /// <summary>Lane status; empty when nothing is happening.</summary>
+    /// <summary>Lane status, empty when nothing is happening.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NoteModelCaption))]
     public partial string NoteModelStatus { get; set; } = "";
@@ -55,7 +55,7 @@ public sealed partial class NoteModelSettings : ObservableObject
     public string NoteModelCaption =>
         string.IsNullOrEmpty(NoteModelStatus) ? "Larger models are more accurate and use more memory." : NoteModelStatus;
 
-    /// <summary>The tier the shell wants; the engine's store resolves it.</summary>
+    /// <summary>The tier the shell wants. The engine's store resolves it.</summary>
     public string NoteTier => _noteTier;
 
     /// <summary>The engine connected: the options come from its store.</summary>
@@ -152,7 +152,7 @@ public sealed partial class NoteModelSettings : ObservableObject
             return;
         }
 
-        // The switch ends the resident model; a consultation needs it
+        // The switch ends the resident model. A consultation needs it
         if (_session?.ConsultationActive == true)
         {
             _reverting = true;
@@ -202,7 +202,7 @@ public sealed partial class NoteModelSettings : ObservableObject
         }
     }
 
-    // A refused or failed switch reverts to the previous tier, once; the
+    // A refused or failed switch reverts to the previous tier, once, and the
     // engine is told
     private void RevertTier(string reason)
     {

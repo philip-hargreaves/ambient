@@ -35,7 +35,7 @@ internal sealed class EngineProcess : IAsyncDisposable
         _process.BeginErrorReadLine();
     }
 
-    // Private pipe and roots per run so tests never touch the app's; a replay
+    // Private pipe and roots per run so tests leave the app's alone. A replay
     // wav stands in for the microphone
     public static EngineProcess Start(
         string? pipeName = null, string? replayWavPath = null, string? modelsRoot = null)
@@ -143,7 +143,7 @@ internal sealed class EngineProcess : IAsyncDisposable
         }
         catch (IOException)
         {
-            // A leftover temp store is noise, not a failure
+            // A leftover temp store is harmless
         }
     }
 }

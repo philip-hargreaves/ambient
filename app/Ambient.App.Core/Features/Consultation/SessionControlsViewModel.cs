@@ -69,7 +69,7 @@ public sealed partial class SessionControlsViewModel : ObservableObject
 
     public SessionState State => _session.State;
 
-    // The view swaps by state; computed here so it is testable
+    // The view swaps by state. Computed here so it is testable
     public bool IdleVisible => _session.State == SessionState.Idle;
 
     public bool RecordingVisible => _session.State == SessionState.Recording;
@@ -92,7 +92,7 @@ public sealed partial class SessionControlsViewModel : ObservableObject
         ? _mic.FullName
         : "In use - changes apply to the next consultation";
 
-    // The centre holds until the note streams; panes and centre never coexist
+    // The centre holds until the note streams. Panes and centre never show together
     public bool CentreStageVisible =>
         _session.State is SessionState.Idle or SessionState.Recording or SessionState.Refused
         || _session.State == SessionState.Finalising && _session.Phase != FinalisePhase.Streaming;

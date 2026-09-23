@@ -49,7 +49,7 @@ public sealed class SessionReview
         recorder.Sealed += Sealed;
     }
 
-    /// <summary>The session the documents belong to; null before a stop or an open.</summary>
+    /// <summary>The session the documents belong to, null before a stop or an open.</summary>
     public string? FinalisedSessionId { get; private set; }
 
     /// <summary>What the store holds, for autosaving in-place edits on leave.</summary>
@@ -57,7 +57,7 @@ public sealed class SessionReview
 
     public string LoadedPatient { get; set; } = "";
 
-    /// <summary>True from a regenerate request until its pipeline settles; keeps the rewrite out of the per-session metrics.</summary>
+    /// <summary>True from a regenerate request until its pipeline settles. Keeps the rewrite out of the per-session metrics.</summary>
     public bool Regenerating { get; set; }
 
     /// <summary>How long added documents must stop changing before the note is searched again.</summary>
@@ -68,7 +68,7 @@ public sealed class SessionReview
     {
         FinalisedSessionId = id;
         _finalisedStartedAt = "";
-        // An unkept consultation is erased on leaving; a reflection cannot outlive it
+        // An unkept consultation is erased on leaving, so a reflection cannot outlive it
         _note.ReflectAvailable = _preferences?.KeepConsultations != false;
         _note.HasReflection = false;
     }
@@ -141,7 +141,7 @@ public sealed class SessionReview
         }
     }
 
-    // Results are keyed to the consultation on screen; a typed query has no id.
+    // Results are keyed to the consultation on screen. A typed query has no id.
     // A search replaced by a newer one says so and changes nothing
     public void ApplyGuidance(GuidanceRecord record)
     {
@@ -366,7 +366,7 @@ public sealed class SessionReview
         var sheetWritten = patient?.GeneratedAt ?? "";
         _note.PatientStale = noteEdited.Length > 0 && sheetWritten.Length > 0
             && string.CompareOrdinal(noteEdited, sheetWritten) > 0;
-        // What this note was shown, without a model; nothing to read for an empty note
+        // What this note was shown, without a model. Nothing to read for an empty note
         if (_note.ClinicalNoteText.Length > 0)
         {
             var stored = await EngineStep.TryAsync(_status, "session/guidance", () => _engine.StoredGuidanceAsync(id))

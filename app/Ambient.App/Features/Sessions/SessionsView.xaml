@@ -94,7 +94,7 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- The title is the label, edited in place; the header shares the documents' column -->
+            <!-- The title is the label, edited in place. The header shares the documents' column -->
             <Grid
                 x:Name="DetailHeader"
                 MaxWidth="1480"
@@ -130,7 +130,7 @@
                 </StackPanel>
             </Grid>
 
-            <!-- Wide: note and patient sheet beside the transcript; narrow: tabs. Views move in code -->
+            <!-- Wide: note and patient sheet beside the transcript. Narrow: tabs. Views move in code -->
             <Grid
                 x:Name="WideLayout"
                 Grid.Row="1"
@@ -142,7 +142,7 @@
                     <ColumnDefinition Width="*" MaxWidth="760" />
                     <ColumnDefinition Width="*" MaxWidth="700" />
                 </Grid.ColumnDefinitions>
-                <!-- The patient sheet folds; the note does not -->
+                <!-- The patient sheet folds. The note does not -->
                 <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="0,0,12,0" Spacing="6">
                         <TextBlock Style="{StaticResource DocumentHeadingText}" Text="Clinical note" />
@@ -257,8 +257,8 @@
                 Text="Its transcript, note and patient sheet open here." />
         </StackPanel>
 
-        <!-- Keep consultations is off and nothing is stored: the page says
-             so instead of presenting an empty list as a mystery -->
+        <!-- Keep consultations is off and nothing is stored: the page explains
+             why the list is empty -->
         <StackPanel
             Grid.Row="1"
             Grid.ColumnSpan="2"

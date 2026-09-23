@@ -75,7 +75,7 @@ public class PipeTransportTest
     {
         var name = UniquePipeName();
         await using var fake = new FakeEngine(name, _ => []);
-        // The fake server runs in this test process; demand a pid it cannot have.
+        // The fake server runs in this test process, so demand a pid it cannot have.
         var wrongPid = (uint)(Environment.ProcessId + 1);
 
         var error = await Assert.ThrowsAsync<IOException>(
@@ -126,12 +126,12 @@ public class PipeTransportTest
         await using var fake = new FakeEngine(name, request =>
         {
             var id = request.RootElement.GetProperty("id").GetInt64();
-            // An id but neither result nor error: the request must fault, not hang.
+            // An id but neither result nor error: the request must fault promptly.
             return [$"{{\"jsonrpc\":\"2.0\",\"id\":{id}}}"];
         });
         await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
 
-        // The missing result member, not the cancellation a timeout would raise
+        // The missing result member raises its own exception, distinct from a timeout
         await Assert.ThrowsAsync<KeyNotFoundException>(
             () => transport.RequestAsync("engine/echo", null, Timeout));
     }

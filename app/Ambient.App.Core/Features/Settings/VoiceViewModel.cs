@@ -10,11 +10,11 @@ namespace Ambient.App.Core.Features.Settings;
 
 /// <summary>
 /// The clinician's voiceprint as one thing: learned from consultations, or set
-/// up by reading a passage and refined by consultations after that. Never two.
+/// up by reading a passage and refined by consultations after that. There is only ever one.
 /// </summary>
 public sealed partial class VoiceViewModel : ObservableObject
 {
-    // Below this the automatic print is still settling; the copy says so
+    // Below this the automatic print is still settling. The copy says so
     private const int LearnedAfterSessions = 5;
 
     private readonly IEngineApi _engine;

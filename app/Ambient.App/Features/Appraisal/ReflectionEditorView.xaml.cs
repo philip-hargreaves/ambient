@@ -6,7 +6,7 @@ using Ambient.App.Core.Features.Appraisal;
 namespace Ambient.App.Features.Appraisal;
 
 /// <summary>
-/// The case study and the three questions; used by the sheet and the journal cards.
+/// The case study and the three questions, used by the sheet and the journal cards.
 /// </summary>
 public sealed partial class ReflectionEditorView : UserControl
 {
@@ -21,10 +21,10 @@ public sealed partial class ReflectionEditorView : UserControl
 
     public ReflectionViewModel ViewModel { get; }
 
-    /// <summary>The title and month; off inside a journal card, whose header carries them.</summary>
+    /// <summary>The title and month. Off inside a journal card, whose header carries them.</summary>
     public bool ShowHeading { get; }
 
-    /// <summary>Removes the entry; only a journal card offers it.</summary>
+    /// <summary>Removes the entry. Only a journal card offers it.</summary>
     public ICommand? RemoveCommand { get; }
 
     public bool HasRemove => RemoveCommand is not null;

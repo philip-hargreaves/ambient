@@ -49,7 +49,7 @@ public sealed partial class PrivacySettings : ObservableObject
 
     /// <summary>
     /// Off by default: a consultation is erased when it is left. On: the
-    /// encrypted history. Applies to consultations from now on; audio is
+    /// encrypted history. Applies to consultations from now on. Audio is
     /// never kept either way.
     /// </summary>
     [ObservableProperty]
@@ -126,7 +126,7 @@ public sealed partial class PrivacySettings : ObservableObject
         {
             var removed = await _client.DeleteAllSessionsAsync().ConfigureAwait(true);
             _status?.Append(removed == 1 ? "1 consultation deleted" : $"{removed} consultations deleted");
-            // The seed was erased too; the switch follows, and switching on reseeds
+            // The seed was erased too. The switch follows, and switching on reseeds
             _seedFollowsStore = true;
             SeedDataEnabled = false;
             _seedFollowsStore = false;
@@ -162,7 +162,7 @@ public sealed partial class PrivacySettings : ObservableObject
         }
     }
 
-    // On seeds, a no-op when already seeded; off clears
+    // On seeds, a no-op when already seeded. Off clears
     private async Task ApplySeedDataAsync(bool enabled)
     {
         if (_client is null || !_client.Connected)

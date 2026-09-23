@@ -5,7 +5,7 @@ namespace Ambient.App.Platform;
 
 public sealed class WinUiLauncher : ILauncher
 {
-    // Web links only. Anything else is refused here rather than handed to the launcher
+    // Web links only. Anything else is refused before it reaches the launcher
     public async Task<bool> OpenLinkAsync(string link)
     {
         try

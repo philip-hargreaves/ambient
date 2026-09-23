@@ -11,7 +11,7 @@ using Ambient.Client;
 
 namespace Ambient.App.Tests.Composition;
 
-/// <summary>The view-model graph over fakes: a new constructor parameter fails here, not at launch.</summary>
+/// <summary>The view-model graph over fakes, so a new constructor parameter fails here before launch.</summary>
 public class CompositionTest
 {
     private sealed class FakeHost : IEngineHost

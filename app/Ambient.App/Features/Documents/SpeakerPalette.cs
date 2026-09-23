@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Media;
 namespace Ambient.App.Features.Documents;
 
 /// <summary>Speaker roles to brushes and labels, resolved by the theme in
-/// effect - a plain resource lookup follows the OS theme, not the chosen one.
+/// effect, since a plain resource lookup follows only the OS theme.
 /// The consuming view keeps <see cref="Theme"/> current.</summary>
 public static class SpeakerPalette
 {

@@ -24,7 +24,7 @@ public class MicViewModelTest
         var engine = new FakeEngineClient();
         var mic = new MicViewModel(new EngineApi(engine));
 
-        // A single-microphone laptop - the common clinical case - reads cleanly
+        // A single-microphone laptop, the common clinical case, reads cleanly
         engine.AudioInputs = [Array()];
         await mic.RefreshAsync();
         Assert.Equal("Microphone Array", mic.Label);

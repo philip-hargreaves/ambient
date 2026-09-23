@@ -1,6 +1,6 @@
 namespace Ambient.App.Tests.Support;
 
-/// <summary>Waiting for fire-and-forget work to land, by its effect rather than by a fixed sleep.</summary>
+/// <summary>Waiting for fire-and-forget work to land, by its effect.</summary>
 internal static class Waits
 {
     private static readonly TimeSpan DefaultLimit = TimeSpan.FromSeconds(5);

@@ -2,7 +2,7 @@ using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Core.Features.Consultation;
 
-/// <summary>An engine call inside a flow that carries on when it fails: reported, logged, never thrown.</summary>
+/// <summary>An engine call inside a flow that carries on when it fails: the failure is reported and logged, and nothing is thrown.</summary>
 internal static class EngineStep
 {
     public static async Task<bool> TryAsync(StatusBarViewModel status, string step, Func<Task> call) =>

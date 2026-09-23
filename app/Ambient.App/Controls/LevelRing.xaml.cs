@@ -8,10 +8,9 @@ using Ambient.App.Core.Shell;
 namespace Ambient.App.Controls;
 
 /// <summary>
-/// The presence behind a disc button: a soft accent glow with no edge that
-/// brightens and reaches further with the microphone level, and one hairline
-/// ring that eases outward from the disc. Restrained on purpose: it should read
-/// as "alive", never as an alarm.
+/// The presence behind a disc button: a soft accent glow that grows with the
+/// microphone level and one hairline ring that eases outward from the disc.
+/// Kept restrained so it reads as calm activity.
 /// </summary>
 public sealed partial class LevelRing : UserControl
 {
