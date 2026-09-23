@@ -18,10 +18,16 @@ internal static class TestSession
         var status = new StatusBarViewModel();
         var session = new ConsultationViewModel(
             new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
-            dialogs ?? new FakeDialogService(), Page(engine, status), preferences: preferences);
+            dialogs ?? new FakeDialogService(), Page(engine, status), Guidance(status),
+            preferences: preferences);
         return (session, engine, note);
     }
 
     public static PageViewModel Page(IEngineTransport engine, StatusBarViewModel status) =>
         new(new EngineApi(engine), new FakeLauncher(), new FakeClipboard(), status);
+
+    public static GuidanceViewModel Guidance(StatusBarViewModel status) =>
+        new(new FakeLauncher(), new FakeClipboard(), status);
+
+    public static MicViewModel Mic() => new(new EngineApi(new FakeEngineClient()));
 }

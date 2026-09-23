@@ -113,7 +113,7 @@ public interface IEngineApi
     Task FinishEnrolmentAsync();
 
     // Reflections
-    Task<IReadOnlyList<ReflectionEntry>> ListReflectionsAsync();
+    Task<IReadOnlyList<ReflectionListing>> ListReflectionsAsync();
 
     Task<StoredReflection> GetReflectionAsync(string id);
 

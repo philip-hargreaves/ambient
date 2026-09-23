@@ -28,7 +28,6 @@ public sealed partial class ConsultationView : UserControl
             await Mic.RefreshAsync();
             BuildMicFlyout();
         };
-        mic.PropertyChanged += (_, _) => Bindings.Update();
 
         ControlsHost.Content = controls;
         TranscriptHost.Content = transcript;
@@ -73,10 +72,6 @@ public sealed partial class ConsultationView : UserControl
     public SessionControlsViewModel Controls { get; }
 
     public MicViewModel Mic { get; }
-
-    public string MicTip => Controls.MicPickerEnabled
-        ? Mic.FullName
-        : "In use - changes apply to the next consultation";
 
     private void BuildMicFlyout()
     {

@@ -118,10 +118,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     public ConsultationViewModel(
         IEngineApi engine, IUiDispatcher dispatcher,
         TranscriptViewModel transcript, NoteViewModel note, StatusBarViewModel status,
-        IDialogService dialogs, PageViewModel pageView,
+        IDialogService dialogs, PageViewModel pageView, GuidanceViewModel guidance,
         Metrics.PerformanceCollector? metrics = null, TimeSpan? readinessPollInterval = null,
-        AppPreferences? preferences = null, GuidanceViewModel? guidance = null,
-        DemoMode? demo = null)
+        AppPreferences? preferences = null, DemoMode? demo = null)
     {
         _engine = engine;
         _dispatcher = dispatcher;
@@ -133,7 +132,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         _readinessPollInterval = readinessPollInterval ?? TimeSpan.FromSeconds(2);
         Transcript = transcript;
         Note = note;
-        Guidance = guidance ?? new GuidanceViewModel();
+        Guidance = guidance;
         Status = status;
         if (demo is not null)
         {

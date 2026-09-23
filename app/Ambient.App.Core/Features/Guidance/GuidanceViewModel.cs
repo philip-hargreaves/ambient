@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Ports;
+using Ambient.App.Core.Shell;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
@@ -33,6 +35,51 @@ public enum GuidanceSection
 /// </summary>
 public sealed partial class GuidanceViewModel : ObservableObject
 {
+    private readonly ILauncher _launcher;
+    private readonly IClipboard _clipboard;
+    private readonly StatusBarViewModel _status;
+
+    public GuidanceViewModel(ILauncher launcher, IClipboard clipboard, StatusBarViewModel status)
+    {
+        _launcher = launcher;
+        _clipboard = clipboard;
+        _status = status;
+    }
+
+    /// <summary>The section folded to its heading; the review's patient sheet folds the same way.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BodyVisible), nameof(FoldGlyph))]
+    public partial bool Folded { get; set; }
+
+    public bool BodyVisible => !Folded;
+
+    // Open shows an up chevron, folded a down one
+    public string FoldGlyph => Folded ? "\uE70D" : "\uE70E";
+
+    [RelayCommand]
+    private void ToggleFold() => Folded = !Folded;
+
+    /// <summary>A web link opens in the browser, an added document in the PDF viewer.</summary>
+    [RelayCommand]
+    private async Task Open(GuidanceRecommendation found)
+    {
+        if (found.FromDocument)
+        {
+            await OpenDocumentAsync(found).ConfigureAwait(true);
+        }
+        else if (!await _launcher.OpenLinkAsync(found.Link).ConfigureAwait(true))
+        {
+            _status.Append("Could not open the link - no browser answered");
+        }
+    }
+
+    [RelayCommand]
+    private Task ShowInDocument(GuidanceRecommendation found) => ShowInDocumentAsync(found);
+
+    [RelayCommand]
+    private Task CopyCitation(GuidanceRecommendation found) =>
+        _clipboard.CopyAsync(_status, found.CitationText, "Citation");
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StateCaption), nameof(CaptionVisible),
         nameof(SettingsLinkVisible),

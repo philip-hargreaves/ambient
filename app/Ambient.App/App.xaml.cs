@@ -112,6 +112,7 @@ public partial class App : Application
             Path.Combine(localState, "metrics.jsonl")));
         services.AddSingleton<TranscriptViewModel>();
         services.AddSingleton<NoteViewModel>();
+        services.AddSingleton<DocumentExportViewModel>();
         services.AddSingleton<GuidanceViewModel>();
         services.AddSingleton<PageViewModel>();
         services.AddSingleton<StatusBarViewModel>();

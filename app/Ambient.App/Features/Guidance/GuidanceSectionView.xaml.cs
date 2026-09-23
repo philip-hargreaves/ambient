@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Ambient.App.Core.Features.Guidance;
-using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Features.Guidance;
@@ -12,21 +11,13 @@ namespace Ambient.App.Features.Guidance;
 /// <summary>The Guidelines section under the clinical note, hosted by the note editor.</summary>
 public sealed partial class GuidanceSectionView : UserControl
 {
-    private readonly StatusBarViewModel _status;
-    private readonly ILauncher _launcher;
-    private readonly IClipboard _clipboard;
     private readonly DispatcherQueueTimer _timingTimer;
     private Storyboard? _fade;
 
-    public GuidanceSectionView(
-        GuidanceViewModel viewModel, ShellViewModel shell, StatusBarViewModel status,
-        ILauncher launcher, IClipboard clipboard)
+    public GuidanceSectionView(GuidanceViewModel viewModel, ShellViewModel shell)
     {
         ViewModel = viewModel;
         Shell = shell;
-        _status = status;
-        _launcher = launcher;
-        _clipboard = clipboard;
         InitializeComponent();
         _timingTimer = DispatcherQueue.CreateTimer();
         _timingTimer.Interval = TimeSpan.FromSeconds(4);
@@ -91,49 +82,16 @@ public sealed partial class GuidanceSectionView : UserControl
 
     private void OnRowExited(object sender, PointerRoutedEventArgs e) => ViewModel.Hovered = "";
 
-    // Open shows an up chevron, folded a down one, as the patient sheet's fold does
-    private void OnFoldClick(object sender, RoutedEventArgs e)
-    {
-        var open = Body.Visibility == Visibility.Visible;
-        Body.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        SearchRow.Visibility = Body.Visibility;
-        FoldGlyph.Glyph = open ? "" : "";
-    }
-
     /// <summary>A tooltip only when there is something to say.</summary>
     public static object? Tip(string tip) => tip.Length == 0 ? null : tip;
 
-    private async void OnOpen(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is not GuidanceRecommendation found)
-        {
-            return;
-        }
-
-        if (found.FromDocument)
-        {
-            await ViewModel.OpenDocumentAsync(found);
-        }
-        else if (!await _launcher.OpenLinkAsync(found.Link))
-        {
-            _status.Append("Could not open the link - no browser answered");
-        }
-    }
-
-    private async void OnShowInDocument(object sender, RoutedEventArgs e)
+    // The opener is remembered so focus can return to it when the page closes
+    private void OnShowInDocument(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
             PageView.Opener = sender as FrameworkElement;
-            await ViewModel.ShowInDocumentAsync(found);
-        }
-    }
-
-    private async void OnCopyCitation(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
-        {
-            await _clipboard.CopyAsync(_status, found.CitationText, "Citation");
+            ViewModel.ShowInDocumentCommand.Execute(found);
         }
     }
 }

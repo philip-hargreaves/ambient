@@ -324,7 +324,7 @@ public class ReplaySessionTest
             new FileCrashLog(Path.Combine(directory, "crashes.jsonl")));
         await using var connection = new EngineConnection(host, async (pid, ct) =>
             await PipeTransport.ConnectAsync(pipeName, Timeout, pid, ct));
-        var session = new ConsultationViewModel(new EngineApi(connection), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(connection, new StatusBarViewModel()));
+        var session = new ConsultationViewModel(new EngineApi(connection), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(connection, new StatusBarViewModel()), TestSession.Guidance(new StatusBarViewModel()));
         try
         {
             host.Start();

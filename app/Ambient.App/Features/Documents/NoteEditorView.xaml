@@ -58,24 +58,19 @@
                     SelectedIndex="{x:Bind ViewModel.ExampleCaseIndex, Mode=TwoWay}"
                     Visibility="{x:Bind ViewModel.ExampleCasesVisible, Mode=OneWay}" />
                 <ComboBox
-                    x:Name="StyleBox"
                     MinWidth="104"
                     AutomationProperties.Name="Note style"
+                    DisplayMemberPath="Name"
                     IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
-                    SelectionChanged="OnStyleChanged">
-                    <ComboBoxItem Content="Prose" Tag="prose" />
-                    <ComboBoxItem Content="SOAP" Tag="soap" />
-                </ComboBox>
+                    ItemsSource="{x:Bind ViewModel.StyleOptions}"
+                    SelectedIndex="{x:Bind ViewModel.StyleIndex, Mode=TwoWay}" />
                 <ComboBox
-                    x:Name="DetailBox"
                     MinWidth="118"
                     AutomationProperties.Name="Note detail"
+                    DisplayMemberPath="Name"
                     IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
-                    SelectionChanged="OnDetailChanged">
-                    <ComboBoxItem Content="Concise" Tag="concise" />
-                    <ComboBoxItem Content="Standard" Tag="standard" />
-                    <ComboBoxItem Content="Detailed" Tag="detailed" />
-                </ComboBox>
+                    ItemsSource="{x:Bind ViewModel.DetailOptions}"
+                    SelectedIndex="{x:Bind ViewModel.DetailIndex, Mode=TwoWay}" />
                 <Button x:Name="RegenerateButton"
                         Command="{x:Bind ViewModel.RegenerateCommand}"
                         ToolTipService.ToolTip="Rewrite the note with the chosen style and detail">
@@ -102,14 +97,14 @@
 
         <Grid Grid.Row="2" Margin="0,2,0,0">
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Click="OnCopyNote"
+                <Button Command="{x:Bind Export.CopyNoteCommand}"
                         IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="14" Glyph="&#xE8C8;" />
                         <TextBlock Text="Copy" />
                     </StackPanel>
                 </Button>
-                <Button Click="OnExportNote"
+                <Button Command="{x:Bind Export.ExportNoteCommand}"
                         IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.NoteViewing, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="8">

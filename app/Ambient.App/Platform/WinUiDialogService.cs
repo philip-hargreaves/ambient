@@ -40,12 +40,9 @@ public sealed class WinUiDialogService(
 
     public async Task ShowReflectionAsync(string sessionId, string startedAt)
     {
-        var reflection = new ReflectionViewModel(engine, dispatcher, status);
+        var reflection = new ReflectionViewModel(engine, dispatcher, clipboard, picker, this, status);
         await reflection.LoadAsync(sessionId, startedAt);
-        var dialog = new ReflectionDialog(reflection, status, clipboard, picker, this)
-        {
-            XamlRoot = window.XamlRoot,
-        };
+        var dialog = new ReflectionDialog(reflection) { XamlRoot = window.XamlRoot };
         await dialog.ShowAsync();
     }
 }

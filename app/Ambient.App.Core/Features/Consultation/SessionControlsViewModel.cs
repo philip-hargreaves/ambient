@@ -8,10 +8,13 @@ namespace Ambient.App.Core.Features.Consultation;
 public sealed partial class SessionControlsViewModel : ObservableObject
 {
     private readonly ConsultationViewModel _session;
+    private readonly MicViewModel _mic;
 
-    public SessionControlsViewModel(ConsultationViewModel session)
+    public SessionControlsViewModel(ConsultationViewModel session, MicViewModel mic)
     {
         _session = session;
+        _mic = mic;
+        _mic.PropertyChanged += (_, _) => OnPropertyChanged(nameof(MicTip));
         _session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ConsultationViewModel.State)
@@ -25,6 +28,7 @@ public sealed partial class SessionControlsViewModel : ObservableObject
                 OnPropertyChanged(nameof(ReviewVisible));
                 OnPropertyChanged(nameof(MicPickerVisible));
                 OnPropertyChanged(nameof(MicPickerEnabled));
+                OnPropertyChanged(nameof(MicTip));
                 OnPropertyChanged(nameof(CentreStageVisible));
                 OnPropertyChanged(nameof(PanesVisible));
                 OnPropertyChanged(nameof(FinalisingVisible));
@@ -83,6 +87,10 @@ public sealed partial class SessionControlsViewModel : ObservableObject
 
     /// <summary>Pinned once recording: changes apply to the next consultation.</summary>
     public bool MicPickerEnabled => _session.State == SessionState.Idle;
+
+    public string MicTip => MicPickerEnabled
+        ? _mic.FullName
+        : "In use - changes apply to the next consultation";
 
     // The centre holds until the note streams; panes and centre never coexist
     public bool CentreStageVisible =>

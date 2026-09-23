@@ -5,6 +5,9 @@ using Ambient.App.Core.Features.Demo;
 
 namespace Ambient.App.Core.Features.Documents;
 
+/// <summary>A note option as the engine names it and as the combo shows it.</summary>
+public sealed record NoteOption(string Value, string Name);
+
 public sealed partial class NoteViewModel : ObservableObject
 {
     [ObservableProperty]
@@ -54,11 +57,45 @@ public sealed partial class NoteViewModel : ObservableObject
 
     /// <summary>Note options as the engine names them: "prose" or "soap".</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StyleIndex))]
     public partial string Style { get; set; } = "prose";
 
     /// <summary>"concise", "standard" or "detailed".</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailIndex))]
     public partial string Detail { get; set; } = "standard";
+
+    public IReadOnlyList<NoteOption> StyleOptions { get; } =
+        [new("prose", "Prose"), new("soap", "SOAP")];
+
+    public IReadOnlyList<NoteOption> DetailOptions { get; } =
+        [new("concise", "Concise"), new("standard", "Standard"), new("detailed", "Detailed")];
+
+    // The combos select by index; an unknown stored value shows the first option
+    public int StyleIndex
+    {
+        get => Math.Max(0, IndexOf(StyleOptions, Style));
+        set => Style = value >= 0 && value < StyleOptions.Count ? StyleOptions[value].Value : Style;
+    }
+
+    public int DetailIndex
+    {
+        get => Math.Max(0, IndexOf(DetailOptions, Detail));
+        set => Detail = value >= 0 && value < DetailOptions.Count ? DetailOptions[value].Value : Detail;
+    }
+
+    private static int IndexOf(IReadOnlyList<NoteOption> options, string value)
+    {
+        for (var i = 0; i < options.Count; i++)
+        {
+            if (options[i].Value == value)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     public ObservableCollection<string> Languages { get; } = [];
 

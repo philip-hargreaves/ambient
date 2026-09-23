@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Ambient.App.Features.Appraisal.AppraisalsView"
+    x:Name="AppraisalsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Ambient.App.Features.Appraisal"
@@ -28,7 +29,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Button Click="OnBackClick" ToolTipService.ToolTip="Back">
+                    <Button Command="{x:Bind ViewModel.LeaveCommand}" ToolTipService.ToolTip="Back">
                         <FontIcon FontSize="14" Glyph="&#xE72B;" />
                     </Button>
                     <TextBlock
@@ -105,7 +106,7 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="vm:MonthMarker">
-                                <sessions:MonthMarkerView Marker="{x:Bind}" />
+                                <sessions:MonthMarkerView Marker="{x:Bind}" Command="{Binding ElementName=AppraisalsPage, Path=ViewModel.PressMonthCommand}" />
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>

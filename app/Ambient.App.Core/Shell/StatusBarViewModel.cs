@@ -31,10 +31,18 @@ public sealed partial class StatusBarViewModel : ObservableObject
     // The two models a clinician's machine actually works for, each with its
     // live number: "Whisper Turbo · GPU · 33× RT", "Qwen3.5 9B · GPU · 14.2 tok/s"
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AsrChipVisible))]
     public partial string AsrChip { get; private set; } = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoteChipVisible))]
     public partial string NoteChip { get; private set; } = "";
+
+    public bool AsrChipVisible => MetricsVisible && AsrChip.Length > 0;
+
+    public bool NoteChipVisible => MetricsVisible && NoteChip.Length > 0;
+
+    public bool MemoryChipVisible => MetricsVisible && MemoryChip.Length > 0;
 
     private string _asrName = "";
     private string _noteName = "";
@@ -264,10 +272,12 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
     /// <summary>"Memory · 5.1 GB": the product's whole working set.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MemoryChipVisible))]
     public partial string MemoryChip { get; private set; } = "";
 
     /// <summary>The chips are for testing, not GPs: off unless opted in.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AsrChipVisible), nameof(NoteChipVisible), nameof(MemoryChipVisible))]
     public partial bool MetricsVisible { get; set; }
 
     // Shell + engine + note host: the honest on-device footprint. By name

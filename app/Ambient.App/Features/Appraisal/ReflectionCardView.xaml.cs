@@ -12,9 +12,6 @@ public sealed partial class ReflectionCardView : UserControl
         nameof(Card), typeof(ReflectionCard), typeof(ReflectionCardView),
         new PropertyMetadata(null, OnCardChanged));
 
-    /// <summary>Builds the editor for an opened card; the page supplies it with its dependencies.</summary>
-    public static Func<ReflectionCard, UIElement>? EditorFactory { get; set; }
-
     public ReflectionCardView()
     {
         InitializeComponent();
@@ -65,7 +62,8 @@ public sealed partial class ReflectionCardView : UserControl
         TitleBox.Text = editor.Title;
         if (EditorHost.Content is not ReflectionEditorView view || view.ViewModel != editor)
         {
-            EditorHost.Content = EditorFactory?.Invoke(card);
+            EditorHost.Content = new ReflectionEditorView(
+                editor, showHeading: false, removeCommand: card.DeleteCommand);
         }
     }
 

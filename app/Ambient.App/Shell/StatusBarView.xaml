@@ -42,7 +42,7 @@
                 <Border
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     Style="{StaticResource ChipBorder}"
-                    Visibility="{x:Bind AsrChipVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.AsrChipVisible, Mode=OneWay}">
                     <!-- Colour pairs swapped by visibility: code-resolved
                          brushes follow the OS theme, not the chosen one -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -74,7 +74,7 @@
                 <Border
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     Style="{StaticResource ChipBorder}"
-                    Visibility="{x:Bind NoteChipVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.NoteChipVisible, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse
                             Width="6"
@@ -98,7 +98,7 @@
                 <Border
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                     Style="{StaticResource ChipBorder}"
-                    Visibility="{x:Bind MemoryChipVisible, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.MemoryChipVisible, Mode=OneWay}">
                     <TextBlock
                         Style="{StaticResource CaptionText}"
                         Text="{x:Bind ViewModel.MemoryChip, Mode=OneWay}"

@@ -121,7 +121,7 @@ public sealed record StoredReflection(
     string Id = "", string? Label = null, ReflectionSummary? Summary = null,
     [property: JsonPropertyName("reflection")] ReflectionAnswers? Answers = null);
 
-public sealed record ReflectionEntry(
+public sealed record ReflectionListing(
     string Id = "", string StartedAt = "", string? Label = null, string? Happened = null,
     string? Learned = null, string? Next = null, string? Summary = null, string? CreatedAt = null,
     string? EditedAt = null, bool Demo = false);

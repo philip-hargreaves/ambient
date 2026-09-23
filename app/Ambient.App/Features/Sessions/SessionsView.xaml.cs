@@ -45,21 +45,11 @@ public sealed partial class SessionsView : UserControl
         NarrowTabs.Loaded += (_, _) => FitNarrow();
         NarrowTabs.SizeChanged += (_, _) => FitNarrow();
         Loaded += (_, _) => _ = ViewModel.RefreshAsync();
-        ViewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(SessionsViewModel.DetailOpen)
-                or nameof(SessionsViewModel.EmptyBecauseOff))
-            {
-                Bindings.Update();
-            }
-        };
     }
 
     public SessionsViewModel ViewModel { get; }
 
     public ShellViewModel Shell { get; }
-
-    public bool SelectHintVisible => !ViewModel.DetailOpen && !ViewModel.EmptyBecauseOff;
 
     private void OnDetailSizeChanged(object sender, SizeChangedEventArgs e) =>
         Place(e.NewSize.Width >= WideThreshold);
@@ -138,48 +128,6 @@ public sealed partial class SessionsView : UserControl
         }
     }
 
-    private void OnPatientFoldClick(object sender, RoutedEventArgs e)
-    {
-        var open = PatientHostWide.Visibility == Visibility.Visible;
-        PatientHostWide.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        PatientFoldGlyph.Glyph = open ? "" : "";
-    }
-
-    // Leaving the page ends the review: edits saved, the engine told
-    private async void OnBackClick(object sender, RoutedEventArgs e)
-    {
-        await ViewModel.LeaveAsync();
-        Shell.GoBackCommand.Execute(null);
-    }
-
-    // Push the text first: the two-way binding's order against this handler
-    // is not guaranteed
-    private async void OnTitleCommitted(object sender, RoutedEventArgs e)
-    {
-        ViewModel.DetailTitle = ((TextBox)sender).Text;
-        await ViewModel.RenameAsync();
-    }
-
-    // Deletion is crypto-erase, so the confirmation lives here, not in the VM
-    private async void OnDeleteClick(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is not SessionRow row)
-        {
-            return;
-        }
-
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = "Delete this consultation?",
-            Content = "The transcript, note and patient sheet are erased and cannot be recovered.",
-            PrimaryButtonText = "Delete",
-            CloseButtonText = "Keep",
-            DefaultButton = ContentDialogButton.Close,
-        };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-        {
-            await ViewModel.DeleteAsync(row);
-        }
-    }
+    // The box binds as the text changes, so the view model is current when focus leaves
+    private async void OnTitleCommitted(object sender, RoutedEventArgs e) => await ViewModel.RenameAsync();
 }

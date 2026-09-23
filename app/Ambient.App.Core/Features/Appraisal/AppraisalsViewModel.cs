@@ -101,13 +101,43 @@ public sealed partial class AppraisalsViewModel : ObservableObject
     private readonly IEngineApi _engine;
     private readonly IUiDispatcher _dispatcher;
     private readonly StatusBarViewModel _status;
+    private readonly IClipboard _clipboard;
+    private readonly IFilePicker _picker;
+    private readonly IDialogService _dialogs;
+    private readonly INavigationService _navigation;
     private readonly List<ReflectionCard> _all = [];
 
-    public AppraisalsViewModel(IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel status)
+    public AppraisalsViewModel(
+        IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel status, IClipboard clipboard,
+        IFilePicker picker, IDialogService dialogs, INavigationService navigation)
     {
         _engine = engine;
         _dispatcher = dispatcher;
         _status = status;
+        _clipboard = clipboard;
+        _picker = picker;
+        _dialogs = dialogs;
+        _navigation = navigation;
+    }
+
+    // A month with entries filters to it; an empty one says so
+    [RelayCommand]
+    private void PressMonth(MonthMarker month)
+    {
+        if (month.Filled)
+        {
+            ToggleMonth(month.Month);
+            return;
+        }
+
+        _status.Append($"No reflections in {MonthName(month.Month)}");
+    }
+
+    [RelayCommand]
+    private async Task Leave()
+    {
+        await LeaveAsync().ConfigureAwait(true);
+        _navigation.GoBack();
     }
 
     public ObservableCollection<ReflectionCard> Cards { get; } = [];
@@ -281,7 +311,7 @@ public sealed partial class AppraisalsViewModel : ObservableObject
         }
 
         await CollapseAllAsync().ConfigureAwait(true);
-        var editor = new ReflectionViewModel(_engine, _dispatcher, _status);
+        var editor = new ReflectionViewModel(_engine, _dispatcher, _clipboard, _picker, _dialogs, _status);
         await editor.LoadAsync(card.Id, card.Started.ToString("o", CultureInfo.InvariantCulture))
             .ConfigureAwait(true);
         card.Editor = editor;

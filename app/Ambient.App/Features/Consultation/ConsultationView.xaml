@@ -35,7 +35,7 @@
                         x:Name="MicPicker"
                         IsEnabled="{x:Bind Controls.MicPickerEnabled, Mode=OneWay}"
                         Style="{StaticResource TrayButton}"
-                        ToolTipService.ToolTip="{x:Bind MicTip, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind Controls.MicTip, Mode=OneWay}"
                         Visibility="{x:Bind Controls.MicPickerVisible, Mode=OneWay}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontSize="14" Glyph="&#xE720;" />

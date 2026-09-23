@@ -20,8 +20,8 @@ public class SessionsViewModelTest
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
             new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
-            new FakeDialogService(), TestSession.Page(engine, status));
-        return (new SessionsViewModel(new EngineApi(engine), status, consultation), consultation, engine, status);
+            new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
+        return (new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), new RecordingNavigationService()), consultation, engine, status);
     }
 
     /// <summary>Scripted responses per method; unscripted methods answer {}.</summary>
@@ -250,7 +250,7 @@ public class SessionsViewModelTest
         vm.Selected = vm.Sessions[0];
         await Task.Delay(50);
 
-        await vm.DeleteSelectedAsync();
+        await vm.DeleteCommand.ExecuteAsync(vm.Selected);
 
         var close = engine.Calls.FindIndex(c => c.Method == "session/close");
         var delete = engine.Calls.FindIndex(c => c.Method == "session/delete");
@@ -291,8 +291,8 @@ public class SessionsViewModelTest
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
             new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            status, new FakeDialogService(), TestSession.Page(engine, status));
-        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, preferences);
+            status, new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
+        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), new RecordingNavigationService(), preferences);
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
 
         await vm.RefreshAsync();

@@ -11,7 +11,7 @@ public class ReflectionViewModelTest
     private static (ReflectionViewModel Reflection, FakeEngineClient Engine) Create()
     {
         var engine = new FakeEngineClient();
-        return (new ReflectionViewModel(new EngineApi(engine), new InlineDispatcher(), new StatusBarViewModel()), engine);
+        return (new ReflectionViewModel(new EngineApi(engine), new InlineDispatcher(), new FakeClipboard(), new FakeFilePicker(), new FakeDialogService(), new StatusBarViewModel()), engine);
     }
 
     [Fact]

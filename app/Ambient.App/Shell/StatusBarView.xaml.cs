@@ -19,27 +19,9 @@ public sealed partial class StatusBarView : UserControl
         BuildCredits();
         ActualThemeChanged += (_, _) => BuildCredits();
         Loaded += (_, _) => BuildCredits();
-        // Chip visibility is computed here; the async model fetch needs a nudge
-        viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(StatusBarViewModel.AsrChip)
-                or nameof(StatusBarViewModel.NoteChip)
-                or nameof(StatusBarViewModel.MemoryChip)
-                or nameof(StatusBarViewModel.MetricsVisible))
-            {
-                Bindings.Update();
-            }
-        };
     }
 
     public StatusBarViewModel ViewModel { get; }
-
-    public bool AsrChipVisible => ViewModel.MetricsVisible && ViewModel.AsrChip.Length > 0;
-
-    public bool NoteChipVisible => ViewModel.MetricsVisible && ViewModel.NoteChip.Length > 0;
-
-    public bool MemoryChipVisible => ViewModel.MetricsVisible && ViewModel.MemoryChip.Length > 0;
-
 
     private void BuildCredits()
     {

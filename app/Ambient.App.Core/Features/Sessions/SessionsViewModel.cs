@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
@@ -36,6 +37,8 @@ public sealed partial class SessionsViewModel : ObservableObject
     private readonly IEngineApi _engine;
     private readonly StatusBarViewModel _status;
     private readonly ConsultationViewModel _consultation;
+    private readonly IDialogService _dialogs;
+    private readonly INavigationService _navigation;
     private readonly AppPreferences? _preferences;
 
     public ObservableCollection<SessionRow> Sessions { get; } = [];
@@ -46,6 +49,7 @@ public sealed partial class SessionsViewModel : ObservableObject
     /// shows; only the clinician empties it.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
     public partial bool EmptyBecauseOff { get; private set; }
 
     [ObservableProperty]
@@ -53,7 +57,23 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     /// <summary>True while the selected session is open in the panes.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
     public partial bool DetailOpen { get; private set; }
+
+    /// <summary>"Select a consultation" when there is a list and nothing open.</summary>
+    public bool SelectHintVisible => !DetailOpen && !EmptyBecauseOff;
+
+    /// <summary>The wide layout folds the patient sheet under the note.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PatientVisible), nameof(PatientFoldGlyph))]
+    public partial bool PatientFolded { get; set; }
+
+    public bool PatientVisible => !PatientFolded;
+
+    public string PatientFoldGlyph => PatientFolded ? "\uE70D" : "\uE70E";
+
+    [RelayCommand]
+    private void TogglePatientFold() => PatientFolded = !PatientFolded;
 
     /// <summary>The open session's label; editing it renames the session.</summary>
     [ObservableProperty]
@@ -66,11 +86,13 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     public SessionsViewModel(
         IEngineApi engine, StatusBarViewModel status, ConsultationViewModel consultation,
-        AppPreferences? preferences = null)
+        IDialogService dialogs, INavigationService navigation, AppPreferences? preferences = null)
     {
         _engine = engine;
         _status = status;
         _consultation = consultation;
+        _dialogs = dialogs;
+        _navigation = navigation;
         _preferences = preferences;
     }
 
@@ -170,17 +192,21 @@ public sealed partial class SessionsViewModel : ObservableObject
         }
     }
 
+    // Deletion is crypto-erase, so it is confirmed first
     [RelayCommand]
-    public Task DeleteSelectedAsync() => DeleteAsync(Selected);
+    private async Task Delete(SessionRow row)
+    {
+        if (await _dialogs.ConfirmAsync("Delete this consultation?",
+                "The transcript, note and patient sheet are erased and cannot be recovered.",
+                "Delete", "Keep").ConfigureAwait(true))
+        {
+            await DeleteAsync(row).ConfigureAwait(true);
+        }
+    }
 
     /// <summary>Deletes one row, closing its review first if open.</summary>
-    public async Task DeleteAsync(SessionRow? row)
+    public async Task DeleteAsync(SessionRow row)
     {
-        if (row is null)
-        {
-            return;
-        }
-
         try
         {
             if (Selected?.Id == row.Id)
@@ -205,6 +231,13 @@ public sealed partial class SessionsViewModel : ObservableObject
         Selected = null;
         DetailOpen = false;
         return _consultation.CloseReviewAsync();
+    }
+
+    [RelayCommand]
+    private async Task Leave()
+    {
+        await LeaveAsync().ConfigureAwait(true);
+        _navigation.GoBack();
     }
 
     private string OptionsLabel()

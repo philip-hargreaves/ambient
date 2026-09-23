@@ -17,7 +17,7 @@
                 LostFocus="OnTitleCommitted"
                 Padding="0,4"
                 PlaceholderText="{x:Bind ViewModel.Month, Mode=OneWay}"
-                Text="{x:Bind ViewModel.Title, Mode=TwoWay}" />
+                Text="{x:Bind ViewModel.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             <TextBlock Style="{StaticResource CaptionText}" Text="{x:Bind ViewModel.Month, Mode=OneWay}" />
         </StackPanel>
 
@@ -50,7 +50,7 @@
                     Background="Transparent"
                     LostFocus="OnSummaryCommitted"
                     PlaceholderText="Writing the case study"
-                    Text="{x:Bind ViewModel.Summary, Mode=TwoWay}"
+                    Text="{x:Bind ViewModel.Summary, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                     TextWrapping="Wrap" />
                 <TextBlock
                     Style="{StaticResource CaptionText}"
@@ -74,7 +74,7 @@
                 AutomationProperties.Name="What stood out"
                 LostFocus="OnAnswerCommitted"
                 PlaceholderText="What was difficult, went well or surprised you"
-                Text="{x:Bind ViewModel.Happened, Mode=TwoWay}"
+                Text="{x:Bind ViewModel.Happened, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Spacing="6">
@@ -85,7 +85,7 @@
                 AutomationProperties.Name="What did I learn"
                 LostFocus="OnAnswerCommitted"
                 PlaceholderText="What this case taught you, or confirmed"
-                Text="{x:Bind ViewModel.Learned, Mode=TwoWay}"
+                Text="{x:Bind ViewModel.Learned, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Spacing="6">
@@ -96,7 +96,7 @@
                 AutomationProperties.Name="Would I do anything differently"
                 LostFocus="OnAnswerCommitted"
                 PlaceholderText="What you would change next time, or why you would keep the same approach"
-                Text="{x:Bind ViewModel.Next, Mode=TwoWay}"
+                Text="{x:Bind ViewModel.Next, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 TextWrapping="Wrap" />
         </StackPanel>
 
@@ -109,13 +109,13 @@
                 Content="Remove from appraisals"
                 Visibility="{x:Bind HasRemove}" />
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
-                <Button Click="OnCopy" ToolTipService.ToolTip="Copy this reflection as text">
+                <Button Command="{x:Bind ViewModel.CopyCommand}" ToolTipService.ToolTip="Copy this reflection as text">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="14" Glyph="&#xE8C8;" />
                         <TextBlock Text="Copy" />
                     </StackPanel>
                 </Button>
-                <Button Click="OnSave" ToolTipService.ToolTip="Save this reflection as a text file">
+                <Button Command="{x:Bind ViewModel.SaveAsTextCommand}" ToolTipService.ToolTip="Save this reflection as a text file">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="14" Glyph="&#xE74E;" />
                         <TextBlock Text="Save as text" />

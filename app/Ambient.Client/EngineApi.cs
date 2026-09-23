@@ -167,8 +167,8 @@ public sealed class EngineApi : IEngineApi
 
     public Task FinishEnrolmentAsync() => CallAsync("anchor/enrol/finish");
 
-    public Task<IReadOnlyList<ReflectionEntry>> ListReflectionsAsync() =>
-        ListAsync<ReflectionEntry>("reflection/list", "reflections");
+    public Task<IReadOnlyList<ReflectionListing>> ListReflectionsAsync() =>
+        ListAsync<ReflectionListing>("reflection/list", "reflections");
 
     public Task<StoredReflection> GetReflectionAsync(string id) =>
         ReplyAsync<StoredReflection>("reflection/get", new { id });

@@ -14,17 +14,25 @@ public sealed partial class ReflectionViewModel : ObservableObject
 {
 
     private readonly IEngineApi _engine;
-    private readonly StatusBarViewModel? _status;
+    private readonly IClipboard _clipboard;
+    private readonly IFilePicker _picker;
+    private readonly IDialogService _dialogs;
+    private readonly StatusBarViewModel _status;
     private readonly Action<EngineNotification> _onNotification;
     private string _savedHappened = "";
     private string _savedLearned = "";
     private string _savedNext = "";
     private string _savedTitle = "";
+    private string _savedSummary = "";
 
     public ReflectionViewModel(
-        IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel? status = null)
+        IEngineApi engine, IUiDispatcher dispatcher, IClipboard clipboard, IFilePicker picker,
+        IDialogService dialogs, StatusBarViewModel status)
     {
         _engine = engine;
+        _clipboard = clipboard;
+        _picker = picker;
+        _dialogs = dialogs;
         _status = status;
         _onNotification = notification => dispatcher.Post(() => HandleNotification(notification));
         _engine.NotificationReceived += _onNotification;
@@ -100,7 +108,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         {
             var got = await _engine.GetReflectionAsync(sessionId).ConfigureAwait(true);
             Title = _savedTitle = got.Label ?? "";
-            Summary = got.Summary?.Text ?? "";
+            Summary = _savedSummary = got.Summary?.Text ?? "";
             if (got.Answers is { } answers)
             {
                 Happened = _savedHappened = Answer(answers.Happened ?? "");
@@ -114,7 +122,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not open the reflection: {e.Message}");
+            _status.Append($"could not open the reflection: {e.Message}");
             return;
         }
 
@@ -165,7 +173,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not save the reflection: {e.Message}");
+            _status.Append($"could not save the reflection: {e.Message}");
         }
     }
 
@@ -185,14 +193,14 @@ public sealed partial class ReflectionViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not rename: {e.Message}");
+            _status.Append($"could not rename: {e.Message}");
         }
     }
 
     /// <summary>The clinician corrected the summary; kept as their wording.</summary>
     public async Task SaveSummaryAsync()
     {
-        if (SessionId.Length == 0)
+        if (SessionId.Length == 0 || Summary == _savedSummary)
         {
             return;
         }
@@ -200,12 +208,20 @@ public sealed partial class ReflectionViewModel : ObservableObject
         try
         {
             await _engine.UpdateReflectionSummaryAsync(SessionId, Summary).ConfigureAwait(true);
+            _savedSummary = Summary;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _status?.Append($"could not save the summary: {e.Message}");
+            _status.Append($"could not save the summary: {e.Message}");
         }
     }
+
+    [RelayCommand]
+    private Task Copy() => _clipboard.CopyAsync(_status, ExportText, "Reflection");
+
+    [RelayCommand]
+    private Task SaveAsText() =>
+        ReflectionFile.SaveAsync(_dialogs, _picker, _status, ExportText, DisplayTitle);
 
     public void Detach() => _engine.NotificationReceived -= _onNotification;
 
@@ -214,7 +230,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         switch (notification)
         {
             case ReflectionSummaryReady ready when ready.Id == SessionId:
-                Summary = ready.Text;
+                Summary = _savedSummary = ready.Text;
                 SummaryPending = false;
                 SummaryProblem = "";
                 break;

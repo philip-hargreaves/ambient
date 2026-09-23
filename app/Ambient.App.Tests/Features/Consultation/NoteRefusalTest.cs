@@ -40,7 +40,7 @@ public class NoteRefusalTest
     public async Task DoneAfterARefusalClosesTheSessionAndReturnsToIdle()
     {
         var (session, engine, note) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session);
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
         await session.StartRecordingAsync();
         await session.StopRecordingAsync();
         engine.RaiseNotification("session/progress", Params(new { stage = "transcript" }));

@@ -1,7 +1,5 @@
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Appraisal;
-using Ambient.App.Core.Ports;
-using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Features.Appraisal;
 
@@ -10,12 +8,11 @@ namespace Ambient.App.Features.Appraisal;
 /// </summary>
 public sealed partial class ReflectionDialog : ContentDialog
 {
-    public ReflectionDialog(ReflectionViewModel viewModel, StatusBarViewModel status,
-        IClipboard clipboard, IFilePicker picker, IDialogService dialogs)
+    public ReflectionDialog(ReflectionViewModel viewModel)
     {
         ViewModel = viewModel;
         InitializeComponent();
-        EditorHost.Content = new ReflectionEditorView(viewModel, status, clipboard, picker, dialogs);
+        EditorHost.Content = new ReflectionEditorView(viewModel);
     }
 
     public ReflectionViewModel ViewModel { get; }
