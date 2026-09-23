@@ -11,18 +11,13 @@ using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Consultation;
 
-/// <summary>A file replayed as the session's audio source.</summary>
-public sealed record ReplayRequest(string Path, double Speed, bool Monitor);
-
 public sealed partial class ConsultationViewModel : ObservableObject, ISessionState
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
     // Accelerated replay legitimately leaves a decode backlog for stop to
     // drain; at 1x this is seconds
-    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(180);
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly IUiDispatcher _dispatcher;
     private int _documentsGeneration;
     private readonly Metrics.PerformanceCollector? _metrics;
@@ -122,7 +117,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     public StatusBarViewModel Status { get; }
 
     public ConsultationViewModel(
-        IEngineClient engine, IUiDispatcher dispatcher,
+        IEngineApi engine, IUiDispatcher dispatcher,
         TranscriptViewModel transcript, NoteViewModel note, StatusBarViewModel status,
         IDialogService dialogs, PageViewModel pageView,
         Metrics.PerformanceCollector? metrics = null, TimeSpan? readinessPollInterval = null,
@@ -214,10 +209,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         var before = (Guidance.Readiness, Guidance.ReadinessDetail, Guidance.RefusedCorpora.Count);
         try
         {
-            var corpora = await _engine
-                .RequestAsync("guidance/corpora", null, RequestTimeout)
-                .ConfigureAwait(true);
-            Guidance.ApplyCorpora(corpora);
+            Guidance.ApplyCorpora(await _engine.GuidanceCorporaAsync().ConfigureAwait(true));
         }
         catch (Exception e)
         {
@@ -283,7 +275,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             }
         }
 
-        if (!await RequestAsync("guidance/search", new { id }).ConfigureAwait(true))
+        if (!await TryAsync("guidance/search", () => _engine.SearchGuidanceAsync(id)).ConfigureAwait(true))
         {
             Guidance.ApplyFailed();
         }
@@ -291,7 +283,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     private async Task SearchGuidanceAsync(string text)
     {
-        if (!await RequestAsync("guidance/search", new { text, limit = 3 }).ConfigureAwait(true))
+        if (!await TryAsync("guidance/search", () => _engine.SearchGuidanceAsync(text, 3))
+            .ConfigureAwait(true))
         {
             Guidance.ApplyQueryFailed();
         }
@@ -362,23 +355,21 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     {
         try
         {
-            var response = await _engine
-                .RequestAsync("engine/readiness", null, RequestTimeout)
-                .ConfigureAwait(true);
+            var readiness = await _engine.ReadinessAsync().ConfigureAwait(true);
             // A note host wedged in the GPU driver outlives the engine; only a reboot ends it
-            if (response.TryGetProperty("strayNoteHost", out var stray) && stray.GetBoolean())
+            if (readiness.StrayNoteHost)
             {
                 Status.Append("A previous note process is stuck in the graphics driver - restart the computer");
                 Status.Log("stray note host detected at engine start");
             }
 
-            if (!response.TryGetProperty("firstUse", out var f) || !f.GetBoolean())
+            if (!readiness.FirstUse)
             {
                 ModelsReady = true;
                 return;
             }
 
-            while (!response.GetProperty("ready").GetBoolean())
+            while (!readiness.Ready)
             {
                 if (ModelsReady)
                 {
@@ -387,9 +378,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 }
 
                 await Task.Delay(_readinessPollInterval).ConfigureAwait(true);
-                response = await _engine
-                    .RequestAsync("engine/readiness", null, RequestTimeout)
-                    .ConfigureAwait(true);
+                readiness = await _engine.ReadinessAsync().ConfigureAwait(true);
             }
 
             if (!ModelsReady)
@@ -409,13 +398,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     {
         try
         {
-            var response = await _engine
-                .RequestAsync("translate/languages", null, RequestTimeout)
-                .ConfigureAwait(true);
+            var languages = await _engine.LanguagesAsync().ConfigureAwait(true);
             Note.Languages.Clear();
-            foreach (var language in response.GetProperty("languages").EnumerateArray())
+            foreach (var language in languages)
             {
-                Note.Languages.Add(language.GetString() ?? "");
+                Note.Languages.Add(language);
             }
         }
         catch (Exception)
@@ -430,8 +417,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
+        var id = _finalisedSessionId;
         Note.TranslationText = "";
-        await RequestAsync("patient/translate", new { id = _finalisedSessionId, language })
+        await TryAsync("patient/translate", () => _engine.TranslatePatientAsync(id, language))
             .ConfigureAwait(true);
     }
 
@@ -480,9 +468,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     {
         if (_engine.Connected)
         {
-            await RequestAsync("note/tier", new { tier = _preferences?.NoteTier ?? "default" })
+            await TryAsync("note/tier", () => _engine.SetNoteTierAsync(_preferences?.NoteTier ?? "default"))
                 .ConfigureAwait(true);
-            await RequestAsync("note/options", new { style = Note.Style, detail = Note.Detail })
+            await TryAsync("note/options", () => _engine.SetNoteOptionsAsync(Note.Style, Note.Detail))
                 .ConfigureAwait(true);
         }
     }
@@ -496,7 +484,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         }
 
         await SaveNoteAsync().ConfigureAwait(true);
-        var accepted = await RequestAsync("patient/regenerate", null).ConfigureAwait(true);
+        var accepted = await TryAsync("patient/regenerate", () => _engine.RegeneratePatientAsync())
+            .ConfigureAwait(true);
         if (accepted)
         {
             _regenerating = true;
@@ -512,8 +501,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        var accepted = await RequestAsync(
-            "note/regenerate", new { style = Note.Style, detail = Note.Detail })
+        var accepted = await TryAsync(
+            "note/regenerate", () => _engine.RegenerateNoteAsync(Note.Style, Note.Detail))
             .ConfigureAwait(true);
         if (accepted)
         {
@@ -531,8 +520,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        var accepted = await RequestAsync(
-            "note/regenerate", new { style = Note.Style, detail = Note.Detail, confirmed = true })
+        var accepted = await TryAsync("note/regenerate",
+            () => _engine.RegenerateNoteAsync(Note.Style, Note.Detail, confirmed: true))
             .ConfigureAwait(true);
         if (accepted)
         {
@@ -555,7 +544,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        var saved = await RequestAsync("note/update", new { id, text }).ConfigureAwait(true);
+        var saved = await TryAsync("note/update", () => _engine.UpdateNoteAsync(id, text))
+            .ConfigureAwait(true);
         if (saved && id == _finalisedSessionId)
         {
             _loadedNote = text;
@@ -568,13 +558,13 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public async Task SavePatientAsync()
     {
-        if (_finalisedSessionId is null)
+        if (_finalisedSessionId is not { } id)
         {
             return;
         }
 
-        var saved = await RequestAsync(
-            "patient/update", new { id = _finalisedSessionId, text = Note.PatientInfoText })
+        var saved = await TryAsync(
+            "patient/update", () => _engine.UpdatePatientAsync(id, Note.PatientInfoText))
             .ConfigureAwait(true);
         if (saved)
         {
@@ -597,7 +587,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         }
 
         await AutosaveReviewAsync().ConfigureAwait(true);
-        if (!await RequestAsync("session/open", new { id }).ConfigureAwait(true))
+        if (!await TryAsync("session/open", () => _engine.OpenSessionAsync(id)).ConfigureAwait(true))
         {
             return false;
         }
@@ -614,35 +604,27 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.HasReflection = hasReflection;
         await LoadFinalTranscriptAsync(id).ConfigureAwait(true);
 
-        var note = await RequestValueAsync("session/note", null, new { id }).ConfigureAwait(true);
-        var patient = await RequestValueAsync("session/patient", null, new { id })
+        var note = await TryAsync("session/note", () => _engine.StoredNoteAsync(id)).ConfigureAwait(true);
+        var patient = await TryAsync("session/patient", () => _engine.StoredPatientAsync(id))
             .ConfigureAwait(true);
-        var (translation, translationLanguage) =
-            patient is { ValueKind: JsonValueKind.Object } p
-            && p.TryGetProperty("translation", out var t) && t.ValueKind == JsonValueKind.Object
-                ? (Text(t, "text"), Text(t, "language"))
-                : ("", "");
+        var translation = patient?.Translation;
         Note.LoadStored(
-            Text(note, "text"), Text(patient, "text"), translation,
-            Text(note, "style"), Text(note, "detail"),
-            EditedStamp.Label(Text(note, "generatedAt"), Text(note, "editedAt")),
-            translationLanguage);
+            note?.Text ?? "", patient?.Text ?? "", translation?.Text ?? "",
+            note?.Style ?? "", note?.Detail ?? "",
+            EditedStamp.Label(note?.GeneratedAt ?? "", note?.EditedAt ?? ""),
+            translation?.Language ?? "");
         _loadedNote = Note.ClinicalNoteText;
         _loadedPatient = Note.PatientInfoText;
         // ISO 8601 UTC compares as text: the sheet predates the note edit
-        var noteEdited = Text(note, "editedAt");
-        var sheetWritten = Text(patient, "generatedAt");
+        var noteEdited = note?.EditedAt ?? "";
+        var sheetWritten = patient?.GeneratedAt ?? "";
         Note.PatientStale = noteEdited.Length > 0 && sheetWritten.Length > 0
             && string.CompareOrdinal(noteEdited, sheetWritten) > 0;
         // What this note was shown, without a model; nothing to read for an empty note
         if (Note.ClinicalNoteText.Length > 0)
         {
-            var guidance = await RequestValueAsync("session/guidance", null, new { id })
+            var stored = await TryAsync("session/guidance", () => _engine.StoredGuidanceAsync(id))
                 .ConfigureAwait(true);
-            var stored = guidance is { ValueKind: JsonValueKind.Object } g
-                && g.TryGetProperty("guidance", out var record)
-                    ? record
-                    : (JsonElement?)null;
             // Documents added since this note was searched: refresh once the view has settled
             if (Guidance.LoadStored(stored))
             {
@@ -658,9 +640,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         return true;
     }
 
-    private static string Text(JsonElement? element, string property) =>
-        element is { ValueKind: JsonValueKind.Object } o
-            && o.TryGetProperty(property, out var value)
+    private static string Text(JsonElement element, string property) =>
+        element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(property, out var value)
             && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? ""
             : "";
@@ -675,7 +657,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         }
 
         await AutosaveReviewAsync().ConfigureAwait(true);
-        await RequestAsync("session/close").ConfigureAwait(true);
+        await TryAsync("session/close", () => _engine.CloseSessionAsync()).ConfigureAwait(true);
         Note.Reset();
         Guidance.Reset();
         PageView.Hide();
@@ -732,22 +714,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
         try
         {
-            var replay = ActiveReplay;
             var retain = _preferences?.KeepConsultations ?? true;
-            var parameters = replay is null
-                ? (object)new { resume, retain }
-                : new
-                {
-                    resume,
-                    retain,
-                    replay = new { path = replay.Path, speed = replay.Speed, monitor = replay.Monitor },
-                };
-            // A post-crash resume decrypts stored audio, far beyond the default
-            // timeout; the raw request tells a lost engine from one that answered
-            var response = await _engine.RequestAsync(
-                "session/start", parameters, TimeSpan.FromSeconds(60)).ConfigureAwait(true);
-            _recordingSessionId = response.TryGetProperty("sessionId", out var id)
-                ? id.GetString() : null;
+            // The raw call tells a lost engine from one that answered
+            var started = await _engine.ResumeSessionAsync(resume, retain, ActiveReplay)
+                .ConfigureAwait(true);
+            _recordingSessionId = started.Length > 0 ? started : null;
             Status.Append("Recording");
         }
         catch (Exception e) when (e is EngineErrorException or OperationCanceledException)
@@ -779,18 +750,13 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        // Keep consultations off: the engine erases the session once it is left
+        // Keep consultations off: the engine erases the session once it is left.
+        // An empty mic id means the default; one that has gone falls back there, logged
         var retain = _preferences?.KeepConsultations ?? true;
-        var parameters = replay is null
-            // The engine pins this microphone; empty means the default, and
-            // an id that has gone falls back to the default there, logged
-            ? (object)new { retain, micId = _preferences?.MicId ?? "" }
-            : new
-            {
-                retain,
-                replay = new { path = replay.Path, speed = replay.Speed, monitor = replay.Monitor },
-            };
-        if (!await BeginAsync(parameters, replay, null).ConfigureAwait(true))
+        var start = replay is null
+            ? () => _engine.StartSessionAsync(retain, _preferences?.MicId ?? "")
+            : (Func<Task<string>>)(() => _engine.StartReplayAsync(retain, replay));
+        if (!await BeginAsync(start, replay, null).ConfigureAwait(true))
         {
             return;
         }
@@ -812,8 +778,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        var parameters = new { playback = new { id = playback.SessionId } };
-        if (!await BeginAsync(parameters, null, playback).ConfigureAwait(true))
+        var start = () => _engine.StartPlaybackAsync(playback.SessionId);
+        if (!await BeginAsync(start, null, playback).ConfigureAwait(true))
         {
             return;
         }
@@ -823,19 +789,15 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     }
 
     private async Task<bool> BeginAsync(
-        object parameters, ReplayRequest? replay, DemoMaster? playback)
+        Func<Task<string>> start, ReplayRequest? replay, DemoMaster? playback)
     {
-        // Beyond the engine's 10 s no-audio deadline: a Bluetooth link wakes in
-        // seconds and a timeout here would abandon a started session
-        var response = await RequestValueAsync(
-            "session/start", TimeSpan.FromSeconds(30), parameters).ConfigureAwait(true);
-        if (response is null)
+        var started = await TryAsync("session/start", start).ConfigureAwait(true);
+        if (started is null)
         {
             return false;
         }
 
-        _recordingSessionId = response.Value.TryGetProperty("sessionId", out var id)
-            ? id.GetString() : null;
+        _recordingSessionId = started.Length > 0 ? started : null;
         Paused = false;
         AudioSeconds = 0;
         Phase = FinalisePhase.None;
@@ -854,7 +816,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        if (await RequestAsync("session/pause", new { paused }).ConfigureAwait(true))
+        if (await TryAsync("session/pause", () => _engine.PauseSessionAsync(paused)).ConfigureAwait(true))
         {
             Paused = paused;
         }
@@ -864,7 +826,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     {
         if (State == SessionState.Recording)
         {
-            await RequestAsync("session/monitor", new { on }).ConfigureAwait(true);
+            await TryAsync("session/monitor", () => _engine.MonitorSessionAsync(on)).ConfigureAwait(true);
         }
     }
 
@@ -891,8 +853,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.Apply(NotePipelineEvent.NoteWritingStarted);
         Guidance.NoteStarted();
         Status.Append("Finalising", busy: true);
-        var response = await RequestValueAsync("session/stop", StopTimeout).ConfigureAwait(true);
-        if (response is null)
+        var stopped = await TryAsync("session/stop", () => _engine.StopSessionAsync()).ConfigureAwait(true);
+        if (stopped is null)
         {
             // A failed stop must not wedge the UI; the recording is safe in
             // the store either way
@@ -907,10 +869,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
         // The finalised transcript carries the speaker labels the live feed
         // could not; it replaces the pane once the engine has sealed it
-        if (response is { ValueKind: JsonValueKind.Object } stop
-            && stop.TryGetProperty("sessionId", out var sessionId))
+        if (stopped.Length > 0)
         {
-            _finalisedSessionId = sessionId.GetString();
+            _finalisedSessionId = stopped;
             _finalisedStartedAt = "";
             // An unkept consultation is erased on leaving; a reflection cannot outlive it
             Note.ReflectAvailable = _preferences?.KeepConsultations != false;
@@ -930,16 +891,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
         try
         {
-            var response = await _engine
-                .RequestAsync("session/transcript", new { id }, RequestTimeout)
-                .ConfigureAwait(true);
+            var turns = await _engine.TranscriptAsync(id).ConfigureAwait(true);
             Transcript.Turns.Clear();
-            foreach (var turn in response.GetProperty("turns").EnumerateArray())
+            foreach (var turn in turns)
             {
-                Transcript.Add(
-                    turn.GetProperty("speaker").GetString() ?? "",
-                    turn.GetProperty("firstFrame").GetUInt64(),
-                    turn.GetProperty("text").GetString() ?? "");
+                Transcript.Add(turn.Speaker, turn.FirstFrame, turn.Text);
             }
         }
         catch (Exception)
@@ -964,7 +920,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
-        if (!await RequestAsync("session/cancel").ConfigureAwait(true))
+        if (!await TryAsync("session/cancel", () => _engine.CancelSessionAsync()).ConfigureAwait(true))
         {
             return;
         }
@@ -1208,28 +1164,30 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         }
     }
 
-    private async Task<bool> RequestAsync(
-        string method, object? parameters = null, TimeSpan? timeout = null) =>
-        await RequestValueAsync(method, timeout, parameters).ConfigureAwait(true) is not null;
+    // A failed step is reported and the flow carries on: false, or null for a value
+    private async Task<bool> TryAsync(string step, Func<Task> call) =>
+        await TryAsync(step, async () =>
+        {
+            await call().ConfigureAwait(true);
+            return true;
+        }).ConfigureAwait(true);
 
-    private async Task<JsonElement?> RequestValueAsync(
-        string method, TimeSpan? timeout = null, object? parameters = null)
+    private async Task<T?> TryAsync<T>(string step, Func<Task<T>> call)
     {
         try
         {
-            return await _engine.RequestAsync(method, parameters, timeout ?? RequestTimeout)
-                .ConfigureAwait(true);
+            return await call().ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             Status.Append("Taking longer than expected", busy: true);
-            return null;
+            return default;
         }
         catch (Exception e)
         {
             Status.Append("A step failed - trying to continue");
-            Status.Log($"{method} failed: {e.Message}");
-            return null;
+            Status.Log($"{step} failed: {e.Message}");
+            return default;
         }
     }
 }

@@ -11,7 +11,7 @@ namespace Ambient.App.Core.Metrics;
 /// only, never content. Writes nothing unless enabled.
 /// </summary>
 public sealed class PerformanceCollector(
-    IEngineClient engine, Func<bool> enabled, Func<int?> enginePid, string path)
+    IEngineApi engine, Func<bool> enabled, Func<int?> enginePid, string path)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -113,9 +113,7 @@ public sealed class PerformanceCollector(
         JsonElement? engineMetrics = null;
         try
         {
-            engineMetrics = await engine
-                .RequestAsync("engine/metrics", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(false);
+            engineMetrics = (await engine.MetricsAsync().ConfigureAwait(false)).Raw;
         }
         catch (Exception)
         {

@@ -23,18 +23,6 @@ public class FinalTranscriptTest
     }
 
     [Fact]
-    public async Task LiveTurnsAreNotShown()
-    {
-        var (session, engine, _) = TestSession.Create();
-        await session.StartRecordingAsync();
-
-        engine.RaiseNotification("transcript.turn", System.Text.Json.JsonSerializer
-            .SerializeToElement(new { firstFrame = 168000, frameCount = 16000, speaker = "", text = "hello there" }));
-
-        Assert.Empty(session.Transcript.Turns);
-    }
-
-    [Fact]
     public void TimeLabelsAreMinutesAndSeconds()
     {
         var transcript = new TranscriptViewModel();

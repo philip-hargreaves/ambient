@@ -33,9 +33,7 @@ public sealed record SessionRow(
 /// </summary>
 public sealed partial class SessionsViewModel : ObservableObject
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
-
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly StatusBarViewModel _status;
     private readonly ConsultationViewModel _consultation;
     private readonly AppPreferences? _preferences;
@@ -67,7 +65,7 @@ public sealed partial class SessionsViewModel : ObservableObject
     public NoteViewModel Note => _consultation.Note;
 
     public SessionsViewModel(
-        IEngineClient engine, StatusBarViewModel status, ConsultationViewModel consultation,
+        IEngineApi engine, StatusBarViewModel status, ConsultationViewModel consultation,
         AppPreferences? preferences = null)
     {
         _engine = engine;
@@ -93,37 +91,25 @@ public sealed partial class SessionsViewModel : ObservableObject
     {
         try
         {
-            var result = await _engine
-                .RequestAsync("session/list", null, RequestTimeout).ConfigureAwait(true);
+            var sessions = await _engine.ListSessionsAsync().ConfigureAwait(true);
             Selected = null;
             Sessions.Clear();
-            foreach (var session in result.GetProperty("sessions").EnumerateArray())
+            foreach (var session in sessions)
             {
-                var started = session.GetProperty("startedAt").GetString() ?? "";
-                var ended = session.GetProperty("endedAt").GetString() ?? "";
-                var label = session.TryGetProperty("label", out var l)
-                    ? l.GetString() ?? "" : "";
-                var edited = session.TryGetProperty("editedAt", out var e)
-                    && e.ValueKind == System.Text.Json.JsonValueKind.String
-                    ? e.GetString() ?? "" : "";
+                var started = session.StartedAt;
+                var label = session.Label ?? "";
                 // No title beats a bad title: without a stored label the
                 // date and time are the row's name
                 var startedLabel = FormatStarted(started);
-                var audioSeconds = session.TryGetProperty("audioSeconds", out var a)
-                    ? a.GetDouble() : 0;
-                var demo = session.TryGetProperty("demo", out var d)
-                    && d.ValueKind == System.Text.Json.JsonValueKind.True;
-                var hasReflection = session.TryGetProperty("hasReflection", out var h)
-                    && h.ValueKind == System.Text.Json.JsonValueKind.True;
                 Sessions.Add(new SessionRow(
-                    session.GetProperty("id").GetString() ?? "",
+                    session.Id,
                     label.Length > 0 ? label : startedLabel,
                     startedLabel,
-                    FormatDuration(audioSeconds, started, ended),
-                    EditedStamp.Label(started, edited),
+                    FormatDuration(session.AudioSeconds, started, session.EndedAt),
+                    EditedStamp.Label(started, session.EditedAt ?? ""),
                     started,
-                    demo,
-                    hasReflection));
+                    session.Demo,
+                    session.HasReflection));
             }
 
             EmptyBecauseOff = Sessions.Count == 0
@@ -164,10 +150,7 @@ public sealed partial class SessionsViewModel : ObservableObject
 
         try
         {
-            _ = await _engine
-                .RequestAsync("session/label", new { id = Selected.Id, text = DetailTitle },
-                    RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.LabelSessionAsync(Selected.Id, DetailTitle).ConfigureAwait(true);
             var index = Sessions.IndexOf(Selected);
             var renamed = Selected with { Title = DetailTitle };
             _retitling = true;
@@ -206,9 +189,7 @@ public sealed partial class SessionsViewModel : ObservableObject
                 DetailOpen = false;
             }
 
-            _ = await _engine
-                .RequestAsync("session/delete", new { id = row.Id }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.DeleteSessionAsync(row.Id).ConfigureAwait(true);
             _status.Append("Session deleted");
             await RefreshAsync().ConfigureAwait(true);
         }

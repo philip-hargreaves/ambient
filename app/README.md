@@ -10,7 +10,7 @@ Ambient.App  ->  Ambient.App.Core  ->  Ambient.Client  -> (named pipe) ->  engin
 |---|---|---|
 | `Ambient.App` | XAML views, their code-behind, themes, and the WinUI implementations of Core's ports | The only project that references WinUI. If a file needs a XAML type to compile, it lives here. |
 | `Ambient.App.Core` | View models, the ports they depend on, engine supervision, preferences, metrics | No WinUI reference, so every view model is a plain object a test constructs off the UI thread. |
-| `Ambient.Client` | `IEngineClient`, message framing, the pipe transport | The engine's SDK. Knows nothing about the app. |
+| `Ambient.Client` | `IEngineApi` and its typed replies, `IEngineTransport`, message framing, the pipe transport | The engine's SDK. Knows nothing about the app. |
 
 ## Folders
 

@@ -11,7 +11,7 @@ using Ambient.Client;
 namespace Ambient.App.Platform;
 
 public sealed class WinUiDialogService(
-    WindowAccessor window, IEngineClient engine, IUiDispatcher dispatcher, MicViewModel mic,
+    WindowAccessor window, IEngineApi engine, IUiDispatcher dispatcher, MicViewModel mic,
     StatusBarViewModel status, IClipboard clipboard, IFilePicker picker) : IDialogService
 {
     // Cancel is the safe default in every confirmation

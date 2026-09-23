@@ -2,6 +2,7 @@ using Ambient.App.Core.Features.Settings;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Settings;
 
@@ -16,7 +17,7 @@ public class VoiceViewModelTest
     public async Task TheHeadlineNamesEachStateOfThePrint()
     {
         var engine = new FakeEngineClient();
-        var voice = new VoiceViewModel(engine, new FakeDialogService());
+        var voice = new VoiceViewModel(new EngineApi(engine), new FakeDialogService());
 
         await voice.RefreshAsync();
         Assert.False(voice.HasVoice);
@@ -52,7 +53,7 @@ public class VoiceViewModelTest
         var engine = new FakeEngineClient { AnchorOrigin = "accrued", AnchorSessions = 4 };
         var status = new StatusBarViewModel();
         var dialogs = new FakeDialogService { Answer = false };
-        var voice = new VoiceViewModel(engine, dialogs, new FakeSession(), status);
+        var voice = new VoiceViewModel(new EngineApi(engine), dialogs, new FakeSession(), status);
         await voice.RefreshAsync();
         Assert.True(voice.ForgetVoiceCommand.CanExecute(null));
 
@@ -74,7 +75,7 @@ public class VoiceViewModelTest
         var engine = new FakeEngineClient { AnchorOrigin = "accrued", AnchorSessions = 4 };
         var status = new StatusBarViewModel();
         var session = new FakeSession { ConsultationActive = true };
-        var voice = new VoiceViewModel(engine, new FakeDialogService(), session, status);
+        var voice = new VoiceViewModel(new EngineApi(engine), new FakeDialogService(), session, status);
         await voice.RefreshAsync();
 
         await voice.ForgetVoiceCommand.ExecuteAsync(null);
@@ -98,7 +99,7 @@ public class VoiceViewModelTest
                 engine.AnchorEnrolledAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             },
         };
-        var voice = new VoiceViewModel(engine, dialogs, new FakeSession(), status);
+        var voice = new VoiceViewModel(new EngineApi(engine), dialogs, new FakeSession(), status);
         await voice.RefreshAsync();
         Assert.True(voice.SetUpVoiceCommand.CanExecute(null));
         await voice.SetUpVoiceCommand.ExecuteAsync(null);

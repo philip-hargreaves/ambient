@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Consultation;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Demo;
 

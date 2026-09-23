@@ -4,6 +4,7 @@ using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Support;
 
@@ -16,11 +17,11 @@ internal static class TestSession
         var note = new NoteViewModel();
         var status = new StatusBarViewModel();
         var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), note, status,
+            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
             dialogs ?? new FakeDialogService(), Page(engine, status), preferences: preferences);
         return (session, engine, note);
     }
 
-    public static PageViewModel Page(Ambient.Client.IEngineClient engine, StatusBarViewModel status) =>
-        new(engine, new FakeLauncher(), new FakeClipboard(), status);
+    public static PageViewModel Page(IEngineTransport engine, StatusBarViewModel status) =>
+        new(new EngineApi(engine), new FakeLauncher(), new FakeClipboard(), status);
 }

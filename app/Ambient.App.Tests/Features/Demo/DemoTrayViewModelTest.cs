@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Tests.Support;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Demo;
 

@@ -95,7 +95,8 @@ public partial class App : Application
             sp.GetRequiredService<IEngineHost>(),
             static async (pid, ct) => await PipeTransport.ConnectAsync(
                 EngineInfo.PipeName, EngineConnectTimeout, pid, ct).ConfigureAwait(false)));
-        services.AddSingleton<IEngineClient>(sp => sp.GetRequiredService<EngineConnection>());
+        services.AddSingleton<IEngineTransport>(sp => sp.GetRequiredService<EngineConnection>());
+        services.AddSingleton<IEngineApi>(sp => new EngineApi(sp.GetRequiredService<EngineConnection>()));
 
         services.AddSingleton<NavigationService>();
         services.AddSingleton<INavigationService>(sp => sp.GetRequiredService<NavigationService>());
@@ -105,7 +106,7 @@ public partial class App : Application
         services.AddSingleton<Core.Metrics.IMachineInfoProvider,
             Core.Metrics.WmiMachineInfoProvider>();
         services.AddSingleton(sp => new Core.Metrics.PerformanceCollector(
-            sp.GetRequiredService<IEngineClient>(),
+            sp.GetRequiredService<IEngineApi>(),
             () => sp.GetRequiredService<AppPreferences>().CollectPerformanceData,
             () => sp.GetRequiredService<IEngineHost>().EnginePid,
             Path.Combine(localState, "metrics.jsonl")));

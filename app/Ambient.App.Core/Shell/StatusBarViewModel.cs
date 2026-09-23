@@ -66,29 +66,21 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
         try
         {
-            var response = await _engine
-                .RequestAsync("engine/models", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            var models = await _engine.ListModelsAsync().ConfigureAwait(true);
             // The chip names the model the engine marks active for the role, not
             // the first listed; older engines send no flag, so the default tier is assumed
             _asrName = _noteName = "";
-            foreach (var model in response.GetProperty("models").EnumerateArray()
-                         .OrderBy(m => m.TryGetProperty("active", out var active)
-                                       && active.ValueKind == JsonValueKind.True ? 0
-                             : m.GetProperty("tier").GetString() == "default" ? 1 : 2))
+            foreach (var model in models.OrderBy(m => m.Active ? 0 : m.Tier == "default" ? 1 : 2))
             {
-                var task = model.GetProperty("task").GetString();
-                var id = model.GetProperty("id").GetString() ?? "";
-                var name = model.TryGetProperty("name", out var given)
-                           && !string.IsNullOrWhiteSpace(given.GetString())
-                    ? given.GetString()!
-                    : FriendlyModelName(id);
-                var device = ShortDevice(model.GetProperty("device").GetString() ?? "");
-                if (task == "asr" && _asrName.Length == 0)
+                var name = string.IsNullOrWhiteSpace(model.Name)
+                    ? FriendlyModelName(model.Id)
+                    : model.Name;
+                var device = ShortDevice(model.Device);
+                if (model.Task == "asr" && _asrName.Length == 0)
                 {
                     (_asrName, _asrDevice) = (name, device);
                 }
-                else if (task == "note" && _noteName.Length == 0)
+                else if (model.Task == "note" && _noteName.Length == 0)
                 {
                     (_noteName, _noteDevice) = (name, device);
                 }
@@ -149,7 +141,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
         }
     }
 
-    private readonly IEngineClient? _engine;
+    private readonly IEngineApi? _engine;
     private readonly TimeProvider _time = TimeProvider.System;
     private readonly ThroughputMeter _meter = new();
     private readonly Func<double> _memoryGb = ReadMemoryGb;
@@ -163,7 +155,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     /// With an engine, the bar meters generation live: one partial per token
     /// from whichever lane streams, so the number moves with every token.
     /// </summary>
-    public StatusBarViewModel(IEngineClient engine, IUiDispatcher dispatcher,
+    public StatusBarViewModel(IEngineApi engine, IUiDispatcher dispatcher,
         TimeProvider? time = null, Func<double>? memoryGb = null)
     {
         _engine = engine;
@@ -327,28 +319,16 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
         try
         {
-            var metrics = await _engine
-                .RequestAsync("engine/metrics", null, TimeSpan.FromSeconds(2))
-                .ConfigureAwait(true);
-            if (metrics.TryGetProperty("asrRealtimeFactor", out var factor)
-                && factor.ValueKind == JsonValueKind.Number)
+            var metrics = await _engine.MetricsAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            if (metrics.AsrRealtimeFactor is { } factor)
             {
-                RealtimeFactor = factor.GetDouble();
+                RealtimeFactor = factor;
             }
 
-            if (metrics.TryGetProperty("devices", out var devices)
-                && devices.ValueKind == JsonValueKind.Object)
+            if (metrics.Devices is { } devices)
             {
-                if (devices.TryGetProperty("asr", out var asr))
-                {
-                    _asrDevice = ShortDevice(asr.GetString() ?? _asrDevice);
-                }
-
-                if (devices.TryGetProperty("note", out var note))
-                {
-                    _noteDevice = ShortDevice(note.GetString() ?? _noteDevice);
-                }
-
+                _asrDevice = ShortDevice(devices.Asr ?? _asrDevice);
+                _noteDevice = ShortDevice(devices.Note ?? _noteDevice);
                 RecomputeChips();
             }
         }

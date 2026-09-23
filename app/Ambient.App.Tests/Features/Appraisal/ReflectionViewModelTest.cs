@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ambient.App.Core.Features.Appraisal;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Appraisal;
 
@@ -10,7 +11,7 @@ public class ReflectionViewModelTest
     private static (ReflectionViewModel Reflection, FakeEngineClient Engine) Create()
     {
         var engine = new FakeEngineClient();
-        return (new ReflectionViewModel(engine, new InlineDispatcher(), new StatusBarViewModel()), engine);
+        return (new ReflectionViewModel(new EngineApi(engine), new InlineDispatcher(), new StatusBarViewModel()), engine);
     }
 
     [Fact]

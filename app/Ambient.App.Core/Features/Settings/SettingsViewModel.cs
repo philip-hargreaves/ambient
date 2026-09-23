@@ -26,7 +26,6 @@ public sealed record CorpusRow(string Name, string Detail, string Attribution, b
 
 public sealed partial class SettingsViewModel : ObservableObject
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
 
     private readonly AppPreferences? _preferences;
     private readonly IEngineHost? _engine;
@@ -35,7 +34,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IMachineInfoProvider? _machine;
     private readonly PerformanceCollector? _metrics;
     private readonly DemoMode? _demo;
-    private readonly IEngineClient? _client;
+    private readonly IEngineApi? _client;
     private readonly IUiDispatcher? _dispatcher;
     private readonly IDialogService? _dialogs;
     private readonly IFilePicker? _picker;
@@ -47,7 +46,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(AppPreferences? preferences = null, IEngineHost? engine = null,
         ISessionState? session = null, StatusBarViewModel? status = null,
         IMachineInfoProvider? machine = null, PerformanceCollector? metrics = null,
-        string? exportDirectory = null, IEngineClient? client = null,
+        string? exportDirectory = null, IEngineApi? client = null,
         IUiDispatcher? dispatcher = null, DemoMode? demo = null, IDialogService? dialogs = null,
         IFilePicker? picker = null, ILauncher? launcher = null, IThemeService? theme = null)
     {
@@ -114,9 +113,9 @@ public sealed partial class SettingsViewModel : ObservableObject
                         _ = LoadDocumentsAsync();
                     });
                 }
-                else if (method == "guidance/document")
+                else if (method == "guidance/document"
+                    && Protocol.Parse<DocumentInfo>(parameters) is { } document)
                 {
-                    var document = parameters.Clone();
                     Post(() => Upsert(document));
                 }
                 else if (method == "guidance/progress")
@@ -200,16 +199,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var response = await _client
-                .RequestAsync("engine/models", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
-            var staged = response.GetProperty("models").EnumerateArray()
-                .Where(m => m.GetProperty("task").GetString() == "note")
+            var models = await _client.ListModelsAsync().ConfigureAwait(true);
+            var staged = models
+                .Where(m => m.Task == "note")
                 .Select(m => (
-                    Tier: m.GetProperty("tier").GetString() ?? "",
-                    Name: m.TryGetProperty("name", out var n) && !string.IsNullOrWhiteSpace(n.GetString())
-                        ? n.GetString()!
-                        : StatusBarViewModel.FriendlyModelName(m.GetProperty("id").GetString() ?? "")))
+                    m.Tier,
+                    Name: string.IsNullOrWhiteSpace(m.Name)
+                        ? StatusBarViewModel.FriendlyModelName(m.Id)
+                        : m.Name))
                 .Where(m => AppPreferences.NoteTiers.Contains(m.Tier))
                 .OrderBy(m => LadderRank(m.Tier))
                 .ToList();
@@ -308,13 +305,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var reply = await _client
-                .RequestAsync("note/tier", new { tier }, RequestTimeout)
-                .ConfigureAwait(true);
+            var reply = await _client.SetNoteTierAsync(tier).ConfigureAwait(true);
             // Already resident (the same tier after a restart): nothing to wait for
-            if (reply.TryGetProperty("state", out var state) && state.GetString() == "ready")
+            if (reply.State == "ready")
             {
-                OnNoteModel(reply);
+                ApplyNoteModel(reply.State, reply.Tier, firstUse: false, detail: "");
             }
         }
         catch (Exception e)
@@ -352,13 +347,19 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        var state = parameters.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "";
-        var tier = parameters.TryGetProperty("tier", out var t) ? t.GetString() ?? "" : "";
+        ApplyNoteModel(
+            parameters.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "",
+            parameters.TryGetProperty("tier", out var t) ? t.GetString() ?? "" : "",
+            parameters.TryGetProperty("firstUse", out var f) && f.GetBoolean(),
+            parameters.TryGetProperty("detail", out var d) ? d.GetString() ?? "" : "");
+    }
+
+    private void ApplyNoteModel(string state, string tier, bool firstUse, string detail)
+    {
         switch (state)
         {
             case "loading":
                 NoteModelEnabled = false;
-                var firstUse = parameters.TryGetProperty("firstUse", out var f) && f.GetBoolean();
                 NoteModelStatus = firstUse
                     ? "Preparing for this computer, a few minutes the first time"
                     : "Loading";
@@ -379,7 +380,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
                 break;
             case "failed":
-                var detail = parameters.TryGetProperty("detail", out var d) ? d.GetString() ?? "" : "";
                 if (tier == _noteTier)
                 {
                     RevertTier(detail);
@@ -419,10 +419,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var reply = await _client
-                .RequestAsync("guidance/corpora", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
-            ApplyGuidanceCorpora(reply);
+            ApplyGuidanceCorpora(await _client.GuidanceCorporaAsync().ConfigureAwait(true));
         }
         catch (Exception)
         {
@@ -431,19 +428,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private void ApplyGuidanceCorpora(JsonElement reply)
+    private void ApplyGuidanceCorpora(CorporaStatus reply)
     {
         GuidanceCorpora.Clear();
-        if (reply.TryGetProperty("corpora", out var list) && list.ValueKind == JsonValueKind.Array)
+        foreach (var corpus in reply.Corpora)
         {
-            foreach (var corpus in list.EnumerateArray())
-            {
-                GuidanceCorpora.Add(RowFrom(corpus) with { Divided = GuidanceCorpora.Count > 0 });
-            }
+            GuidanceCorpora.Add(RowFrom(corpus) with { Divided = GuidanceCorpora.Count > 0 });
         }
 
-        var detail = GuidanceCard.Field(reply, "detail");
-        GuidanceCaption = GuidanceCard.Field(reply, "state") switch
+        var detail = reply.Detail ?? "";
+        GuidanceCaption = reply.State switch
         {
             "loading" => "Loading",
             "unavailable" => detail.Length > 0 ? $"Unavailable: {detail}" : "Unavailable",
@@ -453,31 +447,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     // A refused corpus keeps its place, so unused guidance stays visible
-    private static CorpusRow RowFrom(JsonElement corpus)
+    private static CorpusRow RowFrom(CorpusInfo corpus)
     {
-        var refused = GuidanceCard.Field(corpus, "unavailable");
+        var refused = corpus.Unavailable ?? "";
         if (refused.Length > 0)
         {
-            return new CorpusRow(
-                GuidanceCard.Field(corpus, "id"), $"Not used: {refused}", "", true);
+            return new CorpusRow(corpus.Id, $"Not used: {refused}", "", true);
         }
 
         // The licence is not shown: the attribution line is what it asks for
         var parts = new List<string>();
-        if (corpus.TryGetProperty("chunks", out var chunks)
-            && chunks.TryGetInt32(out var count) && count > 0)
+        if (corpus.Chunks > 0)
         {
-            parts.Add($"{count:N0} passages");
+            parts.Add($"{corpus.Chunks:N0} passages");
         }
 
-        var built = GuidanceCard.ShortDate(GuidanceCard.Field(corpus, "builtAt"));
+        var built = GuidanceCard.ShortDate(corpus.BuiltAt ?? "");
         if (built.Length > 0)
         {
             parts.Add(built);
         }
 
-        return new CorpusRow(GuidanceCard.Field(corpus, "name"), string.Join(" · ", parts),
-            GuidanceCard.Field(corpus, "attribution"), false);
+        return new CorpusRow(corpus.Name, string.Join(" · ", parts), corpus.Attribution ?? "", false);
     }
 
     // ---- added documents --------------------------------------------------
@@ -579,18 +570,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var reply = await _client
-                .RequestAsync("guidance/documents/add", new { paths }, RequestTimeout)
-                .ConfigureAwait(true);
-            if (reply.TryGetProperty("documents", out var documents))
+            var added = await _client.AddDocumentsAsync(paths).ConfigureAwait(true);
+            foreach (var document in added.Documents)
             {
-                foreach (var document in documents.EnumerateArray())
-                {
-                    Upsert(document);
-                }
+                Upsert(document);
             }
 
-            DocumentsCaption = SkippedCaption(reply);
+            DocumentsCaption = SkippedCaption(added.Skipped);
         }
         catch (Exception e)
         {
@@ -600,17 +586,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     // Skipped files become a count under the add row
-    private static string SkippedCaption(JsonElement reply)
+    private static string SkippedCaption(IReadOnlyList<SkippedFile> skipped)
     {
-        if (!reply.TryGetProperty("skipped", out var skipped)
-            || skipped.ValueKind != JsonValueKind.Array || skipped.GetArrayLength() == 0)
+        if (skipped.Count == 0)
         {
             return "";
         }
 
         var parts = new List<string>();
-        foreach (var group in skipped.EnumerateArray()
-            .GroupBy(s => GuidanceCard.Field(s, "reason")))
+        foreach (var group in skipped.GroupBy(s => s.Reason ?? ""))
         {
             var n = group.Count();
             parts.Add(group.Key switch
@@ -633,15 +617,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var reply = await _client
-                .RequestAsync("guidance/documents", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
-            GuidelinesFolder = GuidanceCard.Field(reply, "folder");
-            FolderMissing = reply.TryGetProperty("found", out var found) && !found.GetBoolean();
+            var list = await _client.ListDocumentsAsync().ConfigureAwait(true);
+            GuidelinesFolder = list.Folder ?? "";
+            FolderMissing = !list.Found;
             FolderInOneDrive = InOneDrive(GuidelinesFolder, OneDriveRoots());
-            var unsupported = reply.TryGetProperty("unsupported", out var u) ? u.GetInt32() : 0;
+            var unsupported = list.Unsupported;
             Documents.Clear();
-            foreach (var document in reply.GetProperty("documents").EnumerateArray())
+            foreach (var document in list.Documents)
             {
                 Upsert(document);
             }
@@ -660,11 +642,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     // A row keeps its place while it works, then sorts by name below the batch
-    private void Upsert(JsonElement document)
+    private void Upsert(DocumentInfo document)
     {
-        var id = document.GetProperty("id").GetInt64();
-        var row = Documents.FirstOrDefault(r => r.Id == id);
-        if (GuidanceCard.Field(document, "state") == "removed")
+        var row = Documents.FirstOrDefault(r => r.Id == document.Id);
+        if (document.State == "removed")
         {
             if (row is not null)
             {
@@ -764,9 +745,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await _client
-                .RequestAsync("guidance/documents/remove", new { id = row.Id }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _client.RemoveDocumentAsync(row.Id).ConfigureAwait(true);
         }
         catch (Exception e)
         {
@@ -793,8 +772,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await _client.RequestAsync("guidance/documents/removeAll", null, RequestTimeout)
-                .ConfigureAwait(true);
+            await _client.RemoveAllDocumentsAsync().ConfigureAwait(true);
         }
         catch (Exception e)
         {
@@ -988,8 +966,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var result = await _client.RequestAsync("session/deleteAll", null, RequestTimeout).ConfigureAwait(true);
-            var removed = result.TryGetProperty("removed", out var n) ? n.GetInt32() : 0;
+            var removed = await _client.DeleteAllSessionsAsync().ConfigureAwait(true);
             _status?.Append(removed == 1 ? "1 consultation deleted" : $"{removed} consultations deleted");
             // The seed was erased too; the switch follows, and switching on reseeds
             _seedFollowsStore = true;
@@ -1012,9 +989,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var result = await _client.RequestAsync(enabled ? "demo/seed" : "demo/clear", null, RequestTimeout)
+            var count = await (enabled ? _client.SeedDemoAsync() : _client.ClearDemoAsync())
                 .ConfigureAwait(true);
-            var count = result.TryGetProperty(enabled ? "added" : "removed", out var n) ? n.GetInt32() : 0;
             if (count > 0)
             {
                 _status?.Append(enabled
@@ -1092,8 +1068,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await _client.RequestAsync("guidance/research", new { include }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _client.SetResearchGuidanceAsync(include).ConfigureAwait(true);
         }
         catch (Exception e)
         {

@@ -14,8 +14,14 @@ public static class Protocol
     public static JsonSerializerOptions JsonOptions { get; } = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
     };
+
+    /// <summary>An object payload as a record; null for anything else.</summary>
+    public static T? Parse<T>(JsonElement element)
+        where T : class =>
+        element.ValueKind == JsonValueKind.Object ? element.Deserialize<T>(JsonOptions) : null;
 }
 
 /// <summary>A JSON-RPC error response from the engine.</summary>

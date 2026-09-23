@@ -6,6 +6,7 @@ using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Sessions;
 
@@ -18,13 +19,13 @@ public class SessionsViewModelTest
         var note = new NoteViewModel();
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), note, status,
+            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
             new FakeDialogService(), TestSession.Page(engine, status));
-        return (new SessionsViewModel(engine, status, consultation), consultation, engine, status);
+        return (new SessionsViewModel(new EngineApi(engine), status, consultation), consultation, engine, status);
     }
 
     /// <summary>Scripted responses per method; unscripted methods answer {}.</summary>
-    public sealed class RecordingEngineClient : Ambient.Client.IEngineClient
+    public sealed class RecordingEngineClient : Ambient.Client.IEngineTransport
     {
         public Dictionary<string, object> Responses { get; } = [];
 
@@ -289,9 +290,9 @@ public class SessionsViewModelTest
         var engine = new RecordingEngineClient();
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
+            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
             status, new FakeDialogService(), TestSession.Page(engine, status));
-        var vm = new SessionsViewModel(engine, status, consultation, preferences);
+        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, preferences);
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
 
         await vm.RefreshAsync();

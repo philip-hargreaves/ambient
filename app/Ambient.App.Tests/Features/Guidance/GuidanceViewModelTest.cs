@@ -5,6 +5,7 @@ using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Guidance;
 
@@ -231,7 +232,7 @@ public class GuidanceViewModelTest
         Assert.Equal("Matched: the note as a whole", cards[^1].Recommendations.Single().Matched);
         Assert.False(cards[1].Recommendations.Single().CanOpen);
 
-        guidance.ApplyCorpora(Fixtures.Load("guidance-corpora.json").GetProperty("result"));
+        guidance.ApplyCorpora(Protocol.Parse<CorporaStatus>(Fixtures.Load("guidance-corpora.json").GetProperty("result"))!);
         Assert.Equal(GuidanceReadiness.Ready, guidance.Readiness);
         Assert.Equal(
             "nice-2026-08-25: corpus.db sha256 does not match the manifest",
@@ -425,7 +426,7 @@ public class GuidanceViewModelTest
             FailNext = m => m == "guidance/corpora" ? new IOException("pipe closed") : null,
         };
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status));
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status));
 
         Assert.Equal(GuidanceReadiness.Unavailable, session.Guidance.Readiness);
         Assert.Contains(
@@ -793,7 +794,7 @@ public class GuidanceViewModelTest
     public void ReadinessComesFromThePollThenTheNotification()
     {
         var engine = new FakeEngineClient(autoNotify: false) { GuidanceState = "loading" };
-        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()));
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()));
         Assert.Equal(GuidanceReadiness.Loading, session.Guidance.Readiness);
 
         engine.GuidanceState = "ready";
@@ -812,7 +813,7 @@ public class GuidanceViewModelTest
             GuidanceDetail = "no model for embedding/default",
         };
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status));
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status));
 
         Assert.Equal(GuidanceReadiness.Unavailable, session.Guidance.Readiness);
         Assert.Contains(
@@ -829,7 +830,7 @@ public class GuidanceViewModelTest
         var engine = new FakeEngineClient(autoNotify: false);
         engine.GuidanceCorpora.Clear();
         engine.GuidanceCorpora.Add(new { id = "nice", unavailable = "sha256 differs" });
-        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()));
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()));
 
         Assert.Equal(GuidanceReadiness.Ready, session.Guidance.Readiness);
         Assert.False(session.Guidance.SettingsLinkVisible);

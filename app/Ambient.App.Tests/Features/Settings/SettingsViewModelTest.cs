@@ -4,6 +4,7 @@ using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Settings;
 
@@ -68,7 +69,7 @@ public class SettingsViewModelTest
         var preferences = TempPreferences();
         var engine = new FakeEngineClient();
         var status = new StatusBarViewModel();
-        var settings = new SettingsViewModel(preferences, status: status, client: engine);
+        var settings = new SettingsViewModel(preferences, status: status, client: new EngineApi(engine));
         Assert.False(settings.SeedDataEnabled);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "demo/seed");
 
@@ -90,7 +91,7 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient { StoredSessions = 3 };
         var status = new StatusBarViewModel();
         var dialogs = new FakeDialogService { Answer = false };
-        var settings = new SettingsViewModel(preferences, status: status, client: engine, dialogs: dialogs);
+        var settings = new SettingsViewModel(preferences, status: status, client: new EngineApi(engine), dialogs: dialogs);
         settings.SeedDataEnabled = true;
 
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
@@ -113,7 +114,7 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient { StoredSessions = 2 };
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
         var status = new StatusBarViewModel();
-        var settings = new SettingsViewModel(TempPreferences(), status: status, client: engine,
+        var settings = new SettingsViewModel(TempPreferences(), status: status, client: new EngineApi(engine),
             dialogs: new FakeDialogService());
 
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
@@ -128,7 +129,7 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient { StoredSessions = 3 };
         var status = new StatusBarViewModel();
         var settings = new SettingsViewModel(TempPreferences(), session: new FakeSession { ConsultationActive = true },
-            status: status, client: engine, dialogs: new FakeDialogService());
+            status: status, client: new EngineApi(engine), dialogs: new FakeDialogService());
 
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
 
@@ -144,7 +145,7 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient { SamplesSeeded = true };
         var status = new StatusBarViewModel();
 
-        var settings = new SettingsViewModel(preferences, status: status, client: engine);
+        var settings = new SettingsViewModel(preferences, status: status, client: new EngineApi(engine));
 
         Assert.True(settings.SeedDataEnabled);
         Assert.Single(engine.Requests, r => r.Method == "demo/seed");
@@ -225,7 +226,7 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient();
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
         var preferences = TempPreferences();
-        var settings = new SettingsViewModel(preferences, client: engine);
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine));
 
         Assert.Equal("1 document · all ready", settings.DocumentsSummary);
         Assert.False(settings.DocumentsExpanded);
@@ -303,7 +304,7 @@ public class SettingsViewModelTest
         preferences.NoteTier = "accuracy";
         var engine = TieredEngine();
 
-        var settings = new SettingsViewModel(preferences, client: engine);
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine));
 
         Assert.Equal(["Qwen3.5 4B", "Qwen3.5 9B", "Qwen3.6 35B"], settings.NoteModelOptions);
         Assert.Equal(2, settings.NoteModelIndex);
@@ -317,7 +318,7 @@ public class SettingsViewModelTest
     public void AReconnectWithTheSameModelsLeavesTheCollectionAlone()
     {
         var engine = TieredEngine();
-        var settings = new SettingsViewModel(TempPreferences(), client: engine, session: new FakeSession());
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine), session: new FakeSession());
         var changes = 0;
         settings.NoteModelOptions.CollectionChanged += (_, _) => changes++;
         settings.NoteModelIndex = 2;
@@ -340,7 +341,7 @@ public class SettingsViewModelTest
     [Fact]
     public void ASingleStagedModelLeavesNothingToChoose()
     {
-        var settings = new SettingsViewModel(TempPreferences(), client: new FakeEngineClient());
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(new FakeEngineClient()));
 
         Assert.Equal(["Qwen3.5 9B"], settings.NoteModelOptions);
         Assert.Equal(0, settings.NoteModelIndex);
@@ -354,7 +355,7 @@ public class SettingsViewModelTest
         var preferences = TempPreferences();
         preferences.NoteTier = "accuracy";
 
-        var settings = new SettingsViewModel(preferences, client: new FakeEngineClient());
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(new FakeEngineClient()));
 
         Assert.Equal("default", preferences.NoteTier);
         Assert.Equal(0, settings.NoteModelIndex);
@@ -366,7 +367,7 @@ public class SettingsViewModelTest
     {
         var preferences = TempPreferences();
         var engine = TieredEngine();
-        var settings = new SettingsViewModel(preferences, client: engine, session: new FakeSession());
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: new FakeSession());
 
         settings.NoteModelIndex = 2;
 
@@ -391,7 +392,7 @@ public class SettingsViewModelTest
     {
         var preferences = TempPreferences();
         var engine = TieredEngine();
-        var settings = new SettingsViewModel(preferences, client: engine, session: new FakeSession());
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: new FakeSession());
         settings.NoteModelIndex = 2;
         engine.Requests.Clear();
 
@@ -410,7 +411,7 @@ public class SettingsViewModelTest
     {
         var preferences = TempPreferences();
         var engine = TieredEngine();
-        var settings = new SettingsViewModel(preferences, client: engine, session: new FakeSession());
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: new FakeSession());
         engine.FailNext = method => method == "note/tier" ? new IOException("no such device") : null;
 
         settings.NoteModelIndex = 0;
@@ -426,7 +427,7 @@ public class SettingsViewModelTest
         var preferences = TempPreferences();
         var engine = TieredEngine();
         var session = new FakeSession { ConsultationActive = true };
-        var settings = new SettingsViewModel(preferences, client: engine, session: session);
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: session);
 
         settings.NoteModelIndex = 2;
 
@@ -440,7 +441,7 @@ public class SettingsViewModelTest
     {
         var preferences = TempPreferences();
         var engine = TieredEngine();
-        var settings = new SettingsViewModel(preferences, client: engine, session: new FakeSession());
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: new FakeSession());
 
         // Another shell instance, or the engine's own default: the control follows
         engine.RaiseNotification("note/model", NoteModel("ready", "constrained", "Qwen3.5 4B"));
@@ -461,7 +462,7 @@ public class SettingsViewModelTest
         var dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(dir);
         var collector = new Ambient.App.Core.Metrics.PerformanceCollector(
-            new FakeEngineClient(), () => true, () => null, Path.Combine(dir, "metrics.jsonl"));
+            new EngineApi(new FakeEngineClient()), () => true, () => null, Path.Combine(dir, "metrics.jsonl"));
         collector.SessionStarted("mic", 0, null);
         collector.StopRequested();
         await collector.SessionFinishedAsync(null, 10);
@@ -482,7 +483,7 @@ public class SettingsViewModelTest
         var dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(dir);
         var collector = new Ambient.App.Core.Metrics.PerformanceCollector(
-            new FakeEngineClient(), () => true, () => null, Path.Combine(dir, "metrics.jsonl"));
+            new EngineApi(new FakeEngineClient()), () => true, () => null, Path.Combine(dir, "metrics.jsonl"));
         collector.SessionStarted("mic", 0, null);
         collector.StopRequested();
         await collector.SessionFinishedAsync(null, 10);
@@ -588,7 +589,7 @@ public class SettingsViewModelTest
     public void InstalledCorporaListWhatTheEngineHas()
     {
         var engine = new FakeEngineClient();
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         var corpus = Assert.Single(settings.GuidanceCorpora);
         Assert.Equal("Fixture guidance corpus", corpus.Name);
@@ -605,12 +606,12 @@ public class SettingsViewModelTest
     {
         var withNice = new FakeEngineClient { GuidanceState = "ready" };
         withNice.GuidanceCorpora.Add(new { name = "NICE guidance", chunks = 22991 });
-        Assert.True(new SettingsViewModel(TempPreferences(), client: withNice)
+        Assert.True(new SettingsViewModel(TempPreferences(), client: new EngineApi(withNice))
             .GuidanceInstalledVisible);
 
         var empty = new FakeEngineClient { GuidanceState = "ready" };
         empty.GuidanceCorpora.Clear();
-        var settings = new SettingsViewModel(TempPreferences(), client: empty);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(empty));
         Assert.Empty(settings.GuidanceCorpora);
         Assert.Equal("", settings.GuidanceCaption);
         Assert.False(settings.GuidanceInstalledVisible);
@@ -626,7 +627,7 @@ public class SettingsViewModelTest
         };
         engine.GuidanceCorpora.Clear();
 
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         Assert.Empty(settings.GuidanceCorpora);
         Assert.Equal(
@@ -646,7 +647,7 @@ public class SettingsViewModelTest
             unavailable = "corpus.db sha256 does not match the manifest",
         });
 
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         var corpus = Assert.Single(settings.GuidanceCorpora);
         Assert.Equal("nice-2026-08", corpus.Name);
@@ -661,7 +662,7 @@ public class SettingsViewModelTest
     {
         var engine = new FakeEngineClient { GuidanceState = "loading" };
         engine.GuidanceCorpora.Clear();
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
         Assert.Equal("Loading", settings.GuidanceCaption);
 
         engine.GuidanceState = "ready";
@@ -709,7 +710,7 @@ public class SettingsViewModelTest
         engine.GuidanceDocuments.Add(Document(2, "asthma", "ready", 12));
         engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
         engine.GuidanceDocuments.Add(Document(4, "Letter", "failed", error: "patientData"));
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         Assert.Equal(["PMR", "Letter", "asthma", "Gout"], settings.Documents.Select(d => d.Name));
         Assert.Equal("Waiting", settings.Documents[0].Detail);
@@ -735,7 +736,7 @@ public class SettingsViewModelTest
         {
             Files = [@"C:\g\PMR pathway.txt", @"C:\g\scan.pdf", @"C:\g\empty.txt"],
         };
-        var settings = new SettingsViewModel(TempPreferences(), client: engine, picker: picker);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine), picker: picker);
 
         await settings.AddDocumentsCommand.ExecuteAsync(null);
 
@@ -755,7 +756,7 @@ public class SettingsViewModelTest
             pagesWithoutText: 38));
         engine.GuidanceDocuments.Add(Document(2, "Locked", "failed", error: "password"));
         engine.GuidanceDocuments.Add(Document(3, "PMR", "ready", 310, pages: 41));
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         Assert.Equal(["Locked", "Scan", "PMR"], settings.Documents.Select(d => d.Name));
         Assert.Equal("Cannot be read: the PDF is password protected.", settings.Documents[0].Detail);
@@ -772,7 +773,7 @@ public class SettingsViewModelTest
         engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
         var asked = 0;
         var dialogs = new FakeDialogService { OnConfirm = () => asked++ };
-        var settings = new SettingsViewModel(TempPreferences(), client: engine, dialogs: dialogs);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine), dialogs: dialogs);
         var row = Assert.Single(settings.Documents);
 
         engine.RaiseNotification("guidance/progress",
@@ -824,7 +825,7 @@ public class SettingsViewModelTest
     {
         var engine = new FakeEngineClient { GuidanceState = "loading" };
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         // Copying a file into the folder needs no embedder, so Add is always available
         Assert.True(settings.AddDocumentsCommand.CanExecute(null));
@@ -849,7 +850,7 @@ public class SettingsViewModelTest
     {
         var engine = new FakeEngineClient { GuidelinesFolderFound = false, UnsupportedFiles = 2 };
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
-        var settings = new SettingsViewModel(TempPreferences(), client: engine);
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         Assert.True(settings.FolderMissing);
         Assert.Single(settings.Documents);

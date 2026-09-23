@@ -2,17 +2,18 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Settings;
 
 /// <summary>One document in the guidelines folder, as Settings lists it.</summary>
 public sealed partial class DocumentRow : ObservableObject
 {
-    public DocumentRow(JsonElement document, IRelayCommand<DocumentRow> remove)
+    public DocumentRow(DocumentInfo document, IRelayCommand<DocumentRow> remove)
     {
-        Id = document.GetProperty("id").GetInt64();
-        Name = GuidanceCard.Field(document, "name");
-        Where = Subfolder(GuidanceCard.Field(document, "path"));
+        Id = document.Id;
+        Name = document.Name ?? "";
+        Where = Subfolder(document.Path ?? "");
         Remove = remove;
         Apply(document);
     }
@@ -54,9 +55,9 @@ public sealed partial class DocumentRow : ObservableObject
     public bool Waiting => Working && Phase.Length == 0;
 
     /// <summary>guidance/document: the row as the engine has it.</summary>
-    public void Apply(JsonElement document)
+    public void Apply(DocumentInfo document)
     {
-        State = GuidanceCard.Field(document, "state");
+        State = document.State;
         Detail = Describe(document);
         if (!Working)
         {
@@ -87,33 +88,32 @@ public sealed partial class DocumentRow : ObservableObject
         return cut > 0 ? path[..cut].Replace('\\', '/').Replace("/", " › ") : "";
     }
 
-    private string Describe(JsonElement document) =>
+    private string Describe(DocumentInfo document) =>
         State switch
         {
             "ready" => Ready(document),
-            "failed" => GuidanceCard.Field(document, "error") switch
+            "failed" => document.Error switch
             {
                 "patientData" => "Not searched: this looks like a document about a patient. "
                     + "Delete it or move it out of the folder.",
                 "password" => "Cannot be read: the PDF is password protected.",
-                "noText" => $"Cannot be searched: {Int(document, "pagesWithoutText")} of "
-                    + $"{Int(document, "pages")} pages are images with no text.",
+                "noText" => $"Cannot be searched: {document.PagesWithoutText} of "
+                    + $"{document.Pages} pages are images with no text.",
                 _ => "Could not be read.",
             },
             _ => "Waiting",
         };
 
-    private static string Ready(JsonElement document)
+    private static string Ready(DocumentInfo document)
     {
         var parts = new List<string>();
-        var pages = Int(document, "pages");
-        if (pages > 0)
+        if (document.Pages > 0)
         {
-            parts.Add(GuidanceCard.Count(pages, "page"));
+            parts.Add(GuidanceCard.Count(document.Pages, "page"));
         }
 
-        parts.Add(GuidanceCard.Count(Int(document, "chunks"), "passage"));
-        var added = GuidanceCard.ShortDate(GuidanceCard.Field(document, "addedAt"));
+        parts.Add(GuidanceCard.Count(document.Chunks, "passage"));
+        var added = GuidanceCard.ShortDate(document.AddedAt ?? "");
         if (added.Length > 0)
         {
             parts.Add($"added {added}");

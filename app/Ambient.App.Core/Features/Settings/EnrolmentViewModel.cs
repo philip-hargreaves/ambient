@@ -39,14 +39,14 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         + "check your blood pressure and listen to your chest, and then we can talk about what "
         + "happens next. Do you have any questions before we start?";
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly IUiDispatcher? _dispatcher;
     private readonly string _micId;
     private readonly double _seconds;
     private readonly TaskCompletionSource<bool> _outcome =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    public EnrolmentViewModel(IEngineClient engine, string micId = "",
+    public EnrolmentViewModel(IEngineApi engine, string micId = "",
         double seconds = DefaultSeconds, IUiDispatcher? dispatcher = null)
     {
         _engine = engine;
@@ -128,9 +128,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         Detail = "";
         try
         {
-            await _engine.RequestAsync("anchor/enrol",
-                new { seconds = _seconds, mic = new { id = _micId } },
-                TimeSpan.FromSeconds(5)).ConfigureAwait(true);
+            await _engine.StartEnrolmentAsync(_seconds, _micId).ConfigureAwait(true);
         }
         catch (Exception e)
         {
@@ -146,8 +144,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
     {
         try
         {
-            await _engine.RequestAsync("anchor/enrol/cancel", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            await _engine.CancelEnrolmentAsync().ConfigureAwait(true);
         }
         catch (Exception)
         {
@@ -163,8 +160,7 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
     {
         try
         {
-            await _engine.RequestAsync("anchor/enrol/finish", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            await _engine.FinishEnrolmentAsync().ConfigureAwait(true);
         }
         catch (Exception e)
         {

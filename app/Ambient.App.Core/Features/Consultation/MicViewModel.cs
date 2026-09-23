@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -14,10 +13,10 @@ public sealed record MicDevice(string Id, string Name, string ShortName, bool Is
 /// open; the choice is stored by id and falls back only while gone.</summary>
 public sealed partial class MicViewModel : ObservableObject
 {
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly AppPreferences? _preferences;
 
-    public MicViewModel(IEngineClient engine, AppPreferences? preferences = null,
+    public MicViewModel(IEngineApi engine, AppPreferences? preferences = null,
         IUiDispatcher? dispatcher = null)
     {
         _engine = engine;
@@ -98,18 +97,13 @@ public sealed partial class MicViewModel : ObservableObject
 
         try
         {
-            var response = await _engine
-                .RequestAsync("audio/inputs", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            var inputs = await _engine.ListAudioInputsAsync().ConfigureAwait(true);
             Devices.Clear();
-            foreach (var device in response.GetProperty("devices").EnumerateArray())
+            foreach (var device in inputs)
             {
                 Devices.Add(new MicDevice(
-                    device.GetProperty("id").GetString() ?? "",
-                    device.GetProperty("name").GetString() ?? "Microphone",
-                    device.GetProperty("shortName").GetString() ?? "Microphone",
-                    device.GetProperty("isDefault").GetBoolean(),
-                    device.GetProperty("bluetooth").GetBoolean()));
+                    device.Id, device.Name ?? "Microphone", device.ShortName ?? "Microphone",
+                    device.IsDefault, device.Bluetooth));
             }
         }
         catch (Exception)

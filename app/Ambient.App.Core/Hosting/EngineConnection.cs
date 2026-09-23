@@ -4,11 +4,11 @@ using Ambient.Client;
 namespace Ambient.App.Core.Hosting;
 
 /// <summary>
-/// IEngineClient that follows the supervisor: connects when the engine comes
+/// IEngineTransport that follows the supervisor: connects when the engine comes
 /// up, drops the transport when it goes down, and fails requests fast in
 /// between. Each engine process gets its own pid-verified connection.
 /// </summary>
-public sealed class EngineConnection : IEngineClient
+public sealed class EngineConnection : IEngineTransport
 {
     private const string ShellName = "ambient-shell";
     private const string ShellVersion = "0.1.0";
@@ -20,10 +20,10 @@ public sealed class EngineConnection : IEngineClient
     private static readonly TimeSpan RedialDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IEngineHost _host;
-    private readonly Func<uint, CancellationToken, Task<IEngineClient>> _connect;
+    private readonly Func<uint, CancellationToken, Task<IEngineTransport>> _connect;
     private readonly CancellationTokenSource _disposal = new();
     private readonly object _gate = new();
-    private IEngineClient? _transport;
+    private IEngineTransport? _transport;
     private Exception? _lastConnectError;
     private int _generation;
     private volatile string? _methodInFlight;
@@ -48,7 +48,7 @@ public sealed class EngineConnection : IEngineClient
     public string? MethodInFlight => _methodInFlight;
 
     public EngineConnection(
-        IEngineHost host, Func<uint, CancellationToken, Task<IEngineClient>> connect)
+        IEngineHost host, Func<uint, CancellationToken, Task<IEngineTransport>> connect)
     {
         _host = host;
         _connect = connect;
@@ -64,7 +64,7 @@ public sealed class EngineConnection : IEngineClient
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        IEngineClient transport;
+        IEngineTransport transport;
         lock (_gate)
         {
             transport = _transport
@@ -92,7 +92,7 @@ public sealed class EngineConnection : IEngineClient
 
         _host.StatusChanged -= OnEngineStatusChanged;
         await _disposal.CancelAsync().ConfigureAwait(false);
-        IEngineClient? transport;
+        IEngineTransport? transport;
         lock (_gate)
         {
             transport = _transport;
@@ -127,7 +127,7 @@ public sealed class EngineConnection : IEngineClient
 
     private void DropTransport()
     {
-        IEngineClient? old;
+        IEngineTransport? old;
         lock (_gate)
         {
             _generation++;

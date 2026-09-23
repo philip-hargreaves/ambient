@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Ambient.App.Core.Features.Settings;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Settings;
 
@@ -12,7 +13,7 @@ public class EnrolmentViewModelTest
     public async Task StartAsksTheEngineForTheReadingWindowOnTheChosenMicrophone()
     {
         var engine = new FakeEngineClient();
-        using var enrolment = new EnrolmentViewModel(engine, micId: "mic-7", seconds: 30);
+        using var enrolment = new EnrolmentViewModel(new EngineApi(engine), micId: "mic-7", seconds: 30);
         Assert.Equal(EnrolmentState.Ready, enrolment.State);
         Assert.Equal("Start", enrolment.PrimaryText);
         Assert.Equal("Cancel", enrolment.CloseText);
@@ -34,7 +35,7 @@ public class EnrolmentViewModelTest
     public async Task ProgressCountsClearSpeechThenFinishAndSuccessClose()
     {
         var engine = new FakeEngineClient();
-        using var enrolment = new EnrolmentViewModel(engine);
+        using var enrolment = new EnrolmentViewModel(new EngineApi(engine));
         await enrolment.StartCommand.ExecuteAsync(null);
 
         engine.RaiseNotification("anchor/progress",
@@ -66,7 +67,7 @@ public class EnrolmentViewModelTest
     public async Task ARefusalSaysWhyAndOffersAnotherGo()
     {
         var engine = new FakeEngineClient();
-        using var enrolment = new EnrolmentViewModel(engine);
+        using var enrolment = new EnrolmentViewModel(new EngineApi(engine));
         await enrolment.StartCommand.ExecuteAsync(null);
 
         engine.RaiseNotification("anchor/enrolled", Params(new
@@ -90,7 +91,7 @@ public class EnrolmentViewModelTest
     public async Task CancelAndDismissalReportNothingKept()
     {
         var engine = new FakeEngineClient();
-        var enrolment = new EnrolmentViewModel(engine);
+        var enrolment = new EnrolmentViewModel(new EngineApi(engine));
         await enrolment.StartCommand.ExecuteAsync(null);
 
         await enrolment.CancelCommand.ExecuteAsync(null);
@@ -105,7 +106,7 @@ public class EnrolmentViewModelTest
     public void ProgressBeforeStartIsIgnored()
     {
         var engine = new FakeEngineClient();
-        using var enrolment = new EnrolmentViewModel(engine);
+        using var enrolment = new EnrolmentViewModel(new EngineApi(engine));
         engine.RaiseNotification("anchor/progress",
             Params(new { elapsed = 3.0, speech = 1.0, level = 0.9, clipped = true }));
         Assert.Equal(0, enrolment.Level);

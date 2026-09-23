@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Shell;
 
@@ -12,7 +13,7 @@ public class StatusBarMetricsTest
     private static (StatusBarViewModel Status, FakeEngineClient Engine) Create()
     {
         var engine = new FakeEngineClient(autoNotify: false);
-        return (new StatusBarViewModel(engine, new InlineDispatcher()), engine);
+        return (new StatusBarViewModel(new EngineApi(engine), new InlineDispatcher()), engine);
     }
 
     [Fact]
@@ -199,7 +200,7 @@ public class StatusBarMetricsTest
         var engine = new FakeEngineClient(autoNotify: false);
         var reading = 5.06;
         var status = new StatusBarViewModel(
-            engine, new InlineDispatcher(), memoryGb: () => reading);
+            new EngineApi(engine), new InlineDispatcher(), memoryGb: () => reading);
 
         await status.PollMetricsOnceAsync();
         Assert.Equal("Memory · 5.1 GB", status.MemoryChip);

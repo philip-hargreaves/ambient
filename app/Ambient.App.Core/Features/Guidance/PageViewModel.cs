@@ -1,11 +1,9 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
-using static Ambient.App.Core.Features.Guidance.GuidanceRecommendation;
 
 namespace Ambient.App.Core.Features.Guidance;
 
@@ -17,11 +15,10 @@ public sealed record PageBox(double Left, double Top, double Width, double Heigh
 /// passage with its lines marked and turnable from there.
 /// </summary>
 public sealed partial class PageViewModel(
-    IEngineClient engine, ILauncher launcher, IClipboard clipboard, StatusBarViewModel status)
+    IEngineApi engine, ILauncher launcher, IClipboard clipboard, StatusBarViewModel status)
     : ObservableObject
 {
     private static readonly TimeSpan SlowAfter = TimeSpan.FromMilliseconds(1500);
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
     private GuidanceRecommendation? _shown;
     private int _page;
@@ -102,10 +99,7 @@ public sealed partial class PageViewModel(
     {
         try
         {
-            var reply = await engine
-                .RequestAsync("guidance/documents/open", new { id = found.Document }, RequestTimeout)
-                .ConfigureAwait(true);
-            var path = Field(reply, "path");
+            var path = await engine.OpenDocumentAsync(found.Document).ConfigureAwait(true);
             if (path.Length > 0)
             {
                 await launcher.OpenFileAsync(path).ConfigureAwait(true);
@@ -137,25 +131,20 @@ public sealed partial class PageViewModel(
     /// guidance/page: the bitmap, its size and the passage's boxes. The boxes come whole
     /// each time, so a page without any is a page the passage is not on.
     /// </summary>
-    public void Apply(JsonElement reply)
+    public void Apply(GuidancePage reply)
     {
-        Width = Numeric(reply, "width");
-        Height = Numeric(reply, "height");
-        ImagePath = Field(reply, "path");
-        var pages = (int)Numeric(reply, "pages");
-        if (pages > 0)
+        Width = reply.Width;
+        Height = reply.Height;
+        ImagePath = reply.Path ?? "";
+        if (reply.Pages > 0)
         {
-            _pages = pages;
+            _pages = reply.Pages;
         }
 
         _boxes = [];
-        if (reply.TryGetProperty("boxes", out var boxes) && boxes.ValueKind == JsonValueKind.Array)
+        foreach (var box in reply.Boxes)
         {
-            foreach (var box in boxes.EnumerateArray())
-            {
-                _boxes.Add(((int)Numeric(box, "page"), Numeric(box, "left"), Numeric(box, "top"),
-                    Numeric(box, "right"), Numeric(box, "bottom")));
-            }
+            _boxes.Add((box.Page, box.Left, box.Top, box.Right, box.Bottom));
         }
 
         Boxes.Clear();
@@ -198,8 +187,7 @@ public sealed partial class PageViewModel(
         _ = MarkSlowAsync(load);
         try
         {
-            var reply = await engine.RequestAsync("guidance/page",
-                new { id = _shown.Document, page = _page, chunkId = _shown.ChunkId }, RequestTimeout)
+            var reply = await engine.PageAsync(_shown.Document, _page, _shown.ChunkId)
                 .ConfigureAwait(true);
             if (load == _load)
             {

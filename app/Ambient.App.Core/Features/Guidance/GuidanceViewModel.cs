@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
 
@@ -390,25 +391,21 @@ public sealed partial class GuidanceViewModel : ObservableObject
     /// guidance/corpora: the embedder's state. Searching needs only that, since added
     /// documents are searched whether or not any corpus is installed.
     /// </summary>
-    public void ApplyCorpora(JsonElement corpora)
+    public void ApplyCorpora(CorporaStatus corpora)
     {
-        ReadinessDetail = GuidanceCard.Field(corpora, "detail");
+        ReadinessDetail = corpora.Detail ?? "";
         var refused = new List<string>();
-        if (corpora.TryGetProperty("corpora", out var list)
-            && list.ValueKind == JsonValueKind.Array)
+        foreach (var corpus in corpora.Corpora)
         {
-            foreach (var corpus in list.EnumerateArray())
+            var reason = corpus.Unavailable ?? "";
+            if (reason.Length > 0)
             {
-                var reason = GuidanceCard.Field(corpus, "unavailable");
-                if (reason.Length > 0)
-                {
-                    refused.Add($"{GuidanceCard.Field(corpus, "id")}: {reason}");
-                }
+                refused.Add($"{corpus.Id}: {reason}");
             }
         }
 
         RefusedCorpora = refused;
-        Readiness = GuidanceCard.Field(corpora, "state") switch
+        Readiness = corpora.State switch
         {
             "loading" => GuidanceReadiness.Loading,
             "ready" => GuidanceReadiness.Ready,

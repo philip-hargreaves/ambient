@@ -6,6 +6,7 @@ using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
@@ -29,7 +30,7 @@ public class PlaybackSessionTest
     {
         var engine = new FakeEngineClient(autoNotify: false);
         var demo = new DemoMode(null, MastersFile(masters), []);
-        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), demo: demo);
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), demo: demo);
         return (session, engine, demo);
     }
 

@@ -7,7 +7,7 @@ namespace Ambient.App.Tests.TestDoubles;
 /// Test-double engine. After session/stop it pushes note/ready then
 /// patient/ready, like the real pipeline.
 /// </summary>
-public sealed class FakeEngineClient(bool autoNotify = true) : IEngineClient
+public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
 {
     private static readonly JsonElement Empty = JsonSerializer.SerializeToElement(new { });
 

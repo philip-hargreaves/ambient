@@ -13,9 +13,8 @@ namespace Ambient.App.Core.Features.Appraisal;
 /// </summary>
 public sealed partial class ReflectionViewModel : ObservableObject
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly StatusBarViewModel? _status;
     private readonly Action<string, JsonElement> _onNotification;
     private string _savedHappened = "";
@@ -24,7 +23,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
     private string _savedTitle = "";
 
     public ReflectionViewModel(
-        IEngineClient engine, IUiDispatcher dispatcher, StatusBarViewModel? status = null)
+        IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel? status = null)
     {
         _engine = engine;
         _status = status;
@@ -101,17 +100,14 @@ public sealed partial class ReflectionViewModel : ObservableObject
         Month = MonthLabel(startedAt);
         try
         {
-            var got = await _engine.RequestAsync("reflection/get", new { id = sessionId }, RequestTimeout)
-                .ConfigureAwait(true);
-            Title = _savedTitle = Text(got, "label");
-            Summary = got.TryGetProperty("summary", out var s) && s.ValueKind == JsonValueKind.Object
-                ? Text(s, "text")
-                : "";
-            if (got.TryGetProperty("reflection", out var r) && r.ValueKind == JsonValueKind.Object)
+            var got = await _engine.GetReflectionAsync(sessionId).ConfigureAwait(true);
+            Title = _savedTitle = got.Label ?? "";
+            Summary = got.Summary?.Text ?? "";
+            if (got.Answers is { } answers)
             {
-                Happened = _savedHappened = Answer(Text(r, "happened"));
-                Learned = _savedLearned = Answer(Text(r, "learned"));
-                Next = _savedNext = Answer(Text(r, "next"));
+                Happened = _savedHappened = Answer(answers.Happened ?? "");
+                Learned = _savedLearned = Answer(answers.Learned ?? "");
+                Next = _savedNext = Answer(answers.Next ?? "");
             }
             else
             {
@@ -141,8 +137,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
         SummaryProblem = "";
         try
         {
-            _ = await _engine.RequestAsync("reflection/summary", new { id = SessionId }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.SummariseReflectionAsync(SessionId).ConfigureAwait(true);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -165,10 +160,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
         try
         {
-            _ = await _engine.RequestAsync("reflection/update",
-                    new { id = SessionId, happened = Happened, learned = Learned, next = Next },
-                    RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.UpdateReflectionAsync(SessionId, Happened, Learned, Next).ConfigureAwait(true);
             _savedHappened = Happened;
             _savedLearned = Learned;
             _savedNext = Next;
@@ -190,8 +182,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
         try
         {
-            _ = await _engine.RequestAsync("session/label", new { id = SessionId, text = title }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.LabelSessionAsync(SessionId, title).ConfigureAwait(true);
             _savedTitle = title;
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -210,9 +201,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
         try
         {
-            _ = await _engine.RequestAsync("reflection/update", new { id = SessionId, summary = Summary },
-                    RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.UpdateReflectionSummaryAsync(SessionId, Summary).ConfigureAwait(true);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

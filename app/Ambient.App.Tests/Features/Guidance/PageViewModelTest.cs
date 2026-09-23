@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Guidance;
 
@@ -42,7 +43,7 @@ public class PageViewModelTest
         object? reply, FakeLauncher launcher, FakeClipboard clipboard)
     {
         var engine = new FakeEngineClient { PageReply = reply };
-        var view = new PageViewModel(engine, launcher, clipboard, new StatusBarViewModel());
+        var view = new PageViewModel(new EngineApi(engine), launcher, clipboard, new StatusBarViewModel());
         return (view, engine);
     }
 

@@ -3,6 +3,7 @@ using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
+using Ambient.Client;
 
 
 namespace Ambient.App.Tests.Features.Consultation;
@@ -168,7 +169,7 @@ public class SessionCommandsTest
     {
         var engine = new FakeEngineClient(autoNotify: false) { FirstUse = true, ModelsCompiled = false };
         var bar = new StatusBarViewModel();
-        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), bar, new FakeDialogService(), TestSession.Page(engine, bar), readinessPollInterval: TimeSpan.FromMilliseconds(1));
+        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), bar, new FakeDialogService(), TestSession.Page(engine, bar), readinessPollInterval: TimeSpan.FromMilliseconds(1));
         var controls = new SessionControlsViewModel(session);
         bar.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running, null);
         bar.SetEngineReady(true);

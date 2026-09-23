@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Ports;
@@ -98,14 +97,13 @@ public sealed record MonthMarker(int Month, string Name, int Count, bool Current
 /// </summary>
 public sealed partial class AppraisalsViewModel : ObservableObject
 {
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly IUiDispatcher _dispatcher;
     private readonly StatusBarViewModel _status;
     private readonly List<ReflectionCard> _all = [];
 
-    public AppraisalsViewModel(IEngineClient engine, IUiDispatcher dispatcher, StatusBarViewModel status)
+    public AppraisalsViewModel(IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel status)
     {
         _engine = engine;
         _dispatcher = dispatcher;
@@ -170,25 +168,24 @@ public sealed partial class AppraisalsViewModel : ObservableObject
         await CollapseAllAsync().ConfigureAwait(true);
         try
         {
-            var result = await _engine.RequestAsync("reflection/list", null, RequestTimeout)
-                .ConfigureAwait(true);
+            var entries = await _engine.ListReflectionsAsync().ConfigureAwait(true);
             _all.Clear();
-            foreach (var entry in result.GetProperty("reflections").EnumerateArray())
+            foreach (var entry in entries)
             {
                 var started = DateTimeOffset.TryParse(
-                    Text(entry, "startedAt"), CultureInfo.InvariantCulture, out var when)
+                    entry.StartedAt, CultureInfo.InvariantCulture, out var when)
                     ? when.ToLocalTime()
                     : DateTimeOffset.Now;
-                var label = Text(entry, "label");
+                var label = entry.Label ?? "";
                 _all.Add(new ReflectionCard(
-                    Text(entry, "id"),
+                    entry.Id,
                     label.Length > 0 ? label : started.ToString("d MMMM", CultureInfo.CurrentCulture),
                     started,
-                    Text(entry, "learned"),
-                    Text(entry, "summary"),
-                    entry.TryGetProperty("demo", out var demo) && demo.ValueKind == JsonValueKind.True,
-                    Text(entry, "happened"),
-                    Text(entry, "next"))
+                    entry.Learned ?? "",
+                    entry.Summary ?? "",
+                    entry.Demo,
+                    entry.Happened ?? "",
+                    entry.Next ?? "")
                 {
                     ToggleRequested = ToggleAsync,
                     DeleteRequested = DeleteAsync,
@@ -326,8 +323,7 @@ public sealed partial class AppraisalsViewModel : ObservableObject
             card.Editor?.Detach();
             card.Editor = null;
             card.Expanded = false;
-            _ = await _engine.RequestAsync("reflection/delete", new { id = card.Id }, RequestTimeout)
-                .ConfigureAwait(true);
+            await _engine.DeleteReflectionAsync(card.Id).ConfigureAwait(true);
             _all.Remove(card);
             Rebuild();
             _status.Append("Reflection removed");
@@ -340,11 +336,4 @@ public sealed partial class AppraisalsViewModel : ObservableObject
 
     /// <summary>Leaving the page saves whatever is open.</summary>
     public Task LeaveAsync() => CollapseAllAsync();
-
-    private static string Text(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty(property, out var value)
-            && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
 }

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Hosting;
@@ -18,13 +17,13 @@ public sealed partial class VoiceViewModel : ObservableObject
     // Below this the automatic print is still settling; the copy says so
     private const int LearnedAfterSessions = 5;
 
-    private readonly IEngineClient _engine;
+    private readonly IEngineApi _engine;
     private readonly IDialogService _dialogs;
     private readonly ISessionState? _session;
     private readonly StatusBarViewModel? _status;
     private readonly TimeProvider _clock;
 
-    public VoiceViewModel(IEngineClient engine, IDialogService dialogs, ISessionState? session = null,
+    public VoiceViewModel(IEngineApi engine, IDialogService dialogs, ISessionState? session = null,
         StatusBarViewModel? status = null, TimeProvider? clock = null)
     {
         _engine = engine;
@@ -84,15 +83,10 @@ public sealed partial class VoiceViewModel : ObservableObject
 
         try
         {
-            var status = await _engine
-                .RequestAsync("anchor/status", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
-            Origin = status.GetProperty("origin").GetString() ?? "none";
-            Sessions = status.GetProperty("sessions").GetInt32();
-            EnrolledAt = status.TryGetProperty("enrolledAt", out var at)
-                         && at.ValueKind == JsonValueKind.Number
-                ? DateTimeOffset.FromUnixTimeSeconds(at.GetInt64())
-                : null;
+            var status = await _engine.AnchorStatusAsync().ConfigureAwait(true);
+            Origin = status.Origin;
+            Sessions = status.Sessions;
+            EnrolledAt = status.EnrolledAt is { } at ? DateTimeOffset.FromUnixTimeSeconds(at) : null;
         }
         catch (Exception)
         {
@@ -147,8 +141,7 @@ public sealed partial class VoiceViewModel : ObservableObject
         Busy = true;
         try
         {
-            await _engine.RequestAsync("anchor/clear", null, TimeSpan.FromSeconds(5))
-                .ConfigureAwait(true);
+            await _engine.ClearAnchorAsync().ConfigureAwait(true);
             await RefreshAsync().ConfigureAwait(true);
             _status?.Append("voice enrolment forgotten");
         }

@@ -11,7 +11,7 @@ namespace Ambient.Client;
 /// failure is terminal: pending and future requests observe it, and the
 /// connection does not recover.
 /// </summary>
-public sealed class PipeTransport : IEngineClient
+public sealed class PipeTransport : IEngineTransport
 {
     private readonly NamedPipeClientStream _pipe;
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pending = new();
