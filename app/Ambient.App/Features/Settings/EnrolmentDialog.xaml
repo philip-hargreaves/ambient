@@ -9,7 +9,6 @@
     CloseButtonText="{x:Bind ViewModel.CloseText, Mode=OneWay}"
     DefaultButton="Primary"
     PrimaryButtonClick="OnPrimary"
-    CloseButtonClick="OnClose"
     Closing="OnClosing">
 
     <StackPanel MaxWidth="520" Spacing="16">

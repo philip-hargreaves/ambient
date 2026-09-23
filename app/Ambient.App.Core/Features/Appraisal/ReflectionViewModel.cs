@@ -10,7 +10,7 @@ namespace Ambient.App.Core.Features.Appraisal;
 /// <summary>
 /// One appraisal reflection: the case summary the engine writes and the three answers the clinician writes. Saved only when changed.
 /// </summary>
-public sealed partial class ReflectionViewModel : ObservableObject
+public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
 {
 
     private readonly IEngineApi _engine;
@@ -223,7 +223,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
     private Task SaveAsText() =>
         ReflectionFile.SaveAsync(_dialogs, _picker, _status, ExportText, DisplayTitle);
 
-    public void Detach() => _engine.NotificationReceived -= _onNotification;
+    public void Dispose() => _engine.NotificationReceived -= _onNotification;
 
     private void HandleNotification(EngineNotification notification)
     {

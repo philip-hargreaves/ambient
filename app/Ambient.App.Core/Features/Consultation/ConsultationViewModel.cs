@@ -164,8 +164,18 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         }
 
         Note.OptionsChanged = OnNoteOptionsChanged;
-        _engine.NotificationReceived +=
-            notification => dispatcher.Post(() => HandleNotification(notification));
+        // Off the transport's thread; a handler that throws must not take the others with it
+        _engine.NotificationReceived += notification => dispatcher.Post(() =>
+        {
+            try
+            {
+                HandleNotification(notification);
+            }
+            catch (Exception e)
+            {
+                Status.Log($"{notification.GetType().Name} handler failed: {e.Message}");
+            }
+        });
         // The status-bar label carries readiness; only the loss is log-worthy
         _engine.ConnectedChanged += connected => dispatcher.Post(() =>
         {
@@ -353,6 +363,13 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     // again. Fails open - a readiness error must not brick recording.
     private async Task CheckReadinessAsync()
     {
+        // Every reconnect calls this; one poll loop at a time
+        if (_checkingReadiness)
+        {
+            return;
+        }
+
+        _checkingReadiness = true;
         try
         {
             var readiness = await _engine.ReadinessAsync().ConfigureAwait(true);
@@ -390,6 +407,10 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         catch (Exception)
         {
             ModelsReady = true;
+        }
+        finally
+        {
+            _checkingReadiness = false;
         }
     }
 
@@ -441,6 +462,13 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.HasReflection = true;
     }
     private string? _recordingSessionId;
+
+    // Bumped by every open and close, so a slow open that was overtaken applies nothing
+    private int _open;
+
+    // A replay stops itself at the end of its file; 0 when the length is unknown
+    private double _replayEndSeconds;
+    private bool _checkingReadiness;
 
     // What the store holds, for autosaving in-place edits on leave
     private string _loadedNote = "";
@@ -586,8 +614,10 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return false;
         }
 
+        var open = ++_open;
         await AutosaveReviewAsync().ConfigureAwait(true);
-        if (!await TryAsync("session/open", () => _engine.OpenSessionAsync(id)).ConfigureAwait(true))
+        if (!await TryAsync("session/open", () => _engine.OpenSessionAsync(id)).ConfigureAwait(true)
+            || open != _open)
         {
             return false;
         }
@@ -607,6 +637,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         var note = await TryAsync("session/note", () => _engine.StoredNoteAsync(id)).ConfigureAwait(true);
         var patient = await TryAsync("session/patient", () => _engine.StoredPatientAsync(id))
             .ConfigureAwait(true);
+        if (open != _open)
+        {
+            return false;
+        }
+
         var translation = patient?.Translation;
         Note.LoadStored(
             note?.Text ?? "", patient?.Text ?? "", translation?.Text ?? "",
@@ -625,6 +660,11 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         {
             var stored = await TryAsync("session/guidance", () => _engine.StoredGuidanceAsync(id))
                 .ConfigureAwait(true);
+            if (open != _open)
+            {
+                return false;
+            }
+
             // Documents added since this note was searched: refresh once the view has settled
             if (Guidance.LoadStored(stored))
             {
@@ -650,6 +690,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
             return;
         }
 
+        _open++;
         await AutosaveReviewAsync().ConfigureAwait(true);
         await TryAsync("session/close", () => _engine.CloseSessionAsync()).ConfigureAwait(true);
         Note.Reset();
@@ -796,6 +837,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         AudioSeconds = 0;
         Phase = FinalisePhase.None;
         ActiveReplay = replay;
+        _replayEndSeconds = replay is null ? 0 : DemoTracks.DurationSeconds(replay.Path);
         ActivePlayback = playback;
         State = SessionState.Recording;
         Status.ResetThroughput();
@@ -1099,8 +1141,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 if (State == SessionState.Recording)
                 {
                     AudioSeconds = level.Seconds ?? AudioSeconds + 0.1;
-                    // A playback stops itself at the end of its clock
-                    if (ActivePlayback is { } playing && AudioSeconds >= playing.AudioSeconds - 0.05)
+                    // A playback or a replay stops itself at the end of its audio
+                    var end = ActivePlayback?.AudioSeconds ?? _replayEndSeconds;
+                    if (end > 0 && AudioSeconds >= end - 0.05)
                     {
                         _ = StopRecordingAsync();
                     }

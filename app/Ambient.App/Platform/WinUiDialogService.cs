@@ -40,7 +40,8 @@ public sealed class WinUiDialogService(
 
     public async Task ShowReflectionAsync(string sessionId, string startedAt)
     {
-        var reflection = new ReflectionViewModel(engine, dispatcher, clipboard, picker, this, status);
+        // The dialog disposes it as it closes; this covers a load that never showed one
+        using var reflection = new ReflectionViewModel(engine, dispatcher, clipboard, picker, this, status);
         await reflection.LoadAsync(sessionId, startedAt);
         var dialog = new ReflectionDialog(reflection) { XamlRoot = window.XamlRoot };
         await dialog.ShowAsync();

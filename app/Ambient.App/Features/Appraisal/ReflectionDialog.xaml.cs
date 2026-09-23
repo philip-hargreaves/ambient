@@ -33,7 +33,7 @@ public sealed partial class ReflectionDialog : ContentDialog
         }
         finally
         {
-            ViewModel.Detach();
+            ViewModel.Dispose();
             deferral.Complete();
         }
     }

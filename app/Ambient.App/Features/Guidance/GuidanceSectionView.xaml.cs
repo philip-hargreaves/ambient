@@ -5,19 +5,22 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Shell;
+using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Guidance;
 
 /// <summary>The Guidelines section under the clinical note, hosted by the note editor.</summary>
 public sealed partial class GuidanceSectionView : UserControl
 {
+    private readonly FocusReturn _focus;
     private readonly DispatcherQueueTimer _timingTimer;
     private Storyboard? _fade;
 
-    public GuidanceSectionView(GuidanceViewModel viewModel, ShellViewModel shell)
+    public GuidanceSectionView(GuidanceViewModel viewModel, ShellViewModel shell, FocusReturn focus)
     {
         ViewModel = viewModel;
         Shell = shell;
+        _focus = focus;
         InitializeComponent();
         _timingTimer = DispatcherQueue.CreateTimer();
         _timingTimer.Interval = TimeSpan.FromSeconds(4);
@@ -90,7 +93,7 @@ public sealed partial class GuidanceSectionView : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
-            PageView.Opener = sender as FrameworkElement;
+            _focus.Opener = sender as FrameworkElement;
             ViewModel.ShowInDocumentCommand.Execute(found);
         }
     }

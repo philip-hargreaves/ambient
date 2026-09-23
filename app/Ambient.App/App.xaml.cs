@@ -138,11 +138,15 @@ public partial class App : Application
         services.AddTransient<PatientEditorView>();
         services.AddTransient<NotePaneView>();
         services.AddTransient<StatusBarView>();
-        services.AddTransient<ConsultationView>();
-        services.AddTransient<SessionsView>();
-        services.AddTransient<AppraisalsView>();
-        services.AddTransient<SettingsView>();
-        services.AddTransient<MainWindow>();
+        // Pages live for the app: the navigation service keeps them on its back stack, so
+        // their subscriptions to the singleton view models are for the app's lifetime too.
+        // The views inside a page are transient, one set per page, since an element has one parent
+        services.AddSingleton<ConsultationView>();
+        services.AddSingleton<SessionsView>();
+        services.AddSingleton<AppraisalsView>();
+        services.AddSingleton<SettingsView>();
+        services.AddSingleton<MainWindow>();
+        services.AddSingleton<FocusReturn>();
 
         return services.BuildServiceProvider();
     }

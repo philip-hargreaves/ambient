@@ -35,11 +35,7 @@ public sealed partial class EnrolmentDialog : ContentDialog
         }
     }
 
-    private void OnClose(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-    {
-        ViewModel.Dismiss();
-    }
-
+    // Closing covers the close button, Escape and a click outside
     private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
     {
         ViewModel.Dismiss();

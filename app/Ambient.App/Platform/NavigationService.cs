@@ -10,9 +10,9 @@ using Ambient.App.Features.Settings;
 namespace Ambient.App.Platform;
 
 /// <summary>
-/// Swaps the host's content between DI-resolved views, keeping a back stack of
-/// instances so returning to a surface restores it rather than rebuilding it.
-/// Views come from the container, so constructor injection holds throughout.
+/// Swaps the host's content between the container's page views, keeping a back stack
+/// so returning to a surface restores it. Pages are singletons, so a surface is built
+/// once and keeps its state.
 /// </summary>
 public sealed class NavigationService(IServiceProvider services) : INavigationService
 {

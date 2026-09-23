@@ -329,7 +329,7 @@ public sealed partial class AppraisalsViewModel : ObservableObject
             card.Learned = editor.Learned;
             card.Next = editor.Next;
             card.Summary = editor.Summary;
-            editor.Detach();
+            editor.Dispose();
         }
 
         card.Editor = null;
@@ -350,7 +350,7 @@ public sealed partial class AppraisalsViewModel : ObservableObject
     {
         try
         {
-            card.Editor?.Detach();
+            card.Editor?.Dispose();
             card.Editor = null;
             card.Expanded = false;
             await _engine.DeleteReflectionAsync(card.Id).ConfigureAwait(true);

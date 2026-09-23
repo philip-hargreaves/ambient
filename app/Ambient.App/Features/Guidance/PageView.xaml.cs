@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Guidance;
 
@@ -13,7 +14,7 @@ public sealed partial class PageView : UserControl
     // Glyph boxes are tight, so a mark reaches a little past the letters
     private const double MarkPad = 4;
 
-    public PageView(PageViewModel viewModel)
+    public PageView(PageViewModel viewModel, FocusReturn focus)
     {
         ViewModel = viewModel;
         InitializeComponent();
@@ -31,16 +32,12 @@ public sealed partial class PageView : UserControl
             }
             else
             {
-                Opener?.Focus(FocusState.Programmatic);
-                Opener = null;
+                focus.Return();
             }
         };
     }
 
     public PageViewModel ViewModel { get; }
-
-    /// <summary>The control that opened the pane, for focus to return to.</summary>
-    public static FrameworkElement? Opener { get; set; }
 
     public static ImageSource? Bitmap(string path) =>
         path.Length == 0 ? null : new BitmapImage(new Uri(path));

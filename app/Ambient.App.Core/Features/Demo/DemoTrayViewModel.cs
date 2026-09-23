@@ -42,13 +42,6 @@ public sealed partial class DemoTrayViewModel : ObservableObject
                 case nameof(ConsultationViewModel.AudioSeconds):
                     OnPropertyChanged(nameof(ProgressFraction));
                     OnPropertyChanged(nameof(ProgressText));
-                    // A replay finishes itself; nobody presses stop in a demo
-                    if (IsReplaying && _durationSeconds > 0
-                        && _session.AudioSeconds >= _durationSeconds - 0.05)
-                    {
-                        _ = _session.StopRecordingAsync();
-                    }
-
                     break;
                 default:
                     break;
