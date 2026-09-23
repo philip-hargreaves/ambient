@@ -88,9 +88,10 @@ public sealed partial class VoiceViewModel : ObservableObject
             Sessions = status.Sessions;
             EnrolledAt = status.EnrolledAt is { } at ? DateTimeOffset.FromUnixTimeSeconds(at) : null;
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // An unreachable engine leaves the last known state on screen
+            _status?.Log($"anchor/status failed: {e.Message}");
         }
     }
 

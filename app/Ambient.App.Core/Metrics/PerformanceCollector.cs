@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Metrics;
@@ -11,8 +14,11 @@ namespace Ambient.App.Core.Metrics;
 /// only, never content. Writes nothing unless enabled.
 /// </summary>
 public sealed class PerformanceCollector(
-    IEngineApi engine, Func<bool> enabled, Func<int?> enginePid, string path)
+    IEngineApi engine, Func<bool> enabled, Func<int?> enginePid, string path,
+    IProcessMetrics? processes = null, Func<PowerState>? power = null, ILogger? logger = null)
 {
+    private readonly IProcessMetrics _processes = processes ?? new NoProcessMetrics();
+    private readonly Func<PowerState> _power = power ?? (() => PowerState.Unknown);
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -115,8 +121,9 @@ public sealed class PerformanceCollector(
         {
             engineMetrics = (await engine.MetricsAsync().ConfigureAwait(false)).Raw;
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            logger?.StepFailed("engine/metrics at session end", e.Message);
         }
 
         double? noteReady = noteFailure is null ? _noteReady ?? now : null;
@@ -154,12 +161,12 @@ public sealed class PerformanceCollector(
                 }
                 : null,
             // The power situation at stop: it decides the finalise floor
-            power = PowerState.Read(),
+            power = _power(),
             memory = new
             {
                 availableAtStartMb = _availableAtStartMb,
-                peakWorkingSetMb = EngineMemoryMb(p => p.PeakWorkingSet64),
-                peakCommitMb = EngineMemoryMb(p => p.PeakPagedMemorySize64),
+                peakWorkingSetMb = EngineMemoryMb(_processes.PeakWorkingSetMb),
+                peakCommitMb = EngineMemoryMb(_processes.PeakCommitMb),
                 noteHostPeakWorkingSetMb = NoteHostPeakMb(),
             },
         };
@@ -169,8 +176,9 @@ public sealed class PerformanceCollector(
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
             File.AppendAllText(Path, JsonSerializer.Serialize(record, Json) + Environment.NewLine);
         }
-        catch (IOException)
+        catch (IOException e)
         {
+            logger?.StepFailed("metrics line write", e.Message);
         }
     }
 
@@ -180,53 +188,12 @@ public sealed class PerformanceCollector(
     private static double? Round(double? seconds) =>
         seconds is null ? null : Math.Round(seconds.Value, 2);
 
-    private long? EngineMemoryMb(Func<Process, long> metric)
-    {
-        try
-        {
-            var pid = enginePid();
-            if (pid is null)
-            {
-                return null;
-            }
-
-            using var process = Process.GetProcessById(pid.Value);
-            return metric(process) / (1024 * 1024);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
+    private long? EngineMemoryMb(Func<int, long?> metric) =>
+        enginePid() is { } pid ? metric(pid) : null;
 
     // The note model lives in its own process beside the engine
-    private long? NoteHostPeakMb()
-    {
-        try
-        {
-            if (enginePid() is null)
-            {
-                return null;
-            }
-
-            var hosts = Process.GetProcessesByName("ambient_note_host");
-            try
-            {
-                return hosts.Length == 0 ? null : hosts.Max(h => h.PeakWorkingSet64) / (1024 * 1024);
-            }
-            finally
-            {
-                foreach (var host in hosts)
-                {
-                    host.Dispose();
-                }
-            }
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
+    private long? NoteHostPeakMb() =>
+        enginePid() is null ? null : _processes.PeakWorkingSetMbOf(EngineLayout.NoteHostProcess);
 
     private static long? AvailableMemoryMb()
     {

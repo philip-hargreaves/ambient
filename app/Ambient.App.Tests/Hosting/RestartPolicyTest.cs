@@ -14,8 +14,8 @@ public class RestartPolicyTest
     {
         var storm = CrashesAt(Enumerable.Repeat(TimeSpan.Zero, 10).ToArray());
 
-        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(true, [], Now));
-        Assert.Equal(RecoveryAction.GiveUp, RestartPolicy.Decide(true, storm, Now));
+        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide([], Now));
+        Assert.Equal(RecoveryAction.GiveUp, RestartPolicy.Decide(storm, Now));
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class RestartPolicyTest
     {
         var crashes = CrashesAt(TimeSpan.Zero);
 
-        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(false, crashes, Now));
+        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(crashes, Now));
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class RestartPolicyTest
         var crashes = CrashesAt(
             Enumerable.Repeat(TimeSpan.FromSeconds(10), RestartPolicy.StormLimit).ToArray());
 
-        Assert.Equal(RecoveryAction.GiveUp, RestartPolicy.Decide(false, crashes, Now));
+        Assert.Equal(RecoveryAction.GiveUp, RestartPolicy.Decide(crashes, Now));
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class RestartPolicyTest
         var crashes = CrashesAt(
             Enumerable.Repeat(TimeSpan.FromSeconds(10), RestartPolicy.StormLimit - 1).ToArray());
 
-        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(false, crashes, Now));
+        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(crashes, Now));
     }
 
     [Fact]
@@ -52,6 +52,16 @@ public class RestartPolicyTest
             .Append(TimeSpan.Zero)
             .ToArray();
 
-        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(false, CrashesAt(agos), Now));
+        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(CrashesAt(agos), Now));
+    }
+
+    [Fact]
+    public void TheFirstRelaunchIsImmediateAndTheNextOnesWaitLonger()
+    {
+        Assert.Equal(TimeSpan.Zero, RestartPolicy.Backoff(1));
+        Assert.Equal(TimeSpan.FromSeconds(1), RestartPolicy.Backoff(2));
+        Assert.Equal(TimeSpan.FromSeconds(2), RestartPolicy.Backoff(3));
+        Assert.Equal(TimeSpan.FromSeconds(4), RestartPolicy.Backoff(4));
+        Assert.Equal(RestartPolicy.MaxBackoff, RestartPolicy.Backoff(9));
     }
 }

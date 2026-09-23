@@ -1,4 +1,5 @@
 using Ambient.App.Core.Hosting;
+using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Hosting;
 
@@ -65,13 +66,6 @@ public class EngineSupervisorTest
         public string SessionPhase { get; set; } = "";
     }
 
-    private sealed class TestClock : TimeProvider
-    {
-        public DateTimeOffset Now { get; set; } = DateTimeOffset.UnixEpoch;
-
-        public override DateTimeOffset GetUtcNow() => Now;
-    }
-
     private sealed class FakeCrashLog : ICrashLog
     {
         public List<CrashReport> Reports { get; } = [];
@@ -85,7 +79,7 @@ public class EngineSupervisorTest
 
         public FakeSession Session { get; } = new();
 
-        public TestClock Clock { get; } = new();
+        public FakeTimeProvider Clock { get; } = new();
 
         public FakeCrashLog Log { get; } = new();
 
@@ -102,6 +96,14 @@ public class EngineSupervisorTest
         }
 
         public FakeProcess Current => Launcher.Launched[^1];
+
+        // A crash, and the wait the policy puts before the relaunch
+        public void CrashAndWait(int exitCode)
+        {
+            var count = Launcher.Launched.Count;
+            Current.Crash(exitCode);
+            Clock.Advance(RestartPolicy.Backoff(count));
+        }
     }
 
     [Fact]
@@ -155,7 +157,7 @@ public class EngineSupervisorTest
 
         for (var i = 0; i < RestartPolicy.StormLimit; i++)
         {
-            h.Current.Crash(-1);
+            h.CrashAndWait(-1);
         }
 
         Assert.Equal(EngineStatus.Faulted, h.Host.Status);
@@ -179,6 +181,38 @@ public class EngineSupervisorTest
 
         Assert.Equal(EngineStatus.Running, h.Host.Status);
         Assert.Null(h.Host.Fault);
+    }
+
+    [Fact]
+    public void ASecondCrashInTheWindowWaitsBeforeRelaunching()
+    {
+        var h = new Harness();
+        h.Host.Start();
+        h.Current.Crash(-1);
+        Assert.Equal(2, h.Launcher.Launched.Count);
+
+        h.Current.Crash(-1);
+
+        Assert.Equal(EngineStatus.Restarting, h.Host.Status);
+        Assert.Equal(2, h.Launcher.Launched.Count);
+        h.Clock.Advance(RestartPolicy.Backoff(2));
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Equal(3, h.Launcher.Launched.Count);
+    }
+
+    [Fact]
+    public void ShutdownDuringTheWaitCancelsTheRelaunch()
+    {
+        var h = new Harness();
+        h.Host.Start();
+        h.Current.Crash(-1);
+        h.Current.Crash(-1);
+
+        h.Host.Shutdown();
+        h.Clock.Advance(RestartPolicy.MaxBackoff);
+
+        Assert.Equal(EngineStatus.Stopped, h.Host.Status);
+        Assert.Equal(2, h.Launcher.Launched.Count);
     }
 
     [Fact]
@@ -219,7 +253,7 @@ public class EngineSupervisorTest
         h.Host.Start();
         for (var i = 0; i < RestartPolicy.StormLimit; i++)
         {
-            h.Current.Crash(-1);
+            h.CrashAndWait(-1);
         }
 
         h.Host.Start();

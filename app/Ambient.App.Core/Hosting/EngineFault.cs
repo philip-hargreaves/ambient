@@ -2,7 +2,6 @@ namespace Ambient.App.Core.Hosting;
 
 public enum EngineFaultKind
 {
-    SessionInterrupted,
     CrashLoop,
     LaunchFailed,
 }

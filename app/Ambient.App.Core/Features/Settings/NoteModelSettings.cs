@@ -126,9 +126,10 @@ public sealed partial class NoteModelSettings : ObservableObject
             _populating = false;
             NoteModelEnabled = _tiers.Count > 1;
         }
-        catch (Exception)
+        catch (Exception e)
         {
             _populating = false;
+            _status?.Log($"engine/models failed: {e.Message}");
         }
     }
 

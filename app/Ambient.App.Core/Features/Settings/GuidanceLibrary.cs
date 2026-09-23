@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
@@ -94,10 +95,11 @@ public sealed partial class GuidanceLibrary : ObservableObject
         {
             ApplyGuidanceCorpora(await _client.GuidanceCorporaAsync().ConfigureAwait(true));
         }
-        catch (Exception)
+        catch (Exception e)
         {
             GuidanceCorpora.Clear();
             GuidanceCaption = "Unavailable";
+            _status?.Log($"guidance/corpora failed: {e.Message}");
         }
     }
 
@@ -302,9 +304,10 @@ public sealed partial class GuidanceLibrary : ObservableObject
                 : unsupported == 1 ? "1 other file is not searched, not PDF or text"
                 : $"{unsupported} other files are not searched, not PDF or text";
         }
-        catch (Exception)
+        catch (Exception e)
         {
             Documents.Clear();
+            _status?.Log($"guidance/documents failed: {e.Message}");
         }
 
         OnPropertyChanged(nameof(DocumentsPresent));
@@ -448,12 +451,7 @@ public sealed partial class GuidanceLibrary : ObservableObject
     /// Dev builds only: include the local research corpus, the NICE demo. Hidden in a
     /// release build.
     /// </summary>
-    public bool ResearchToggleVisible { get; } =
-#if DEBUG
-        true;
-#else
-        false;
-#endif
+    public bool ResearchToggleVisible { get; } = BuildFlags.Debug;
 
     [ObservableProperty]
     public partial bool IncludeResearchGuidance { get; set; }

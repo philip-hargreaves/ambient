@@ -1,9 +1,11 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Ambient.App.Core.Hosting;
 
 namespace Ambient.App.Core.Preferences;
 
 /// <summary>One small json file of app preferences; absent means defaults.</summary>
-public sealed class AppPreferences(string path)
+public sealed class AppPreferences(string path, ILogger? logger = null)
 {
     private sealed record Stored(
         bool DemoTrayEnabled, bool NpuTranscription, bool CollectPerformanceData,
@@ -69,9 +71,14 @@ public sealed class AppPreferences(string path)
     /// </summary>
     public string NoteTier { get; set; } = "default";
 
-    public static AppPreferences Load(string path)
+    public static AppPreferences Load(string path, ILogger? logger = null)
     {
-        var preferences = new AppPreferences(path);
+        var preferences = new AppPreferences(path, logger);
+        if (!File.Exists(path))
+        {
+            return preferences;
+        }
+
         try
         {
             var stored = JsonSerializer.Deserialize<Stored>(File.ReadAllText(path));
@@ -97,8 +104,10 @@ public sealed class AppPreferences(string path)
             preferences.NoteTier = stored?.NoteTier is not null && NoteTiers.Contains(stored.NoteTier)
                 ? stored.NoteTier : "default";
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            // A corrupt file means defaults; the next save replaces it
+            logger?.PreferencesUnreadable(e.Message);
         }
 
         return preferences;
@@ -115,8 +124,9 @@ public sealed class AppPreferences(string path)
                 Theme, NoteTier, SeedDataEnabled, DeveloperToolsExpanded,
                 IncludeResearchGuidance, DemoMode, DemoTrack, DocumentsExpanded)));
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            logger?.PreferencesNotSaved(e.Message);
         }
     }
 }

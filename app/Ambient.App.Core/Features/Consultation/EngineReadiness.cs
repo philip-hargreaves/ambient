@@ -183,8 +183,9 @@ public sealed partial class EngineReadiness : ObservableObject
                 _status.Append("Ready");
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            _status.Log($"engine/readiness failed: {e.Message}");
             ModelsReady = true;
         }
         finally
@@ -205,8 +206,9 @@ public sealed partial class EngineReadiness : ObservableObject
                 _note.Languages.Add(language);
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            _status.Log($"translate/languages failed: {e.Message}");
         }
     }
 }

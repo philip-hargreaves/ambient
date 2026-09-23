@@ -3,7 +3,9 @@ using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
 using Windows.Win32.System.Threading;
 
-namespace Ambient.App.Core.Hosting;
+using Ambient.App.Core.Hosting;
+
+namespace Ambient.App.Platform;
 
 /// <summary>
 /// Launches the engine race-free: created suspended, assigned to a
@@ -11,7 +13,7 @@ namespace Ambient.App.Core.Hosting;
 /// Engine stderr goes to a log file so failures are diagnosable.
 /// </summary>
 public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
-    string? stderrPath = null, Func<string>? extraArguments = null)
+    string? stderrPath = null, Func<IEnumerable<string>>? extraArguments = null)
     : IEngineLauncher, IDisposable
 {
     private readonly JobObject _job = new();
@@ -20,7 +22,7 @@ public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
     public IEngineProcess Launch()
     {
         // Extra arguments are read per launch, so a restart picks up changes
-        var extra = extraArguments?.Invoke() ?? "";
+        var extra = string.Join(" ", (extraArguments?.Invoke() ?? []).Select(Quote));
         // CreateProcess may write into the command line, so it needs a buffer
         Span<char> commandLine =
             ($"\"{exePath}\" {arguments} {extra}".TrimEnd() + '\0').ToCharArray();
@@ -105,6 +107,10 @@ public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
             return null;
         }
     }
+
+    // An argument with a space is one argument to the engine
+    private static string Quote(string argument) =>
+        argument.Contains(' ') ? $"\"{argument}\"" : argument;
 
     public void Dispose() => _job.Dispose();
 }

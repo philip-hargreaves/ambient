@@ -3,6 +3,7 @@ using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Platform;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;

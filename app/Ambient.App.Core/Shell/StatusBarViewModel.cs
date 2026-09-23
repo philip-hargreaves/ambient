@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
 using Ambient.Client;
@@ -93,8 +94,9 @@ public sealed partial class StatusBarViewModel : ObservableObject
                 }
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log($"engine/models failed: {e.Message}");
         }
 
         RecomputeChips();
@@ -149,9 +151,10 @@ public sealed partial class StatusBarViewModel : ObservableObject
     }
 
     private readonly IEngineApi? _engine;
+    private readonly ILogger? _logger;
     private readonly TimeProvider _time = TimeProvider.System;
     private readonly ThroughputMeter _meter = new();
-    private readonly Func<double> _memoryGb = ReadMemoryGb;
+    private readonly Func<double> _memoryGb = () => 0;
     private readonly long _started;
 
     public StatusBarViewModel()
@@ -163,11 +166,12 @@ public sealed partial class StatusBarViewModel : ObservableObject
     /// from whichever lane streams, so the number moves with every token.
     /// </summary>
     public StatusBarViewModel(IEngineApi engine, IUiDispatcher dispatcher,
-        TimeProvider? time = null, Func<double>? memoryGb = null)
+        TimeProvider? time = null, Func<double>? memoryGb = null, ILogger? logger = null)
     {
         _engine = engine;
+        _logger = logger;
         _time = time ?? TimeProvider.System;
-        _memoryGb = memoryGb ?? ReadMemoryGb;
+        _memoryGb = memoryGb ?? (() => 0);
         _started = _time.GetTimestamp();
         engine.ConnectedChanged += connected => dispatcher.Post(() =>
         {
@@ -282,35 +286,11 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
     // Shell + engine + note host: the honest on-device footprint. By name
     // because the note host is the engine's child, not the shell's
-    private static double ReadMemoryGb()
-    {
-        try
-        {
-            var bytes = Environment.WorkingSet;
-            foreach (var name in new[] { "ambient_engine", "ambient_note_host" })
-            {
-                foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
-                {
-                    using (process)
-                    {
-                        bytes += process.WorkingSet64;
-                    }
-                }
-            }
-
-            return bytes / (1024.0 * 1024 * 1024);
-        }
-        catch (Exception)
-        {
-            return 0;
-        }
-    }
-
     // Polled at 1 Hz while recording - the factor updates per decoded
     // window, so that IS its native rate. Failures leave the last value.
     public async Task PollMetricsOnceAsync()
     {
-        var memory = _memoryGb();
+        var memory = await Task.Run(_memoryGb).ConfigureAwait(true);
         MemoryChip = memory > 0
             ? $"Memory · {memory.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture)} GB"
             : "";
@@ -335,8 +315,9 @@ public sealed partial class StatusBarViewModel : ObservableObject
                 RecomputeChips();
             }
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Log($"engine/metrics failed: {e.Message}");
         }
     }
 
@@ -445,21 +426,17 @@ public sealed partial class StatusBarViewModel : ObservableObject
             EngineStatus.Running when !_ready => "Starting up",
             EngineStatus.Running => "Ready",
             EngineStatus.Restarting => "Recovering",
-            EngineStatus.Faulted => _fault?.Kind switch
-            {
-                EngineFaultKind.SessionInterrupted =>
-                    "A problem interrupted the consultation - recovering",
-                _ => "Recording is unavailable - please restart the app",
-            },
+            EngineStatus.Faulted => "Recording is unavailable - please restart the app",
             _ => "Not running",
         };
         OnPropertyChanged(nameof(DisplayLabel));
         OnPropertyChanged(nameof(Busy));
     }
 
-    /// <summary>Log-only detail; the displayed status stays concise.</summary>
+    /// <summary>Log-only detail, to the file and the developer panel; the displayed status stays concise.</summary>
     public void Log(string line)
     {
+        _logger?.Line(line);
         LogEntries.Add(line);
         while (LogEntries.Count > MaxLogEntries)
         {

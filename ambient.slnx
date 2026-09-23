@@ -7,6 +7,9 @@
     <Project Path="app/Ambient.App.Core/Ambient.App.Core.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="app/Ambient.App.Platform/Ambient.App.Platform.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="app/Ambient.App.Tests/Ambient.App.Tests.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Hosting;
@@ -21,6 +22,7 @@ public sealed class EngineConnection : IEngineTransport
 
     private readonly IEngineHost _host;
     private readonly Func<uint, CancellationToken, Task<IEngineTransport>> _connect;
+    private readonly ILogger? _logger;
     private readonly CancellationTokenSource _disposal = new();
     private readonly object _gate = new();
     private IEngineTransport? _transport;
@@ -48,10 +50,12 @@ public sealed class EngineConnection : IEngineTransport
     public string? MethodInFlight => _methodInFlight;
 
     public EngineConnection(
-        IEngineHost host, Func<uint, CancellationToken, Task<IEngineTransport>> connect)
+        IEngineHost host, Func<uint, CancellationToken, Task<IEngineTransport>> connect,
+        ILogger? logger = null)
     {
         _host = host;
         _connect = connect;
+        _logger = logger;
         host.StatusChanged += OnEngineStatusChanged;
         if (host.Status == EngineStatus.Running)
         {
@@ -137,7 +141,7 @@ public sealed class EngineConnection : IEngineTransport
 
         if (old is not null)
         {
-            _ = old.DisposeAsync().AsTask();
+            Observe(old.DisposeAsync().AsTask(), "transport dispose");
             ConnectedChanged?.Invoke(false);
         }
     }
@@ -169,6 +173,7 @@ public sealed class EngineConnection : IEngineTransport
             }
             catch (Exception e)
             {
+                _logger?.StepFailed("engine connect attempt", e.Message);
                 lock (_gate)
                 {
                     if (_generation == generation)
@@ -237,4 +242,10 @@ public sealed class EngineConnection : IEngineTransport
 
     private void OnInnerNotification(string method, JsonElement parameters) =>
         NotificationReceived?.Invoke(method, parameters);
+
+    // Fire-and-forget work still reports a failure somewhere
+    private void Observe(Task task, string what) =>
+        _ = task.ContinueWith(
+            t => _logger?.StepFailed(what, t.Exception?.GetBaseException().Message ?? "faulted"),
+            CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
 }

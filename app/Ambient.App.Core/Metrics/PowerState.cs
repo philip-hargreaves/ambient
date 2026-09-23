@@ -1,7 +1,3 @@
-using Microsoft.Win32;
-using Windows.Win32;
-using Windows.Win32.System.Power;
-
 namespace Ambient.App.Core.Metrics;
 
 /// <summary>
@@ -11,31 +7,8 @@ namespace Ambient.App.Core.Metrics;
 /// </summary>
 public sealed record PowerState(string Mode, bool OnMains)
 {
-    private const string OverlayKey =
-        @"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes";
-
-    public static PowerState Read()
-    {
-        var onMains = true;
-        var status = new SYSTEM_POWER_STATUS();
-        if (PInvoke.GetSystemPowerStatus(out status))
-        {
-            onMains = status.ACLineStatus != 0;
-        }
-
-        var overlay = "";
-        try
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(OverlayKey);
-            overlay = key?.GetValue(onMains ? "ActiveOverlayAcPowerScheme" : "ActiveOverlayDcPowerScheme")
-                as string ?? "";
-        }
-        catch (Exception)
-        {
-        }
-
-        return new PowerState(ModeName(overlay), onMains);
-    }
+    /// <summary>What a collector without a reader reports.</summary>
+    public static PowerState Unknown { get; } = new("unknown", true);
 
     // The overlay GUIDs are fixed across Windows 10/11
     public static string ModeName(string overlayGuid) => overlayGuid.ToLowerInvariant() switch
