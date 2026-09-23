@@ -48,6 +48,7 @@ add_executable(engine_tests
     adapters/audio/capture_errors_test.cpp
     adapters/audio/capture_timeline_test.cpp
     adapters/storage/chunk_cipher_test.cpp
+    adapters/models/compile_properties_test.cpp
     adapters/models/deferred_load_test.cpp
     adapters/storage/db_test.cpp
     adapters/diarisation/fbank_test.cpp

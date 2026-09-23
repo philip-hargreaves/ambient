@@ -4,6 +4,20 @@
 
 namespace ambient::models {
 
+ov::AnyMap CompileProperties(const ModelInfo& info) {
+    ov::AnyMap map{{"CACHE_DIR", (info.dir / ".cache").string()}};
+    for (const auto& [key, value] : info.properties.items()) {
+        if (value.is_boolean()) {
+            map[key] = value.get<bool>();
+        } else if (value.is_string()) {
+            map[key] = value.get<std::string>();
+        } else {
+            map[key] = value.dump();
+        }
+    }
+    return map;
+}
+
 std::string OvRuntime::ResolveDevice(const std::string& requested) {
     if (requested == "CPU") {
         return "CPU";
@@ -57,8 +71,7 @@ LoadedModel OvRuntime::Load(const ModelStore& store, std::string_view task, std:
     const auto start = std::chrono::steady_clock::now();
     // Same convention as the whisper pipeline: first launch compiles and
     // exports, every later launch imports the cached blob
-    loaded.model = core_.compile_model(xml.string(), loaded.device,
-                                       ov::AnyMap{{"CACHE_DIR", (info.dir / ".cache").string()}});
+    loaded.model = core_.compile_model(xml.string(), loaded.device, CompileProperties(info));
     loaded.load_time = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
     return loaded;

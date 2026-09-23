@@ -10,6 +10,11 @@
 
 namespace ambient::models {
 
+// CACHE_DIR plus the manifest's properties. Values reach OpenVINO as the
+// strings its own property parsing accepts ("32" for a float hint), bools
+// as bools
+ov::AnyMap CompileProperties(const ModelInfo& info);
+
 struct LoadedModel {
     ov::CompiledModel model;
     std::string device;  // the concrete device compiled for, e.g. GPU.1

@@ -5,26 +5,13 @@
 #include <utility>
 
 #include "adapters/models/model_store.hpp"
+#include "adapters/models/ov_runtime.hpp"
 
 namespace ambient::note {
 
 namespace {
 
-// Manifest values reach OpenVINO as the strings its own property parsing
-// accepts ("32" for a float hint), bools as bools
-ov::AnyMap Properties(const models::ModelInfo& info) {
-    ov::AnyMap map{{"CACHE_DIR", (info.dir / ".cache").string()}};
-    for (const auto& [key, value] : info.properties.items()) {
-        if (value.is_boolean()) {
-            map[key] = value.get<bool>();
-        } else if (value.is_string()) {
-            map[key] = value.get<std::string>();
-        } else {
-            map[key] = value.dump();
-        }
-    }
-    return map;
-}
+using models::CompileProperties;
 
 ov::genai::StreamerVariant Wrap(const TextPipeline::Streamer& streamer) {
     if (!streamer) return std::monostate{};
@@ -34,7 +21,7 @@ ov::genai::StreamerVariant Wrap(const TextPipeline::Streamer& streamer) {
 class LlmTextPipeline : public TextPipeline {
    public:
     LlmTextPipeline(const models::ModelInfo& info, const std::string& device)
-        : pipeline_(info.dir, device, Properties(info)) {}
+        : pipeline_(info.dir, device, CompileProperties(info)) {}
 
     Result Generate(const std::string& prompt, const ov::genai::GenerationConfig& config,
                     const Streamer& streamer) override {
@@ -50,7 +37,7 @@ class LlmTextPipeline : public TextPipeline {
 class VlmTextPipeline : public TextPipeline {
    public:
     VlmTextPipeline(const models::ModelInfo& info, const std::string& device)
-        : pipeline_(info.dir, device, Properties(info)) {}
+        : pipeline_(info.dir, device, CompileProperties(info)) {}
 
     Result Generate(const std::string& prompt, const ov::genai::GenerationConfig& config,
                     const Streamer& streamer) override {
