@@ -1,15 +1,18 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Storage.Pickers;
 using Ambient.App.Core.Features.Demo;
+using Ambient.App.Core.Ports;
 
 namespace Ambient.App.Features.Demo;
 
 public sealed partial class DemoTrayView : UserControl
 {
-    public DemoTrayView(DemoTrayViewModel viewModel)
+    private readonly IFilePicker _picker;
+
+    public DemoTrayView(DemoTrayViewModel viewModel, IFilePicker picker)
     {
         ViewModel = viewModel;
+        _picker = picker;
         InitializeComponent();
         ReplayFlyout.Opening += (_, _) => BuildFlyout();
     }
@@ -40,21 +43,10 @@ public sealed partial class DemoTrayView : UserControl
 
     private async void OnBrowse(object sender, RoutedEventArgs e)
     {
-        var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.Downloads };
-        picker.FileTypeFilter.Add(".wav");
-        // Unpackaged WinUI: the picker must be bound to our window handle
-        var window = App.Current.Window;
-        if (window is null)
+        var path = await _picker.PickFileAsync(".wav");
+        if (path is not null)
         {
-            return;
-        }
-
-        WinRT.Interop.InitializeWithWindow.Initialize(
-            picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-        var file = await picker.PickSingleFileAsync();
-        if (file is not null)
-        {
-            ViewModel.UseTrack(file.Path);
+            ViewModel.UseTrack(path);
         }
     }
 }

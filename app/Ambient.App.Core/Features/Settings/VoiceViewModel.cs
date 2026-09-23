@@ -3,6 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
 
@@ -18,14 +19,16 @@ public sealed partial class VoiceViewModel : ObservableObject
     private const int LearnedAfterSessions = 5;
 
     private readonly IEngineClient _engine;
+    private readonly IDialogService _dialogs;
     private readonly ISessionState? _session;
     private readonly StatusBarViewModel? _status;
     private readonly TimeProvider _clock;
 
-    public VoiceViewModel(IEngineClient engine, ISessionState? session = null,
+    public VoiceViewModel(IEngineClient engine, IDialogService dialogs, ISessionState? session = null,
         StatusBarViewModel? status = null, TimeProvider? clock = null)
     {
         _engine = engine;
+        _dialogs = dialogs;
         _session = session;
         _status = status;
         _clock = clock ?? TimeProvider.System;
@@ -58,12 +61,6 @@ public sealed partial class VoiceViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SetUpVoiceCommand), nameof(ForgetVoiceCommand))]
     public partial bool Busy { get; private set; }
-
-    /// <summary>The view runs the enrolment dialog; true when a print was made.</summary>
-    public Func<Task<bool>>? RunEnrolment { get; set; }
-
-    /// <summary>Forgetting is irreversible, so the view confirms it once.</summary>
-    public Func<Task<bool>>? ConfirmForget { get; set; }
 
     public bool HasVoice => Origin != "none";
 
@@ -115,7 +112,7 @@ public sealed partial class VoiceViewModel : ObservableObject
         Busy = true;
         try
         {
-            var made = await RunEnrolment!().ConfigureAwait(true);
+            var made = await _dialogs.RunEnrolmentAsync().ConfigureAwait(true);
             await RefreshAsync().ConfigureAwait(true);
             if (made)
             {
@@ -128,7 +125,7 @@ public sealed partial class VoiceViewModel : ObservableObject
         }
     }
 
-    private bool CanSetUp() => _engine.Connected && !Busy && RunEnrolment is not null;
+    private bool CanSetUp() => _engine.Connected && !Busy;
 
     [RelayCommand(CanExecute = nameof(CanForget))]
     private async Task ForgetVoice()
@@ -139,7 +136,10 @@ public sealed partial class VoiceViewModel : ObservableObject
             return;
         }
 
-        if (ConfirmForget is not null && !await ConfirmForget().ConfigureAwait(true))
+        // Forgetting cannot be undone, so it is asked once
+        if (!await _dialogs.ConfirmAsync("Forget voice enrolment?",
+                "It will be learned again from your next consultation.", "Forget")
+            .ConfigureAwait(true))
         {
             return;
         }

@@ -4,8 +4,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Guidance;
 
@@ -13,15 +13,20 @@ namespace Ambient.App.Features.Guidance;
 public sealed partial class GuidanceSectionView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly ILauncher _launcher;
+    private readonly IClipboard _clipboard;
     private readonly DispatcherQueueTimer _timingTimer;
     private Storyboard? _fade;
 
     public GuidanceSectionView(
-        GuidanceViewModel viewModel, ShellViewModel shell, StatusBarViewModel status)
+        GuidanceViewModel viewModel, ShellViewModel shell, StatusBarViewModel status,
+        ILauncher launcher, IClipboard clipboard)
     {
         ViewModel = viewModel;
         Shell = shell;
         _status = status;
+        _launcher = launcher;
+        _clipboard = clipboard;
         InitializeComponent();
         _timingTimer = DispatcherQueue.CreateTimer();
         _timingTimer.Interval = TimeSpan.FromSeconds(4);
@@ -109,9 +114,9 @@ public sealed partial class GuidanceSectionView : UserControl
         {
             await ViewModel.OpenDocumentAsync(found);
         }
-        else
+        else if (!await _launcher.OpenLinkAsync(found.Link))
         {
-            await LinkHelper.OpenAsync(_status, found.Link);
+            _status.Append("Could not open the link - no browser answered");
         }
     }
 
@@ -128,7 +133,7 @@ public sealed partial class GuidanceSectionView : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is GuidanceRecommendation found)
         {
-            await ClipboardHelper.CopyAsync(_status, found.CitationText, "Citation");
+            await _clipboard.CopyAsync(_status, found.CitationText, "Citation");
         }
     }
 }

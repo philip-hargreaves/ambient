@@ -16,7 +16,7 @@ public class VoiceViewModelTest
     public async Task TheHeadlineNamesEachStateOfThePrint()
     {
         var engine = new FakeEngineClient();
-        var voice = new VoiceViewModel(engine);
+        var voice = new VoiceViewModel(engine, new FakeDialogService());
 
         await voice.RefreshAsync();
         Assert.False(voice.HasVoice);
@@ -51,16 +51,16 @@ public class VoiceViewModelTest
     {
         var engine = new FakeEngineClient { AnchorOrigin = "accrued", AnchorSessions = 4 };
         var status = new StatusBarViewModel();
-        var voice = new VoiceViewModel(engine, new FakeSession(), status);
+        var dialogs = new FakeDialogService { Answer = false };
+        var voice = new VoiceViewModel(engine, dialogs, new FakeSession(), status);
         await voice.RefreshAsync();
         Assert.True(voice.ForgetVoiceCommand.CanExecute(null));
 
-        voice.ConfirmForget = () => Task.FromResult(false);
         await voice.ForgetVoiceCommand.ExecuteAsync(null);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "anchor/clear");
         Assert.True(voice.HasVoice);
 
-        voice.ConfirmForget = () => Task.FromResult(true);
+        dialogs.Answer = true;
         await voice.ForgetVoiceCommand.ExecuteAsync(null);
         Assert.Contains(engine.Requests, r => r.Method == "anchor/clear");
         Assert.False(voice.HasVoice);
@@ -74,11 +74,7 @@ public class VoiceViewModelTest
         var engine = new FakeEngineClient { AnchorOrigin = "accrued", AnchorSessions = 4 };
         var status = new StatusBarViewModel();
         var session = new FakeSession { ConsultationActive = true };
-        var voice = new VoiceViewModel(engine, session, status)
-        {
-            ConfirmForget = () => Task.FromResult(true),
-            RunEnrolment = () => Task.FromResult(true),
-        };
+        var voice = new VoiceViewModel(engine, new FakeDialogService(), session, status);
         await voice.RefreshAsync();
 
         await voice.ForgetVoiceCommand.ExecuteAsync(null);
@@ -94,17 +90,16 @@ public class VoiceViewModelTest
     {
         var engine = new FakeEngineClient();
         var status = new StatusBarViewModel();
-        var voice = new VoiceViewModel(engine, new FakeSession(), status);
-        await voice.RefreshAsync();
-        Assert.False(voice.SetUpVoiceCommand.CanExecute(null), "no dialog wired yet");
-
-        voice.RunEnrolment = () =>
+        var dialogs = new FakeDialogService
         {
-            engine.AnchorOrigin = "enrolled";  // what the dialog's enrolment did
-            engine.AnchorEnrolledAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            return Task.FromResult(true);
+            OnEnrolment = () =>
+            {
+                engine.AnchorOrigin = "enrolled";  // what the dialog's enrolment did
+                engine.AnchorEnrolledAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            },
         };
-        voice.NotifyCommands();
+        var voice = new VoiceViewModel(engine, dialogs, new FakeSession(), status);
+        await voice.RefreshAsync();
         Assert.True(voice.SetUpVoiceCommand.CanExecute(null));
         await voice.SetUpVoiceCommand.ExecuteAsync(null);
 

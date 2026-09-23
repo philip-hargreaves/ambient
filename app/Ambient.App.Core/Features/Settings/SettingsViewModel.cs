@@ -37,6 +37,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly DemoMode? _demo;
     private readonly IEngineClient? _client;
     private readonly IUiDispatcher? _dispatcher;
+    private readonly IDialogService? _dialogs;
+    private readonly IFilePicker? _picker;
+    private readonly ILauncher? _launcher;
+    private readonly IThemeService? _theme;
     private readonly string _exportDirectory;
     private bool _reverting;
 
@@ -44,9 +48,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         ISessionState? session = null, StatusBarViewModel? status = null,
         IMachineInfoProvider? machine = null, PerformanceCollector? metrics = null,
         string? exportDirectory = null, IEngineClient? client = null,
-        IUiDispatcher? dispatcher = null, DemoMode? demo = null)
+        IUiDispatcher? dispatcher = null, DemoMode? demo = null, IDialogService? dialogs = null,
+        IFilePicker? picker = null, ILauncher? launcher = null, IThemeService? theme = null)
     {
         _preferences = preferences;
+        _dialogs = dialogs;
+        _picker = picker;
+        _launcher = launcher;
+        _theme = theme;
         _demo = demo;
         _engine = engine;
         _session = session;
@@ -537,33 +546,24 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool DocumentsPresent => Documents.Count > 0;
 
-    /// <summary>The view supplies the picker, the folder reveal and the dialogs.</summary>
-    public Func<Task<IReadOnlyList<string>>>? PickDocuments { get; set; }
-
-    public Action<string>? RevealFolder { get; set; }
-
-    public Func<string, Task<bool>>? ConfirmRemoveDocument { get; set; }
-
-    public Func<int, Task<bool>>? ConfirmRemoveAllDocuments { get; set; }
-
     [RelayCommand]
     private void OpenFolder()
     {
         if (GuidelinesFolder.Length > 0)
         {
-            RevealFolder?.Invoke(GuidelinesFolder);
+            _launcher?.RevealFolder(GuidelinesFolder);
         }
     }
 
     [RelayCommand]
     private async Task AddDocuments()
     {
-        if (PickDocuments is null)
+        if (_picker is null)
         {
             return;
         }
 
-        var paths = await PickDocuments().ConfigureAwait(true);
+        var paths = await _picker.PickFilesAsync([".pdf", ".txt", ".md"]).ConfigureAwait(true);
         if (paths.Count > 0)
         {
             await AddPathsAsync(paths).ConfigureAwait(true);
@@ -754,8 +754,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        if (ConfirmRemoveDocument is not null
-            && !await ConfirmRemoveDocument(row.Name).ConfigureAwait(true))
+        if (_dialogs is not null && !await _dialogs.ConfirmAsync($"Remove {row.Name}?",
+                "The file is moved to the Recycle Bin and no longer searched. To keep the file, "
+                + "move it out of the folder instead. Guidance already saved with a consultation "
+                + "is unchanged.", "Remove").ConfigureAwait(true))
         {
             return;
         }
@@ -780,8 +782,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        if (ConfirmRemoveAllDocuments is not null
-            && !await ConfirmRemoveAllDocuments(Documents.Count).ConfigureAwait(true))
+        if (_dialogs is not null && !await _dialogs.ConfirmAsync(
+                Documents.Count == 1 ? "Remove the document?" : $"Remove all {Documents.Count} documents?",
+                "Every file in the folder is moved to the Recycle Bin and no longer searched. "
+                + "Guidance already saved with consultations is unchanged.", "Remove all")
+            .ConfigureAwait(true))
         {
             return;
         }
@@ -805,12 +810,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool KeepConsultations { get; set; }
 
-    /// <summary>
-    /// Turning the history on starts accumulating patient records, so the view confirms it
-    /// first. Turning it off is never gated.
-    /// </summary>
-    public Func<Task<bool>>? ConfirmKeepConsultations { get; set; }
-
+    // Turning the history on starts accumulating patient records, so it is
+    // confirmed first. Turning it off is never gated
     partial void OnKeepConsultationsChanged(bool value)
     {
         if (_reverting || _initialising)
@@ -818,7 +819,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        if (value && ConfirmKeepConsultations is not null)
+        if (value && _dialogs is not null)
         {
             _reverting = true;
             KeepConsultations = false;  // holds until the clinician confirms
@@ -832,7 +833,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private async Task AskThenEnableAsync()
     {
-        if (await ConfirmKeepConsultations!().ConfigureAwait(true))
+        if (await _dialogs!.ConfirmAsync("Save consultation data?",
+                "Transcripts, notes and patient sheets will be stored encrypted on this device."
+                + "\n\nContinue only if you have the necessary consent and approval.", "Turn on")
+            .ConfigureAwait(true))
         {
             _reverting = true;
             KeepConsultations = true;
@@ -857,9 +861,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial string Theme { get; set; } = "system";
 
-    /// <summary>Wired by the shell to the window's requested theme.</summary>
-    public Action<string>? ApplyTheme { get; set; }
-
     partial void OnThemeChanged(string value)
     {
         OnPropertyChanged(nameof(ThemeIndex));
@@ -868,7 +869,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        ApplyTheme?.Invoke(value);
+        _theme?.Apply(value);
         if (_preferences is not null)
         {
             _preferences.Theme = value;
@@ -962,9 +963,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     // Set while the switch is aligned to the store, so the engine is not asked again
     private bool _seedFollowsStore;
 
-    /// <summary>The view supplies the confirmation dialog.</summary>
-    public Func<Task<bool>>? ConfirmDeleteAllConsultations { get; set; }
-
     /// <summary>Erases every stored consultation, seeded or real.</summary>
     [RelayCommand]
     private async Task DeleteAllConsultations()
@@ -980,8 +978,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        if (ConfirmDeleteAllConsultations is not null
-            && !await ConfirmDeleteAllConsultations().ConfigureAwait(true))
+        if (_dialogs is not null && !await _dialogs.ConfirmAsync("Delete all consultation data?",
+                "Every stored consultation on this device is erased: transcripts, notes, patient "
+                + "sheets and appraisal reflections. Your guideline documents are kept. This cannot "
+                + "be undone.", "Delete all").ConfigureAwait(true))
         {
             return;
         }
@@ -1141,9 +1141,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string ExportDescription =>
         ExportResult.Length > 0 ? ExportResult : "Saves the report as an HTML file";
 
-    /// <summary>Suggested name in, chosen path (or null) out; the view owns the picker.</summary>
-    public Func<string, Task<string?>>? PickSavePath { get; set; }
-
     /// <summary>One self-contained HTML file: readable, emailable, parseable.</summary>
     [RelayCommand]
     private async Task ExportPerformanceReport()
@@ -1159,8 +1156,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             var html = ReportBuilder.Build(
                 _machine.Describe(), File.ReadAllLines(_metrics.Path), DateTimeOffset.UtcNow);
             var suggested = $"ambient-perf-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}.html";
-            var path = PickSavePath is not null
-                ? await PickSavePath(suggested).ConfigureAwait(true)
+            var path = _picker is not null
+                ? await _picker.PickSaveAsync(suggested, "HTML report", ".html").ConfigureAwait(true)
                 : Path.Combine(_exportDirectory, suggested);
             if (path is null)
             {

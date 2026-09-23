@@ -2,6 +2,9 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Ports;
+using Ambient.App.Core.Shell;
+using Ambient.Client;
 using static Ambient.App.Core.Features.Guidance.GuidanceRecommendation;
 
 namespace Ambient.App.Core.Features.Guidance;
@@ -11,26 +14,20 @@ public sealed record PageBox(double Left, double Top, double Width, double Heigh
 
 /// <summary>
 /// The page view beside the note: a page of an added document, opened on the cited
-/// passage with its lines marked and turnable from there. The consultation view model
-/// supplies the engine calls, the view supplies the file launcher and the clipboard.
+/// passage with its lines marked and turnable from there.
 /// </summary>
-public sealed partial class PageViewModel : ObservableObject
+public sealed partial class PageViewModel(
+    IEngineClient engine, ILauncher launcher, IClipboard clipboard, StatusBarViewModel status)
+    : ObservableObject
 {
     private static readonly TimeSpan SlowAfter = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
     private GuidanceRecommendation? _shown;
     private int _page;
     private int _pages;
     private List<(int Page, double Left, double Top, double Right, double Bottom)> _boxes = [];
     private int _load;
-
-    public Func<string, object, Task<JsonElement>>? Request { get; set; }
-
-    public Func<string, Task>? OpenFile { get; set; }
-
-    public Func<string, Task>? CopyText { get; set; }
-
-    public Action<string>? Report { get; set; }
 
     [ObservableProperty]
     public partial bool Visible { get; private set; }
@@ -103,24 +100,20 @@ public sealed partial class PageViewModel : ObservableObject
     /// <summary>A card's Open: the decrypted copy in the PDF viewer.</summary>
     public async Task OpenAsync(GuidanceRecommendation found)
     {
-        if (Request is null || OpenFile is null)
-        {
-            return;
-        }
-
         try
         {
-            var reply = await Request("guidance/documents/open", new { id = found.Document })
+            var reply = await engine
+                .RequestAsync("guidance/documents/open", new { id = found.Document }, RequestTimeout)
                 .ConfigureAwait(true);
             var path = Field(reply, "path");
             if (path.Length > 0)
             {
-                await OpenFile(path).ConfigureAwait(true);
+                await launcher.OpenFileAsync(path).ConfigureAwait(true);
             }
         }
         catch (Exception)
         {
-            Report?.Invoke("The document could not be opened");
+            status.Append("The document could not be opened");
         }
     }
 
@@ -186,7 +179,7 @@ public sealed partial class PageViewModel : ObservableObject
 
     private async Task LoadAsync()
     {
-        if (_shown is null || Request is null)
+        if (_shown is null)
         {
             return;
         }
@@ -205,8 +198,8 @@ public sealed partial class PageViewModel : ObservableObject
         _ = MarkSlowAsync(load);
         try
         {
-            var reply = await Request("guidance/page",
-                new { id = _shown.Document, page = _page, chunkId = _shown.ChunkId })
+            var reply = await engine.RequestAsync("guidance/page",
+                new { id = _shown.Document, page = _page, chunkId = _shown.ChunkId }, RequestTimeout)
                 .ConfigureAwait(true);
             if (load == _load)
             {
@@ -220,7 +213,7 @@ public sealed partial class PageViewModel : ObservableObject
                 Failed = true;
                 Loading = false;
                 Slow = false;
-                Report?.Invoke($"The page could not be shown: {e.Message}");
+                status.Append($"The page could not be shown: {e.Message}");
             }
         }
     }
@@ -265,5 +258,5 @@ public sealed partial class PageViewModel : ObservableObject
     private Task OpenDocument() => _shown is null ? Task.CompletedTask : OpenAsync(_shown);
 
     [RelayCommand]
-    private Task CopyCitation() => CopyText?.Invoke(Citation) ?? Task.CompletedTask;
+    private Task CopyCitation() => clipboard.CopyAsync(status, Citation, "Citation");
 }

@@ -425,8 +425,7 @@ public class GuidanceViewModelTest
             FailNext = m => m == "guidance/corpora" ? new IOException("pipe closed") : null,
         };
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status);
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status));
 
         Assert.Equal(GuidanceReadiness.Unavailable, session.Guidance.Readiness);
         Assert.Contains(
@@ -794,9 +793,7 @@ public class GuidanceViewModelTest
     public void ReadinessComesFromThePollThenTheNotification()
     {
         var engine = new FakeEngineClient(autoNotify: false) { GuidanceState = "loading" };
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel());
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()));
         Assert.Equal(GuidanceReadiness.Loading, session.Guidance.Readiness);
 
         engine.GuidanceState = "ready";
@@ -815,8 +812,7 @@ public class GuidanceViewModelTest
             GuidanceDetail = "no model for embedding/default",
         };
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status);
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(engine, status));
 
         Assert.Equal(GuidanceReadiness.Unavailable, session.Guidance.Readiness);
         Assert.Contains(
@@ -833,9 +829,7 @@ public class GuidanceViewModelTest
         var engine = new FakeEngineClient(autoNotify: false);
         engine.GuidanceCorpora.Clear();
         engine.GuidanceCorpora.Add(new { id = "nice", unavailable = "sha256 differs" });
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel());
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()));
 
         Assert.Equal(GuidanceReadiness.Ready, session.Guidance.Readiness);
         Assert.False(session.Guidance.SettingsLinkVisible);

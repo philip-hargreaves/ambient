@@ -53,12 +53,8 @@ public class SettingsViewModelTest
         var engine = new FakeEngineHost();
         var asked = 0;
 
-        var settings = new SettingsViewModel(preferences, engine, new FakeSession());
-        settings.ConfirmKeepConsultations = () =>
-        {
-            asked++;
-            return Task.FromResult(false);
-        };
+        var dialogs = new FakeDialogService { Answer = false, OnConfirm = () => asked++ };
+        var settings = new SettingsViewModel(preferences, engine, new FakeSession(), dialogs: dialogs);
 
         Assert.True(settings.NpuTranscription);
         Assert.True(settings.KeepConsultations);
@@ -93,16 +89,15 @@ public class SettingsViewModelTest
         var preferences = TempPreferences();
         var engine = new FakeEngineClient { StoredSessions = 3 };
         var status = new StatusBarViewModel();
-        var settings = new SettingsViewModel(preferences, status: status, client: engine);
+        var dialogs = new FakeDialogService { Answer = false };
+        var settings = new SettingsViewModel(preferences, status: status, client: engine, dialogs: dialogs);
         settings.SeedDataEnabled = true;
-        var answer = false;
-        settings.ConfirmDeleteAllConsultations = () => Task.FromResult(answer);
 
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "session/deleteAll");
         Assert.True(settings.SeedDataEnabled);
 
-        answer = true;
+        dialogs.Answer = true;
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
         Assert.Single(engine.Requests, r => r.Method == "session/deleteAll");
         Assert.Contains("11 consultations deleted", status.LatestActivity);
@@ -118,10 +113,8 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient { StoredSessions = 2 };
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
         var status = new StatusBarViewModel();
-        var settings = new SettingsViewModel(TempPreferences(), status: status, client: engine)
-        {
-            ConfirmDeleteAllConsultations = () => Task.FromResult(true),
-        };
+        var settings = new SettingsViewModel(TempPreferences(), status: status, client: engine,
+            dialogs: new FakeDialogService());
 
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
         Assert.Single(engine.Requests, r => r.Method == "session/deleteAll");
@@ -135,10 +128,7 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient { StoredSessions = 3 };
         var status = new StatusBarViewModel();
         var settings = new SettingsViewModel(TempPreferences(), session: new FakeSession { ConsultationActive = true },
-            status: status, client: engine)
-        {
-            ConfirmDeleteAllConsultations = () => Task.FromResult(true),
-        };
+            status: status, client: engine, dialogs: new FakeDialogService());
 
         await settings.DeleteAllConsultationsCommand.ExecuteAsync(null);
 
@@ -179,14 +169,9 @@ public class SettingsViewModelTest
     public async Task TurningOnIsConfirmedNeverJustToggled()
     {
         var preferences = TempPreferences();
-        var settings = new SettingsViewModel(preferences);
         var asked = 0;
-        var answer = false;
-        settings.ConfirmKeepConsultations = () =>
-        {
-            asked++;
-            return Task.FromResult(answer);
-        };
+        var dialogs = new FakeDialogService { Answer = false, OnConfirm = () => asked++ };
+        var settings = new SettingsViewModel(preferences, dialogs: dialogs);
 
         settings.KeepConsultations = true;
         await Task.Delay(20);
@@ -194,7 +179,7 @@ public class SettingsViewModelTest
         Assert.False(settings.KeepConsultations, "declined: the toggle stays off");
         Assert.False(preferences.KeepConsultations, "and nothing was persisted");
 
-        answer = true;
+        dialogs.Answer = true;
         settings.KeepConsultations = true;
         await Task.Delay(20);
         Assert.Equal(2, asked);
@@ -501,15 +486,15 @@ public class SettingsViewModelTest
         collector.SessionStarted("mic", 0, null);
         collector.StopRequested();
         await collector.SessionFinishedAsync(null, 10);
-        var settings = new SettingsViewModel(machine: new FixedMachine(), metrics: collector);
+        var picker = new FakeFilePicker();
+        var settings = new SettingsViewModel(machine: new FixedMachine(), metrics: collector, picker: picker);
         var chosen = Path.Combine(dir, "picked.html");
 
-        settings.PickSavePath = _ => Task.FromResult<string?>(null);
         await settings.ExportPerformanceReportCommand.ExecuteAsync(null);
         Assert.Equal("", settings.ExportResult);
         Assert.False(File.Exists(chosen));
 
-        settings.PickSavePath = _ => Task.FromResult<string?>(chosen);
+        picker.SavePath = chosen;
         await settings.ExportPerformanceReportCommand.ExecuteAsync(null);
         Assert.True(File.Exists(chosen), "written where the picker chose");
         Assert.Contains("picked.html", settings.ExportResult);
@@ -545,16 +530,15 @@ public class SettingsViewModelTest
     public void ThemeDefaultsToSystemPersistsAndAppliesLive()
     {
         var preferences = TempPreferences();
-        var applied = new List<string>();
-        var settings = new SettingsViewModel(preferences);
-        settings.ApplyTheme = applied.Add;
+        var theme = new FakeThemeService();
+        var settings = new SettingsViewModel(preferences, theme: theme);
         Assert.Equal("system", settings.Theme);
         Assert.Equal(0, settings.ThemeIndex);
 
         settings.ThemeIndex = 2;
 
         Assert.Equal("dark", settings.Theme);
-        Assert.Equal(["dark"], applied);
+        Assert.Equal(["dark"], theme.Applied);
         Assert.Equal("dark", preferences.Theme);
 
         var reopened = new SettingsViewModel(preferences);
@@ -747,11 +731,11 @@ public class SettingsViewModelTest
         engine.AddedDocuments.Add(Document(5, "PMR pathway", "indexing"));
         engine.SkippedDocuments.Add(new { path = @"C:\g\scan.pdf", reason = "unsupported" });
         engine.SkippedDocuments.Add(new { path = @"C:\g\empty.txt", reason = "unreadable" });
-        var settings = new SettingsViewModel(TempPreferences(), client: engine)
+        var picker = new FakeFilePicker
         {
-            PickDocuments = () => Task.FromResult<IReadOnlyList<string>>(
-                [@"C:\g\PMR pathway.txt", @"C:\g\scan.pdf", @"C:\g\empty.txt"]),
+            Files = [@"C:\g\PMR pathway.txt", @"C:\g\scan.pdf", @"C:\g\empty.txt"],
         };
+        var settings = new SettingsViewModel(TempPreferences(), client: engine, picker: picker);
 
         await settings.AddDocumentsCommand.ExecuteAsync(null);
 
@@ -787,14 +771,8 @@ public class SettingsViewModelTest
         var engine = new FakeEngineClient();
         engine.GuidanceDocuments.Add(Document(3, "PMR", "indexing"));
         var asked = 0;
-        var settings = new SettingsViewModel(TempPreferences(), client: engine)
-        {
-            ConfirmRemoveDocument = _ =>
-            {
-                asked++;
-                return Task.FromResult(true);
-            },
-        };
+        var dialogs = new FakeDialogService { OnConfirm = () => asked++ };
+        var settings = new SettingsViewModel(TempPreferences(), client: engine, dialogs: dialogs);
         var row = Assert.Single(settings.Documents);
 
         engine.RaiseNotification("guidance/progress",

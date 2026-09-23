@@ -4,6 +4,7 @@ using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Sessions;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
+using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Features.Sessions;
@@ -17,7 +18,8 @@ public class SessionsViewModelTest
         var note = new NoteViewModel();
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), note, status);
+            engine, new InlineDispatcher(), new TranscriptViewModel(), note, status,
+            new FakeDialogService(), TestSession.Page(engine, status));
         return (new SessionsViewModel(engine, status, consultation), consultation, engine, status);
     }
 
@@ -288,7 +290,7 @@ public class SessionsViewModelTest
         var status = new StatusBarViewModel();
         var consultation = new ConsultationViewModel(
             engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            status);
+            status, new FakeDialogService(), TestSession.Page(engine, status));
         var vm = new SessionsViewModel(engine, status, consultation, preferences);
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
 

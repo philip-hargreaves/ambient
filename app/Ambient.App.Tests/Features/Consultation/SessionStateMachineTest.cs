@@ -65,9 +65,7 @@ public class SessionStateMachineTest
     public async Task AFailedStartStaysIdleWithTheReasonLogged()
     {
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            new RefusingClient(), new InlineDispatcher(), new TranscriptViewModel(),
-            new NoteViewModel(), status);
+        var session = new ConsultationViewModel(new RefusingClient(), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(new FakeEngineClient(), status));
 
         await session.StartRecordingAsync();
 
@@ -79,9 +77,7 @@ public class SessionStateMachineTest
     public async Task ATimedOutStopRecoversToIdle()
     {
         var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            new TimingOutClient(), new InlineDispatcher(), new TranscriptViewModel(),
-            new NoteViewModel(), status);
+        var session = new ConsultationViewModel(new TimingOutClient(), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(new FakeEngineClient(), status));
         await session.StartRecordingAsync();
 
         await session.StopRecordingAsync();

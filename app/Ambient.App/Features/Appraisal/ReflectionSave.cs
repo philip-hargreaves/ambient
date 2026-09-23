@@ -1,37 +1,24 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Appraisal;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Appraisal;
 
-/// <summary>
-/// Saves one reflection as text; warns about identifiers first.
-/// </summary>
+/// <summary>Saves one reflection as text, warning about identifiers first.</summary>
 internal static class ReflectionSave
 {
-    public static async Task SaveAsync(XamlRoot root, StatusBarViewModel status, string text, string title)
+    public static async Task SaveAsync(
+        IDialogService dialogs, IFilePicker picker, StatusBarViewModel status, string text,
+        string title)
     {
         var warning = IdentifierCheck.Describe(text);
-        if (warning.Length > 0)
+        if (warning.Length > 0 && !await dialogs.ConfirmAsync("Check before saving",
+                warning + "\n\nChange the wording, or save as it is.", "Save anyway", "Go back"))
         {
-            var check = new ContentDialog
-            {
-                XamlRoot = root,
-                Title = "Check before saving",
-                Content = warning + "\n\nChange the wording, or save as it is.",
-                PrimaryButtonText = "Save anyway",
-                CloseButtonText = "Go back",
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await check.ShowAsync() != ContentDialogResult.Primary)
-            {
-                return;
-            }
+            return;
         }
 
-        var path = await SavePickerHelper.PickAsync(FileName(title), "Plain text", ".txt");
+        var path = await picker.PickSaveAsync(FileName(title), "Plain text", ".txt");
         if (path is null)
         {
             return;

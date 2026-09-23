@@ -3,9 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Features.Settings;
-using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Features.Appraisal;
 using Ambient.App.Features.Demo;
 using Ambient.App.Features.Documents;
 using Ambient.App.Features.Guidance;
@@ -18,17 +16,12 @@ public sealed partial class ConsultationView : UserControl
     public ConsultationView(
         ShellViewModel shell, SessionControlsView controls, TranscriptPaneView transcript,
         NotePaneView note, StatusBarView status, DemoTrayView demoTray, SettingsViewModel settings,
-        MicViewModel mic, ConsultationViewModel consultation, Ambient.Client.IEngineClient engine,
-        IUiDispatcher dispatcher, StatusBarViewModel statusBar, PageView page)
+        MicViewModel mic, ConsultationViewModel consultation, PageView page)
     {
         Shell = shell;
         Controls = controls.ViewModel;
         Mic = mic;
         InitializeComponent();
-        // The page showing the note opens the sheet
-        Loaded += (_, _) => consultation.OpenReflection = (id, startedAt) =>
-            ReflectionSheet.ShowAsync(XamlRoot, engine, dispatcher, statusBar, id, startedAt);
-
         // Refreshed as the flyout opens: a just-plugged headset must appear
         MicFlyout.Opening += async (_, _) =>
         {

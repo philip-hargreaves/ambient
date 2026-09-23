@@ -3,6 +3,7 @@ using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Shell;
+using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Features.Consultation;
@@ -17,9 +18,7 @@ public class ExampleCaseTest
         var engine = new FakeEngineClient(autoNotify: false);
         var note = new NoteViewModel();
         var demo = new DemoMode(null, Path.Combine(Path.GetTempPath(), "missing.json"), [Gout]);
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), note,
-            new StatusBarViewModel(), demo: demo);
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), note, new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), demo: demo);
         return (session, engine, note);
     }
 

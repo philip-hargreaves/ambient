@@ -2,20 +2,25 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Controls;
 using Ambient.App.Core.Features.Documents;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Documents;
 
 public sealed partial class PatientEditorView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly IClipboard _clipboard;
+    private readonly IFilePicker _picker;
     private readonly TabFit _fit;
 
-    public PatientEditorView(NoteViewModel viewModel, StatusBarViewModel status)
+    public PatientEditorView(
+        NoteViewModel viewModel, StatusBarViewModel status, IClipboard clipboard, IFilePicker picker)
     {
         ViewModel = viewModel;
         _status = status;
+        _clipboard = clipboard;
+        _picker = picker;
         InitializeComponent();
         _fit = new TabFit(PatientBox, 0.6);
         ViewModel.PropertyChanged += (_, e) =>
@@ -63,13 +68,13 @@ public sealed partial class PatientEditorView : UserControl
     // The sheet and its translation travel together to the patient
     private async void OnExportPatient(object sender, RoutedEventArgs e)
     {
-        var path = await SavePickerHelper.PickAsync("patient-sheet.txt", "Text file", ".txt");
+        var path = await _picker.PickSaveAsync("patient-sheet.txt", "Text file", ".txt");
         if (path is null)
         {
             return;
         }
 
-        var text = SavePickerHelper.ExportMarker + ViewModel.PatientInfoText;
+        var text = DocumentExport.Marker + ViewModel.PatientInfoText;
         if (ViewModel.TranslationText.Length > 0)
         {
             text += "\n\n" + ViewModel.TranslationCaption + "\n\n" + ViewModel.TranslationText;
@@ -80,5 +85,5 @@ public sealed partial class PatientEditorView : UserControl
     }
 
     private async void OnCopyPatient(object sender, RoutedEventArgs e) =>
-        await ClipboardHelper.CopyAsync(_status, ViewModel.PatientInfoText, "Patient note");
+        await _clipboard.CopyAsync(_status, ViewModel.PatientInfoText, "Patient note");
 }

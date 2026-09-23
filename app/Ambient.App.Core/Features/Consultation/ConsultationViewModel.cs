@@ -117,19 +117,22 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     public GuidanceViewModel Guidance { get; }
 
     /// <summary>The page of an added document beside the note, when a card asks.</summary>
-    public PageViewModel PageView { get; } = new();
+    public PageViewModel PageView { get; }
 
     public StatusBarViewModel Status { get; }
 
     public ConsultationViewModel(
         IEngineClient engine, IUiDispatcher dispatcher,
         TranscriptViewModel transcript, NoteViewModel note, StatusBarViewModel status,
+        IDialogService dialogs, PageViewModel pageView,
         Metrics.PerformanceCollector? metrics = null, TimeSpan? readinessPollInterval = null,
         AppPreferences? preferences = null, GuidanceViewModel? guidance = null,
         DemoMode? demo = null)
     {
         _engine = engine;
         _dispatcher = dispatcher;
+        _dialogs = dialogs;
+        PageView = pageView;
         _metrics = metrics;
         _preferences = preferences;
         _demo = demo;
@@ -159,9 +162,6 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Guidance.ShowInDocumentRequested = PageView.ShowAsync;
         Guidance.OpenDocumentRequested = PageView.OpenAsync;
         Guidance.CardsShown = () => PageView.KeepOnlyFor(Guidance.Cards);
-        PageView.Request = (method, parameters) =>
-            _engine.RequestAsync(method, parameters, RequestTimeout);
-        PageView.Report = line => Status.Append(line);
         // Persisted options applied before the change callback is wired,
         // so restoring them is not itself a change
         if (preferences is not null)
@@ -438,19 +438,18 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
     private string? _finalisedSessionId;
     private string _finalisedStartedAt = "";
     private readonly DemoMode? _demo;
-
-    /// <summary>The view opens the reflection sheet for (session id, started at).</summary>
-    public Func<string, string, Task>? OpenReflection { get; set; }
+    private readonly IDialogService _dialogs;
 
     // Opening the sheet creates the entry, so the button reads Open from here on
     private async Task ReflectAsync()
     {
-        if (_finalisedSessionId is null || OpenReflection is null)
+        if (_finalisedSessionId is null)
         {
             return;
         }
 
-        await OpenReflection(_finalisedSessionId, _finalisedStartedAt).ConfigureAwait(true);
+        await _dialogs.ShowReflectionAsync(_finalisedSessionId, _finalisedStartedAt)
+            .ConfigureAwait(true);
         Note.HasReflection = true;
     }
     private string? _recordingSessionId;

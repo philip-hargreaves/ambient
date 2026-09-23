@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Appraisal;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.App.Features.Sessions;
 
@@ -11,13 +12,15 @@ public sealed partial class AppraisalsView : UserControl
 {
     private readonly StatusBarViewModel _status;
 
-    public AppraisalsView(AppraisalsViewModel viewModel, ShellViewModel shell, StatusBarViewModel status)
+    public AppraisalsView(AppraisalsViewModel viewModel, ShellViewModel shell, StatusBarViewModel status,
+        IClipboard clipboard, IFilePicker picker, IDialogService dialogs)
     {
         ViewModel = viewModel;
         Shell = shell;
         _status = status;
-        ReflectionCardView.EditorFactory = card =>
-            new ReflectionEditorView(card.Editor!, status, showHeading: false, removeCommand: card.DeleteCommand);
+        ReflectionCardView.EditorFactory = card => new ReflectionEditorView(
+            card.Editor!, status, clipboard, picker, dialogs, showHeading: false,
+            removeCommand: card.DeleteCommand);
         InitializeComponent();
         MonthMarkerView.Pressed = OnMonthPressed;
         Loaded += (_, _) => _ = ViewModel.RefreshAsync();

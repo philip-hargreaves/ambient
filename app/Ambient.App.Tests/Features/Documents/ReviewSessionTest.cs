@@ -2,7 +2,7 @@ using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Tests.Support;
-
+using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Features.Documents;
 
@@ -30,19 +30,14 @@ public class ReviewSessionTest
     [Fact]
     public async Task TheReflectButtonSaysWhetherItCreatesOrOpens()
     {
-        var (session, _, note) = TestSession.Create();
-        var opened = 0;
-        session.OpenReflection = (_, _) =>
-        {
-            opened++;
-            return Task.CompletedTask;
-        };
+        var dialogs = new FakeDialogService();
+        var (session, _, note) = TestSession.Create(dialogs: dialogs);
 
         await session.OpenStoredSessionAsync("abc");
         Assert.Equal("Create reflection", note.ReflectLabel);
 
         await note.ReflectCommand.ExecuteAsync(null);
-        Assert.Equal(1, opened);
+        Assert.Single(dialogs.ReflectionsShown);
         Assert.Equal("Open reflection", note.ReflectLabel);  // the sheet made the entry
 
         await session.OpenStoredSessionAsync("def", hasReflection: true);

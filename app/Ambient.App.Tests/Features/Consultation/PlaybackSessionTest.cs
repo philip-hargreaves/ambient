@@ -29,9 +29,7 @@ public class PlaybackSessionTest
     {
         var engine = new FakeEngineClient(autoNotify: false);
         var demo = new DemoMode(null, MastersFile(masters), []);
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            new StatusBarViewModel(), demo: demo);
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), demo: demo);
         return (session, engine, demo);
     }
 

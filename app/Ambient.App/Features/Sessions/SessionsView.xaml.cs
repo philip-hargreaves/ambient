@@ -3,9 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Features.Sessions;
-using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Features.Appraisal;
 using Ambient.App.Features.Documents;
 using Ambient.App.Features.Guidance;
 
@@ -26,8 +24,7 @@ public sealed partial class SessionsView : UserControl
     public SessionsView(
         SessionsViewModel viewModel, ShellViewModel shell,
         TranscriptPaneView transcript, NoteEditorView note, PatientEditorView patient,
-        ConsultationViewModel consultation, Ambient.Client.IEngineClient engine,
-        IUiDispatcher dispatcher, StatusBarViewModel status, PageView page)
+        ConsultationViewModel consultation, PageView page)
     {
         ViewModel = viewModel;
         Shell = shell;
@@ -47,12 +44,7 @@ public sealed partial class SessionsView : UserControl
         };
         NarrowTabs.Loaded += (_, _) => FitNarrow();
         NarrowTabs.SizeChanged += (_, _) => FitNarrow();
-        Loaded += (_, _) =>
-        {
-            _ = ViewModel.RefreshAsync();
-            consultation.OpenReflection = (id, startedAt) =>
-                ReflectionSheet.ShowAsync(XamlRoot, engine, dispatcher, status, id, startedAt);
-        };
+        Loaded += (_, _) => _ = ViewModel.RefreshAsync();
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(SessionsViewModel.DetailOpen)

@@ -39,9 +39,6 @@ public partial class App : Application
 
     public IServiceProvider Services { get; }
 
-    /// <summary>The main window, for pickers that need an HWND.</summary>
-    public Window? Window => _window;
-
     private static readonly TimeSpan EngineConnectTimeout = TimeSpan.FromSeconds(10);
 
     private static ServiceProvider ConfigureServices()
@@ -49,6 +46,12 @@ public partial class App : Application
         var services = new ServiceCollection();
 
         services.AddSingleton<IUiDispatcher, UiDispatcher>();
+        services.AddSingleton<WindowAccessor>();
+        services.AddSingleton<IClipboard, WinUiClipboard>();
+        services.AddSingleton<IFilePicker, WinUiFilePicker>();
+        services.AddSingleton<ILauncher, WinUiLauncher>();
+        services.AddSingleton<IThemeService, WinUiThemeService>();
+        services.AddSingleton<IDialogService, WinUiDialogService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IEngineLauncher>(sp => new ProcessEngineLauncher(
@@ -109,6 +112,7 @@ public partial class App : Application
         services.AddSingleton<TranscriptViewModel>();
         services.AddSingleton<NoteViewModel>();
         services.AddSingleton<GuidanceViewModel>();
+        services.AddSingleton<PageViewModel>();
         services.AddSingleton<StatusBarViewModel>();
         services.AddSingleton<MicViewModel>();
         services.AddSingleton(sp => new DemoMode(
@@ -240,23 +244,10 @@ public partial class App : Application
             dispatcher.Post(() => statusBar.SetEngineState(host.Status, host.Fault));
 
         _window = Services.GetRequiredService<MainWindow>();
-        // Applied before Activate so a dark preference never flashes light;
-        // ElementTheme.Default IS follow-the-OS, so "system" tracks it live
-        void ApplyTheme(string theme)
-        {
-            if (_window?.Content is FrameworkElement root)
-            {
-                root.RequestedTheme = theme switch
-                {
-                    "light" => ElementTheme.Light,
-                    "dark" => ElementTheme.Dark,
-                    _ => ElementTheme.Default,
-                };
-            }
-        }
-
-        ApplyTheme(Services.GetRequiredService<AppPreferences>().Theme);
-        Services.GetRequiredService<SettingsViewModel>().ApplyTheme = ApplyTheme;
+        Services.GetRequiredService<WindowAccessor>().Window = _window;
+        // Applied before Activate so a dark preference never flashes light
+        Services.GetRequiredService<IThemeService>()
+            .Apply(Services.GetRequiredService<AppPreferences>().Theme);
         _window.Closed += (_, _) => host.Shutdown();
         _window.Activate();
         host.Start();

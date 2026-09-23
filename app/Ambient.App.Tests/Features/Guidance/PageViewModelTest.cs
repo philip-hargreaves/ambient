@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Features.Guidance;
@@ -34,14 +35,14 @@ public class PageViewModelTest
     private static object Reply(params object[] boxes) =>
         new { path = @"C:\scratch\page-7-1.bmp", width = 1000, height = 1400, pages = 5, boxes };
 
-    private static (PageViewModel View, FakeEngineClient Engine) Create(object? reply)
+    private static (PageViewModel View, FakeEngineClient Engine) Create(object? reply) =>
+        Create(reply, new FakeLauncher(), new FakeClipboard());
+
+    private static (PageViewModel View, FakeEngineClient Engine) Create(
+        object? reply, FakeLauncher launcher, FakeClipboard clipboard)
     {
         var engine = new FakeEngineClient { PageReply = reply };
-        var view = new PageViewModel
-        {
-            Request = (method, parameters) =>
-                engine.RequestAsync(method, parameters, TimeSpan.FromSeconds(1)),
-        };
+        var view = new PageViewModel(engine, launcher, clipboard, new StatusBarViewModel());
         return (view, engine);
     }
 
@@ -164,18 +165,13 @@ public class PageViewModelTest
     [Fact]
     public async Task OpenAsksForTheCopyAndHandsThePathToTheViewer()
     {
-        var (view, engine) = Create(null);
+        var launcher = new FakeLauncher();
+        var (view, engine) = Create(null, launcher, new FakeClipboard());
         engine.OpenedPath = @"C:\scratch\7.pdf";
-        string? opened = null;
-        view.OpenFile = path =>
-        {
-            opened = path;
-            return Task.CompletedTask;
-        };
 
         await view.OpenAsync(Found());
 
-        Assert.Equal(@"C:\scratch\7.pdf", opened);
+        Assert.Equal([@"C:\scratch\7.pdf"], launcher.Files);
         var request = Assert.Single(engine.Requests, r => r.Method == "guidance/documents/open");
         Assert.Equal("{\"id\":7}", request.Params);
     }
@@ -183,19 +179,14 @@ public class PageViewModelTest
     [Fact]
     public async Task CloseHidesThePaneAndCopyHandsTheCitationOn()
     {
-        var (view, _) = Create(Reply());
-        string? copied = null;
-        view.CopyText = text =>
-        {
-            copied = text;
-            return Task.CompletedTask;
-        };
+        var clipboard = new FakeClipboard();
+        var (view, _) = Create(Reply(), new FakeLauncher(), clipboard);
         await view.ShowAsync(Found());
 
         await view.CopyCitationCommand.ExecuteAsync(null);
         view.CloseCommand.Execute(null);
 
-        Assert.Equal("BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)", copied);
+        Assert.Equal(["BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)"], clipboard.Copied);
         Assert.False(view.Visible);
     }
 }

@@ -3,22 +3,27 @@ using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Controls;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.App.Features.Guidance;
-using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Documents;
 
 public sealed partial class NoteEditorView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly IClipboard _clipboard;
+    private readonly IFilePicker _picker;
     private readonly TabFit _fit;
 
     public NoteEditorView(
-        NoteViewModel viewModel, StatusBarViewModel status, GuidanceSectionView guidance)
+        NoteViewModel viewModel, StatusBarViewModel status, GuidanceSectionView guidance,
+        IClipboard clipboard, IFilePicker picker)
     {
         ViewModel = viewModel;
         _status = status;
+        _clipboard = clipboard;
+        _picker = picker;
         InitializeComponent();
         Select(StyleBox, ViewModel.Style);
         Select(DetailBox, ViewModel.Detail);
@@ -115,17 +120,17 @@ public sealed partial class NoteEditorView : UserControl
     // Export is the one action that writes outside the encrypted store
     private async void OnExportNote(object sender, RoutedEventArgs e)
     {
-        var path = await SavePickerHelper.PickAsync("clinical-note.txt", "Text file", ".txt");
+        var path = await _picker.PickSaveAsync("clinical-note.txt", "Text file", ".txt");
         if (path is null)
         {
             return;
         }
 
         await System.IO.File.WriteAllTextAsync(
-            path, SavePickerHelper.ExportMarker + ViewModel.ClinicalNoteText);
+            path, DocumentExport.Marker + ViewModel.ClinicalNoteText);
         _status.Append($"Saved to {System.IO.Path.GetFileName(path)} - outside the encrypted store");
     }
 
     private async void OnCopyNote(object sender, RoutedEventArgs e) =>
-        await ClipboardHelper.CopyAsync(_status, ViewModel.ClinicalNoteText, "Note");
+        await _clipboard.CopyAsync(_status, ViewModel.ClinicalNoteText, "Note");
 }

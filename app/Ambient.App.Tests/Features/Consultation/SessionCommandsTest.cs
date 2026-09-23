@@ -168,9 +168,7 @@ public class SessionCommandsTest
     {
         var engine = new FakeEngineClient(autoNotify: false) { FirstUse = true, ModelsCompiled = false };
         var bar = new StatusBarViewModel();
-        var session = new ConsultationViewModel(
-            engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            bar, readinessPollInterval: TimeSpan.FromMilliseconds(1));
+        var session = new ConsultationViewModel(engine, new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), bar, new FakeDialogService(), TestSession.Page(engine, bar), readinessPollInterval: TimeSpan.FromMilliseconds(1));
         var controls = new SessionControlsViewModel(session);
         bar.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running, null);
         bar.SetEngineReady(true);

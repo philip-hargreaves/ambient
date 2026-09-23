@@ -3,8 +3,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Appraisal;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
-using Ambient.App.Platform;
 
 namespace Ambient.App.Features.Appraisal;
 
@@ -14,12 +14,19 @@ namespace Ambient.App.Features.Appraisal;
 public sealed partial class ReflectionEditorView : UserControl
 {
     private readonly StatusBarViewModel _status;
+    private readonly IClipboard _clipboard;
+    private readonly IFilePicker _picker;
+    private readonly IDialogService _dialogs;
 
     public ReflectionEditorView(ReflectionViewModel viewModel, StatusBarViewModel status,
+        IClipboard clipboard, IFilePicker picker, IDialogService dialogs,
         bool showHeading = true, ICommand? removeCommand = null)
     {
         ViewModel = viewModel;
         _status = status;
+        _clipboard = clipboard;
+        _picker = picker;
+        _dialogs = dialogs;
         ShowHeading = showHeading;
         RemoveCommand = removeCommand;
         InitializeComponent();
@@ -77,8 +84,9 @@ public sealed partial class ReflectionEditorView : UserControl
     }
 
     private async void OnCopy(object sender, RoutedEventArgs e) =>
-        await ClipboardHelper.CopyAsync(_status, ViewModel.ExportText, "Reflection");
+        await _clipboard.CopyAsync(_status, ViewModel.ExportText, "Reflection");
 
     private async void OnSave(object sender, RoutedEventArgs e) =>
-        await ReflectionSave.SaveAsync(XamlRoot, _status, ViewModel.ExportText, ViewModel.DisplayTitle);
+        await ReflectionSave.SaveAsync(
+            _dialogs, _picker, _status, ViewModel.ExportText, ViewModel.DisplayTitle);
 }
