@@ -15,7 +15,7 @@
 
 namespace ambient::store {
 
-// One ambient.db, content sealed per blob under per-session keys; a writer
+// One ambient.db, content sealed per blob under per-session keys. A writer
 // thread commits per interval. Layout in schema/ambient.sql
 class SqliteSessionStore : public ISessionStore {
    public:
@@ -47,7 +47,7 @@ class SqliteSessionStore : public ISessionStore {
     std::size_t DeleteAll() override;
     void SetFaultListener(std::function<void(const StoreError&)> listener) override;
 
-    // Test hook: a small cap makes the next commit fail with a full disk; 0 lifts it
+    // Test hook: a small cap makes the next commit fail with a full disk. 0 lifts it
     void SetMaxPageCount(std::int64_t pages);
 
    private:
@@ -59,7 +59,7 @@ class SqliteSessionStore : public ISessionStore {
         std::int64_t next_turn_seq = 0;
         std::uint64_t frames_committed = 0;
         std::uint64_t lost_committed = 0;
-        std::vector<float> held;  // taken from the capture buffer, not yet committed
+        std::vector<float> held;  // taken from the capture buffer, awaiting commit
         std::uint64_t held_lost = 0;
         bool faulted = false;  // a commit failed and the listener was told
     };
@@ -72,7 +72,7 @@ class SqliteSessionStore : public ISessionStore {
 
     // All private members expect mutex_ held
     Open& RequireOpen(const SessionId& id);
-    void RequireStored(const SessionId& id);     // not recording, and has a key row
+    void RequireStored(const SessionId& id);     // has a key row and is no longer recording
     ChunkCipher CipherFor(const SessionId& id);  // a stored session's key
     void InsertKey(const SessionId& id, std::span<const std::uint8_t> wrapped);
     void InsertTurn(const SessionId& id, std::int64_t seq, const ChunkCipher& cipher,
@@ -84,9 +84,8 @@ class SqliteSessionStore : public ISessionStore {
     void Checkpoint();                        // after an erase, so no page image outlives it
     void TakePending(Open& session);          // moves the capture buffer into held
     void ClosePending();                      // no session accepts audio
-    bool CommitPending();                     // seals held as one chunk; false when empty
+    bool CommitPending();                     // seals held as one chunk, false when empty
     void WriterLoop();
-    void ImportPerSessionFiles(const std::filesystem::path& root);
 
     std::chrono::milliseconds commit_interval_;
     Db db_;
@@ -96,7 +95,7 @@ class SqliteSessionStore : public ISessionStore {
     std::function<void(const StoreError&)> on_fault_;
     bool stopping_ = false;
     std::thread writer_;
-    std::mutex pending_mutex_;  // taken after mutex_, never before
+    std::mutex pending_mutex_;  // lock order: mutex_ first
     Pending pending_;
 };
 

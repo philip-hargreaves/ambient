@@ -15,10 +15,10 @@ namespace ambient::diar {
 namespace {
 
 // Research check D: per-frame powerset argmax agreement is the faithfulness
-// criterion (the decoded class is the only downstream consumer); raw
+// criterion, since the decoded class is the only downstream consumer. Raw
 // log-probs carry harmless bi-LSTM float noise. The decode gate then holds
-// our change points and overlap spans against the reference decode of the
-// same windows, tolerant to one ~17 ms frame of drift
+// the engine's change points and overlap spans against the reference decode
+// of the same windows, tolerant to one ~17 ms frame of drift
 constexpr const char* kFixtureDir = AMBIENT_DIAR_FIXTURE_DIR;
 constexpr std::uint64_t kFrameTolerance = 300;  // one seg frame is ~272 samples
 

@@ -33,7 +33,7 @@ inline std::size_t CountProcesses(const wchar_t* image) {
 }
 
 // True once no process with this image is left, false at the bound. A host
-// whose engine just died takes a moment to leave the process table
+// whose engine has died takes a moment to leave the process table
 inline bool WaitUntilGone(const wchar_t* image, std::chrono::milliseconds bound) {
     const auto deadline = std::chrono::steady_clock::now() + bound;
     while (CountProcesses(image) > 0) {

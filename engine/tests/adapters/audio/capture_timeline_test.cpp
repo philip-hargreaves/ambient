@@ -52,7 +52,7 @@ TEST(CaptureTimeline, ALossIsReportedOnceNotEveryPacket) {
     timeline.OnPacket(kNativeStep + 4800, kFrames, true);
     ASSERT_EQ(timeline.TotalLost(), 1600u);
 
-    // Positions keep the same offset forever; no new loss may be invented
+    // Positions keep the same offset forever, and no new loss may be invented
     for (int packet = 2; packet < 50; ++packet) {
         EXPECT_EQ(timeline.OnPacket(packet * kNativeStep + 4800, kFrames, false), 0u);
     }
@@ -80,7 +80,7 @@ TEST(CaptureTimeline, ABackwardPositionClampsAndRecovers) {
     timeline.OnPacket(0, kFrames, false);
     timeline.OnPacket(kNativeStep, kFrames, false);
 
-    // A device hiccup reports an earlier position; that is not loss
+    // A device hiccup reports an earlier position, which is not loss
     EXPECT_EQ(timeline.OnPacket(kNativeStep / 2, kFrames, false), 0u);
 
     // And when positions resume where they should be, still no phantom loss

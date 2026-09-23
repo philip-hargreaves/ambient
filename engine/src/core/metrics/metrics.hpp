@@ -7,7 +7,7 @@
 
 namespace ambient::metrics {
 
-// One engine-wide sink; any thread records, readers get a copy. Devices
+// One engine-wide sink. Any thread records, readers get a copy. Devices
 // and load times persist, the rest resets per session
 class Registry {
    public:

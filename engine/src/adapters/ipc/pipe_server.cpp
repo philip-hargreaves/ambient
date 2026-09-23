@@ -16,7 +16,7 @@ namespace {
 
 constexpr DWORD kIoBufferBytes = 64 * 1024;
 
-// Waits out a pending overlapped operation; false means the pipe is gone
+// Waits out a pending overlapped operation. False means the pipe is gone
 bool CompleteOverlapped(HANDLE pipe, OVERLAPPED& ov, DWORD& transferred) {
     if (GetOverlappedResult(pipe, &ov, &transferred, TRUE)) return true;
     return false;
@@ -190,7 +190,7 @@ bool PipeServer::WriteFrame(const std::string& payload, unsigned timeout_ms) {
         if (!WriteFile(pipe, frame.data() + written_total,
                        static_cast<DWORD>(frame.size() - written_total), nullptr, &write.ov)) {
             if (GetLastError() != ERROR_IO_PENDING) return false;
-            // A client that stops draining must not stall the writer; a
+            // A client that stops draining must not stall the writer. A
             // cancel tears the frame, so the stream is declared dead
             if (timeout_ms != 0 &&
                 WaitForSingleObject(write.ov.hEvent, timeout_ms) != WAIT_OBJECT_0) {

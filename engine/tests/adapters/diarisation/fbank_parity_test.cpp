@@ -15,7 +15,7 @@ namespace ambient::diar {
 namespace {
 
 // The fixture features are torchaudio output (the research reference), so
-// this is a direct torch-vs-C++ front-end parity check on real speech.
+// the test checks torch-vs-C++ front-end parity directly on real speech.
 // Pass criteria are the research port's own gate: identical frame count,
 // p99 abs diff < 1e-4, max abs diff < 1e-2
 constexpr const char* kFixtureDir = AMBIENT_DIAR_FIXTURE_DIR;

@@ -16,11 +16,11 @@
 #endif
 #include <windows.h>
 
-#include "adapters/guidance/corpus_builder.hpp"
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/storage/db.hpp"
 #include "guidance_fixture.hpp"
+#include "tools/corpus/corpus_builder.hpp"
 
 namespace ambient::guidance {
 namespace {

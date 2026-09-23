@@ -8,7 +8,7 @@
 
 namespace ambient::ipc {
 
-// Pipe imposes no size limit; capped to prevent unbounded allocation
+// The pipe imposes no size limit, so frames are capped against unbounded allocation
 inline constexpr std::uint32_t kMaxFrameBytes = 4u * 1024 * 1024;
 
 inline constexpr std::size_t kHeaderBytes = 4;

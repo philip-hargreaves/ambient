@@ -6,7 +6,7 @@
 
 #include <string>
 
-// EcoQoS throttling measured finalise 4.0 -> 6.3 s; engine, note host and
+// EcoQoS throttling measured finalise 4.0 -> 6.3 s. Engine, note host and
 // shell all opt out, so the state never depends on one call
 namespace ambient::system {
 
@@ -29,7 +29,7 @@ inline ThrottlingState ReadThrottling(HANDLE process) {
     return out;
 }
 
-// Clears execution-speed throttling; returns the state read back afterwards
+// Clears execution-speed throttling and returns the state read back afterwards
 inline ThrottlingState DisableThrottling(HANDLE process) {
     PROCESS_POWER_THROTTLING_STATE state{};
     state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;

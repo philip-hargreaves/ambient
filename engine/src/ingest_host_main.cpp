@@ -29,19 +29,15 @@
 
 #include <nlohmann/json.hpp>
 
+#include "adapters/guidance/ingest_exit.hpp"
+#include "core/common/strings.hpp"
 #include "core/common/utf8.hpp"
 
 namespace {
 
 using json = nlohmann::json;
 
-// The engine reads these back as refusal reasons, so the numbers are fixed
-constexpr int kOk = 0;
-constexpr int kBadArgs = 1;
-constexpr int kCannotOpen = 2;
-constexpr int kPassword = 3;
-constexpr int kOutputBound = 4;
-constexpr int kBadPage = 6;
+namespace ingest_exit = ambient::guidance::ingest_exit;
 constexpr std::size_t kOutputCap = 64u << 20;
 
 std::vector<unsigned char> ReadStdin() {
@@ -70,12 +66,6 @@ void AppendUtf8(std::string& out, unsigned int unit, unsigned int& high) {
     }
     high = 0;
     ambient::utf8::Encode(out, cp);
-}
-
-void Trim(std::string& s) {
-    const auto space = [](unsigned char c) { return std::isspace(c) != 0; };
-    while (!s.empty() && space(s.back())) s.pop_back();
-    s.erase(s.begin(), std::find_if_not(s.begin(), s.end(), space));
 }
 
 struct Line {
@@ -108,7 +98,7 @@ json PageJson(FPDF_DOCUMENT doc, int index) {
         Line line;
         unsigned int high = 0;
         const auto flush = [&] {
-            Trim(line.text);
+            line.text = std::string(ambient::strings::Trim(line.text));
             if (line.any && !line.text.empty()) {
                 lines.push_back(
                     {{"text", line.text}, {"box", {line.left, line.top, line.right, line.bottom}}});
@@ -169,11 +159,11 @@ json PageJson(FPDF_DOCUMENT doc, int index) {
 }
 
 int WriteOut(const void* data, std::size_t size) {
-    if (size > kOutputCap) return kOutputBound;
+    if (size > kOutputCap) return ingest_exit::kOutputBound;
     _setmode(_fileno(stdout), _O_BINARY);
     std::fwrite(data, 1, size, stdout);
     std::fflush(stdout);
-    return kOk;
+    return ingest_exit::kOk;
 }
 
 int Extract(FPDF_DOCUMENT doc) {
@@ -195,9 +185,9 @@ void Put32(std::vector<unsigned char>& out, std::uint32_t v) {
 
 // One page as a 32-bit top-down BMP, white behind the content
 int Render(FPDF_DOCUMENT doc, int index, int dpi) {
-    if (index < 0 || index >= FPDF_GetPageCount(doc)) return kBadPage;
+    if (index < 0 || index >= FPDF_GetPageCount(doc)) return ingest_exit::kBadPage;
     FPDF_PAGE page = FPDF_LoadPage(doc, index);
-    if (page == nullptr) return kBadPage;
+    if (page == nullptr) return ingest_exit::kBadPage;
     const int width =
         std::max(1, static_cast<int>(std::lround(FPDF_GetPageWidthF(page) * dpi / 72)));
     const int height =
@@ -205,7 +195,7 @@ int Render(FPDF_DOCUMENT doc, int index, int dpi) {
     FPDF_BITMAP bitmap = FPDFBitmap_Create(width, height, 0);
     if (bitmap == nullptr) {
         FPDF_ClosePage(page);
-        return kOutputBound;
+        return ingest_exit::kOutputBound;
     }
     FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xFFFFFFFF);
     FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, FPDF_ANNOT);
@@ -251,10 +241,11 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr,
                      "usage: ambient_ingest_host extract < document.pdf\n"
                      "       ambient_ingest_host render <page> <dpi> < document.pdf\n");
-        return kBadArgs;
+        return ingest_exit::kBadArgs;
     }
     const auto bytes = ReadStdin();
-    if (bytes.empty() || bytes.size() > static_cast<std::size_t>(INT_MAX)) return kCannotOpen;
+    if (bytes.empty() || bytes.size() > static_cast<std::size_t>(INT_MAX))
+        return ingest_exit::kCannotOpen;
 
     FPDF_LIBRARY_CONFIG config{};
     config.version = 2;
@@ -263,7 +254,8 @@ int main(int argc, char* argv[]) {
     if (doc == nullptr) {
         const auto error = FPDF_GetLastError();
         FPDF_DestroyLibrary();
-        return error == FPDF_ERR_PASSWORD || error == FPDF_ERR_SECURITY ? kPassword : kCannotOpen;
+        return error == FPDF_ERR_PASSWORD || error == FPDF_ERR_SECURITY ? ingest_exit::kPassword
+                                                                        : ingest_exit::kCannotOpen;
     }
     const int code = extract
                          ? Extract(doc)

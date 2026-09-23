@@ -10,8 +10,8 @@
 #include "adapters/ipc/messages.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
-#include "core/audio/playback.hpp"
-#include "core/audio/session_controller.hpp"
+#include "core/session/playback.hpp"
+#include "core/session/session_controller.hpp"
 #include "ports/document_ingest.hpp"
 #include "ports/guidance_lane.hpp"
 #include "ports/note_lane.hpp"
@@ -31,7 +31,7 @@ std::variant<json, Error> HandleHello(const json& params);
 
 std::variant<json, Error> HandleEcho(const json& params);
 
-// Every staged model; `active` marks the one each role loads, the note
+// Every staged model. `active` marks the one each role loads, the note
 // role by its configured tier
 json HandleModels(const ambient::models::ModelStore& models,
                   const std::string& note_tier = "default");
@@ -39,7 +39,7 @@ json HandleModels(const ambient::models::ModelStore& models,
 json NoteModelJson(const ambient::note::NoteModelState& state);
 
 // note/tier: the shell names a tier, the lane resolves and loads it.
-// Refused during a consultation; an unknown or unstaged tier is a
+// Refused during a consultation. An unknown or unstaged tier is a
 // parameter error naming what is staged
 std::variant<json, Error> HandleNoteTier(ambient::note::INoteLane* lane, bool session_active,
                                          const json& params);
@@ -74,7 +74,7 @@ json HandleReflectionList(ambient::store::ISessionStore& sessions);
 std::variant<json, Error> HandleSessionDelete(ambient::store::ISessionStore& sessions,
                                               const json& params);
 
-// Seed data from demo_dir: a no-op while present; cleared without touching real sessions
+// Seed data from demo_dir, a no-op while present. Clearing leaves real sessions untouched
 std::variant<json, Error> HandleDemoSeed(ambient::store::ISessionStore& sessions,
                                          const std::filesystem::path& demo_dir);
 json HandleDemoClear(ambient::store::ISessionStore& sessions);
@@ -124,7 +124,7 @@ std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentInge
                                                 const json& params);
 // guidance/page: one page of an added PDF drawn to a bitmap under the scratch
 // folder, with the cited chunk's boxes. guidance/documents/open: the file in
-// her folder, for the shell to hand to a viewer
+// the guidelines folder, for the shell to hand to a viewer
 std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
                                               const json& params);
 std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
@@ -134,18 +134,34 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
                              ambient::guidance::IGuidanceLane& lane,
                              ambient::guidance::IDocumentIngest& ingest);
 
-// Every method the engine serves. first_use: model caches were cold at
-// launch, so the one-off compiles are running and readiness reports them.
-void RegisterMethods(PipeServer& server, ambient::audio::SessionController& controller,
-                     const ambient::models::ModelStore& models,
-                     ambient::store::ISessionStore& sessions,
-                     ambient::metrics::Registry* metrics = nullptr,
-                     ambient::models::OvRuntime* runtime = nullptr,
-                     ambient::translate::ITranslator* translator = nullptr,
-                     ambient::translate::TranslateLane* translate_lane = nullptr,
-                     bool first_use = false, ambient::diar::AnchorStore* anchors = nullptr,
-                     ambient::note::INoteLane* note_lane = nullptr, bool stray_note_host = false,
-                     const std::filesystem::path& demo_dir = {},
-                     ambient::audio::Playback* playback = nullptr);
+// Everything the methods reach. The controller, models and store are always
+// present. The rest is wired when its model or feature is staged. first_use:
+// model caches were cold at launch, so the one-off compiles are running and
+// readiness reports them
+struct EngineServices {
+    ambient::session::SessionController& controller;
+    const ambient::models::ModelStore& models;
+    ambient::store::ISessionStore& sessions;
+    ambient::metrics::Registry* metrics = nullptr;
+    ambient::models::OvRuntime* runtime = nullptr;
+    ambient::translate::ITranslator* translator = nullptr;
+    ambient::translate::TranslateLane* translate_lane = nullptr;
+    bool first_use = false;
+    ambient::diar::AnchorStore* anchors = nullptr;
+    ambient::note::INoteLane* note_lane = nullptr;
+    bool stray_note_host = false;  // one from an earlier engine is wedged in the GPU driver
+    std::filesystem::path demo_dir;
+    ambient::session::Playback* playback = nullptr;
+};
+
+// engine/*, note/tier, anchor/* and audio/inputs
+void RegisterEngineMethods(PipeServer& server, const EngineServices& services);
+// session/*, note/*, patient/*, reflection/*, demo/* and translate/*
+void RegisterSessionMethods(PipeServer& server, const EngineServices& services);
+
+inline void RegisterMethods(PipeServer& server, const EngineServices& services) {
+    RegisterEngineMethods(server, services);
+    RegisterSessionMethods(server, services);
+}
 
 }  // namespace ambient::ipc

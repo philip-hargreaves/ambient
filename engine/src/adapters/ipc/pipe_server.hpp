@@ -13,7 +13,7 @@
 namespace ambient::ipc {
 
 // One duplex pipe, one client at a time. Construction claims the pipe
-// name so a name already taken is treated as an attack and throws, never retries.
+// name, so a name already taken is treated as an attack and throws.
 class PipeServer {
    public:
     using MethodHandler = std::function<std::variant<json, Error>(const json& params)>;
@@ -25,10 +25,10 @@ class PipeServer {
 
     void RegisterMethod(const std::string& method, MethodHandler handler);
 
-    // Handlers may queue these; each is written to the client right after the reply
+    // Handlers may queue these. Each is written to the client right after the reply
     void QueueNotification(const std::string& method, json params);
 
-    // Callable from any thread; bounded so a client that stops draining never
+    // Callable from any thread. Bounded so a client that stops draining never
     // stalls the capture thread
     void PushNotification(const std::string& method, json params);
 
@@ -46,7 +46,7 @@ class PipeServer {
     std::map<std::string, MethodHandler> handlers_;
     std::vector<json> notifications_;
     std::mutex write_mutex_;
-    bool write_failed_ = false;  // under write_mutex_; a torn frame ends the stream
+    bool write_failed_ = false;  // under write_mutex_. A torn frame ends the stream
 };
 
 }  // namespace ambient::ipc

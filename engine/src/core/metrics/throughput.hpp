@@ -5,7 +5,7 @@
 
 namespace ambient::metrics {
 
-// Tokens per second at the source, before throttling; Rate() is a rolling
+// Tokens per second at the source, before throttling. Rate() is a rolling
 // window for display, Average() the whole stream
 class ThroughputMeter {
    public:

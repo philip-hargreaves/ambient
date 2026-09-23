@@ -10,8 +10,7 @@
 
 namespace ambient::diar {
 
-// Batch Silero over the whole recording, cut finer than the endpointer;
-// validated configuration - do not retune
+// Batch Silero over the whole recording, cut finely. Validated, do not retune
 inline constexpr float kEnter = 0.40f;
 inline constexpr float kExit = 0.25f;
 inline constexpr std::uint64_t kMinSpeechFrames = 1600;   // 100 ms
@@ -22,6 +21,22 @@ struct Region {
     std::uint64_t first_frame = 0;
     std::uint64_t end_frame = 0;
 };
+
+// Feeds the VAD the hops of `audio` not yet in `probabilities`: whole hops
+// only, or with the final partial hop zero-padded when the audio has ended
+inline void AppendVadHops(audio::IStreamingVad& vad, std::span<const float> audio,
+                          std::vector<float>& probabilities, bool pad_tail) {
+    std::vector<float> hop(audio::kVadHopFrames, 0.0f);
+    for (;;) {
+        const auto at = probabilities.size() * audio::kVadHopFrames;
+        if (at >= audio.size()) return;
+        const auto have = std::min<std::size_t>(audio::kVadHopFrames, audio.size() - at);
+        if (have < audio::kVadHopFrames && !pad_tail) return;
+        std::copy_n(audio.begin() + static_cast<std::ptrdiff_t>(at), have, hop.begin());
+        std::fill(hop.begin() + static_cast<std::ptrdiff_t>(have), hop.end(), 0.0f);
+        probabilities.push_back(vad.SpeechProbability(hop));
+    }
+}
 
 // One probability per kVadHopFrames hop, as audio::IStreamingVad emits them
 inline std::vector<Region> SpeechRegions(std::span<const float> probabilities,

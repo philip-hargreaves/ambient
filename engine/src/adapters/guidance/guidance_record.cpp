@@ -5,7 +5,7 @@
 namespace ambient::guidance {
 namespace {
 
-// Null where absence is a state of its own: not built, not refused
+// Null where absence is a state of its own, distinct from built and refused
 json OrNull(const std::string& s) {
     if (s.empty()) return nullptr;
     return s;

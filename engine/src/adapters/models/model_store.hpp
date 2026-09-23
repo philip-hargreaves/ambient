@@ -9,25 +9,25 @@
 
 namespace ambient::models {
 
-// Streaming SHA-256, lowercase hex; shared by verification and test tooling
+// Streaming SHA-256 as lowercase hex, shared by verification and test tooling
 std::string Sha256File(const std::filesystem::path& path);
 
 struct ModelInfo {
     std::string id;
-    std::string name;           // display name; the id when the manifest has none
+    std::string name;           // display name, the id when the manifest has none
     std::string task;           // asr | vad | diarisation | notes
     std::string tier;           // default | accuracy | constrained
     std::string device;         // GPU | CPU | NPU
     std::string licence;        // SPDX id
-    std::string pipeline;       // llm | vlm | embedding: the GenAI pipeline; llm when absent
-    nlohmann::json properties;  // OpenVINO properties passed verbatim at compile; {} when absent
+    std::string pipeline;       // llm | vlm | embedding GenAI pipeline, llm when absent
+    nlohmann::json properties;  // OpenVINO properties passed verbatim at compile, {} when absent
     std::filesystem::path dir;
     std::map<std::string, std::string> file_hashes;    // filename -> sha256 hex: provenance
     std::map<std::string, std::uintmax_t> file_bytes;  // filename -> size, when the manifest says
 };
 
-// Per-model manifest.json dirs under one root; parsing fails closed. A load
-// checks presence and size; integrity is established at delivery (fetch,
+// Per-model manifest.json dirs under one root. Parsing fails closed. A load
+// checks presence and size only. Integrity is established at delivery (fetch,
 // staging, package signature). Hashes serve the tools. No OpenVINO here
 class ModelStore {
    public:
@@ -37,13 +37,13 @@ class ModelStore {
         return models_;
     }
 
-    // The one model serving a role; ambiguity and absence are loud
+    // The one model serving a role. Ambiguity and absence are loud
     const ModelInfo& Resolve(std::string_view task, std::string_view tier) const;
 
-    // Throws naming the first file missing or of the wrong size; reads no bytes
+    // Throws naming the first file missing or of the wrong size. Reads no bytes
     void Verify(const ModelInfo& model) const;
 
-    // Full SHA-256 check, for tooling; throws naming the first mismatch
+    // Full SHA-256 check, for tooling. Throws naming the first mismatch
     void VerifyHashes(const ModelInfo& model) const;
 
    private:

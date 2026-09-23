@@ -89,7 +89,7 @@ TEST(ModelStore, VerifyPassesWhenEveryHashMatches) {
     EXPECT_NO_THROW(store.VerifyHashes(store.List()[0]));
 }
 
-// Integrity is established when a model arrives; the load-time check reads
+// Integrity is established when a model arrives. The load-time check reads
 // no bytes, so it is free at any size. The full hash stays for the tools
 TEST(ModelStore, TheLoadTimeCheckReadsNoBytesTheFullCheckDoes) {
     TempRoot root;
@@ -303,7 +303,7 @@ TEST(ModelStore, TheEmbeddingPipelineIsAccepted) {
 }
 
 // A pipeline this build cannot construct, or a property it cannot pass, is
-// a corrupt manifest for this build: refused at scan, never best-effort
+// a corrupt manifest for this build, refused outright at scan
 TEST(ModelStore, AnUnknownPipelineOrANonScalarPropertyIsRefused) {
     for (const char* runtime : {R"({"device": "GPU", "pipeline": "diffusion"})",
                                 R"({"device": "GPU", "properties": {"NESTED": {"a": 1}}})",

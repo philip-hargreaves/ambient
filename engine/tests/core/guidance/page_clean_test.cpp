@@ -82,7 +82,7 @@ TEST(PageClean, ABrokenWordRejoinsWhenTheDocumentUsesItWhole) {
     auto page = PageOf({Line("Start treat-"), Line("ment early. Later treatment stops."),
                         Line("Use an anti-"), Line("inflammatory drug."), Line("Stop at the end-"),
                         Line("Point defined above."), Line("hyphen\xC2\xAD"), Line("ated")});
-    JoinBrokenWords(page, detail::DocumentWords({page}));
+    JoinBrokenWords(page, DocumentWords({page}));
     EXPECT_EQ(Texts(page),
               (std::vector<std::string>{"Start treatment", "early. Later treatment stops.",
                                         "Use an anti-inflammatory", "drug.", "Stop at the end-",

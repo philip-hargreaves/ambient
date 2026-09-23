@@ -44,11 +44,6 @@ struct TempRoot {
     std::filesystem::path DbPath() const {
         return path / "ambient.db";
     }
-
-    // The first layout's per-session files, for the import test
-    std::filesystem::path SessionFile(const SessionId& id, const char* suffix) const {
-        return path / "sessions" / (id + suffix);
-    }
 };
 
 ChunkCipher CipherOf(const TempRoot& root, const SessionId& id) {
@@ -498,128 +493,6 @@ TEST(SessionStore, DocumentsRefuseTheRecordingSessionAndUnknownIds) {
     EXPECT_THROW(store.ReadDocument("nope", DocumentKind::kNote), std::runtime_error);
 }
 
-// Writes the first layout by hand: main.db catalog, sessions/<id>.db with
-// chunks, turns, a sealed note in its own table and the meta bag, and the
-// wrapped key beside it
-SessionId WritePerSessionFileLayout(const TempRoot& root, const std::vector<float>& audio,
-                                    const std::string& turn_text, const std::string& note,
-                                    const char* state = "finalised") {
-    const SessionId id = "0123456789abcdef0123456789abcdef";
-    std::filesystem::create_directories(root.path / "sessions");
-    {
-        Db catalog(root.path / "main.db");
-        catalog.Exec(
-            "CREATE TABLE sessions(id TEXT PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT,"
-            " state TEXT NOT NULL, sample_rate INTEGER NOT NULL, device_id TEXT,"
-            " device_name TEXT, lost_frames INTEGER NOT NULL DEFAULT 0)");
-        Db::Stmt insert = catalog.Prepare(
-            "INSERT INTO sessions VALUES('0123456789abcdef0123456789abcdef',"
-            " '2026-08-01T09:00:00Z', '2026-08-01T09:10:00Z', ?, 16000, 'mic-1',"
-            " 'Old microphone', 7)");
-        insert.BindText(1, state);
-        insert.Step();
-        catalog.SetUserVersion(1);
-    }
-    const ChunkCipher cipher = ChunkCipher::Generate();
-    {
-        const std::vector<std::uint8_t> wrapped = cipher.Wrapped();
-        std::ofstream key(root.SessionFile(id, ".key"), std::ios::binary);
-        key.write(reinterpret_cast<const char*>(wrapped.data()),
-                  static_cast<std::streamsize>(wrapped.size()));
-    }
-    Db db(root.SessionFile(id, ".db"));
-    db.Exec(
-        "CREATE TABLE chunks(seq INTEGER PRIMARY KEY, first_frame INTEGER NOT NULL,"
-        " frame_count INTEGER NOT NULL, lost_before INTEGER NOT NULL, payload BLOB NOT NULL);"
-        "CREATE TABLE turns(seq INTEGER PRIMARY KEY, first_frame INTEGER NOT NULL,"
-        " frame_count INTEGER NOT NULL, payload BLOB NOT NULL);"
-        "CREATE TABLE note(seq INTEGER PRIMARY KEY, payload BLOB NOT NULL);"
-        "CREATE TABLE patient(seq INTEGER PRIMARY KEY, payload BLOB NOT NULL);"
-        "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);"
-        "INSERT INTO meta VALUES('id', '0123456789abcdef0123456789abcdef')");
-    {
-        const auto sealed = cipher.Seal(
-            Domain::kAudio, id, 0,
-            {reinterpret_cast<const std::uint8_t*>(audio.data()), audio.size() * sizeof(float)});
-        Db::Stmt insert = db.Prepare("INSERT INTO chunks VALUES(0, 0, ?, 7, ?)");
-        insert.BindInt64(1, static_cast<std::int64_t>(audio.size()));
-        insert.BindBlob(2, sealed);
-        insert.Step();
-    }
-    {
-        const std::string content =
-            nlohmann::json{{"speaker", "doctor"}, {"text", turn_text}}.dump();
-        const auto sealed =
-            cipher.Seal(Domain::kTurns, id, 0,
-                        {reinterpret_cast<const std::uint8_t*>(content.data()), content.size()});
-        Db::Stmt insert = db.Prepare("INSERT INTO turns VALUES(0, 0, 16000, ?)");
-        insert.BindBlob(1, sealed);
-        insert.Step();
-    }
-    {
-        const auto sealed =
-            cipher.Seal(Domain::kNote, id, 0,
-                        {reinterpret_cast<const std::uint8_t*>(note.data()), note.size()});
-        Db::Stmt insert = db.Prepare("INSERT INTO note VALUES(0, ?)");
-        insert.BindBlob(1, sealed);
-        insert.Step();
-    }
-    db.SetUserVersion(1);
-    return id;
-}
-
-TEST(SessionStore, ImportsThePerSessionFileLayoutOnFirstOpen) {
-    TempRoot root;
-    const auto audio = Ramp(16000);
-    const SessionId id = WritePerSessionFileLayout(root, audio, "how long have you had the pain",
-                                                   "written by the first release");
-
-    SqliteSessionStore store(root.path, kNever);
-
-    const auto sessions = store.ListSessions();
-    ASSERT_EQ(sessions.size(), 1u);
-    EXPECT_EQ(sessions[0].id, id);
-    EXPECT_EQ(sessions[0].state, "finalised");
-    EXPECT_EQ(sessions[0].ended_at, "2026-08-01T09:10:00Z");
-    EXPECT_TRUE(store.ReadAudio(id).empty()) << "finalised: the audio is held to the seal rule";
-    const auto turns = store.ReadTurns(id);
-    ASSERT_EQ(turns.size(), 1u);
-    EXPECT_EQ(turns[0].speaker, "doctor");
-    EXPECT_EQ(turns[0].text, "how long have you had the pain");
-    const Document note = store.ReadDocument(id, DocumentKind::kNote);
-    EXPECT_EQ(note.text, "written by the first release");
-    EXPECT_TRUE(note.style.empty()) << "the first layout stored no options";
-    EXPECT_TRUE(note.generated_at.empty());
-    EXPECT_EQ(store.ReadDocument(id, DocumentKind::kPatient).text, "");
-
-    Db db(root.DbPath());
-    Db::Stmt row = db.Prepare("SELECT device_name, lost_frames FROM sessions WHERE id = ?");
-    row.BindText(1, id);
-    ASSERT_TRUE(row.Step());
-    EXPECT_EQ(row.ColumnText(0), "Old microphone");
-    EXPECT_EQ(row.ColumnInt64(1), 7);
-
-    EXPECT_FALSE(std::filesystem::exists(root.path / "main.db")) << "the old catalog is gone";
-    EXPECT_FALSE(std::filesystem::exists(root.SessionFile(id, ".db")));
-    EXPECT_FALSE(std::filesystem::exists(root.SessionFile(id, ".key")));
-    EXPECT_FALSE(std::filesystem::exists(root.path / "sessions"));
-
-    store.EditDocument(id, DocumentKind::kNote, "edited on the new build");
-    EXPECT_FALSE(store.ReadDocument(id, DocumentKind::kNote).edited_at.empty());
-}
-
-TEST(SessionStore, AnOldCrashedSessionImportsWithItsAudioForRecovery) {
-    TempRoot root;
-    const auto audio = Ramp(16000);
-    const SessionId id = WritePerSessionFileLayout(root, audio, "turn", "", "recording");
-
-    SqliteSessionStore store(root.path, kNever);
-    const auto recoverable = store.ScanRecoverable();
-    ASSERT_EQ(recoverable.size(), 1u);
-    EXPECT_EQ(recoverable[0].id, id);
-    EXPECT_EQ(store.ReadAudio(id), audio) << "the ciphertext moved unchanged";
-}
-
 TEST(SessionStore, TheSweepErasesFinalisedSessionsRecordedWithRetainOff) {
     TempRoot root;
     SqliteSessionStore store(root.path, kNever);
@@ -700,17 +573,6 @@ TEST(SessionStore, AVersionTwoDatabaseGainsTheRetentionFlag) {
     EXPECT_EQ(row.ColumnInt64(0), 1) << "sessions from before the setting are kept";
     migrated.EraseUnretained();
     EXPECT_EQ(migrated.ListSessions().size(), 1u);
-}
-
-TEST(SessionStore, AnUnreadableOldSessionIsLeftInPlace) {
-    TempRoot root;
-    const SessionId id = WritePerSessionFileLayout(root, Ramp(100), "turn", "note");
-    std::filesystem::remove(root.SessionFile(id, ".key"));  // no key: nothing can be read
-
-    SqliteSessionStore store(root.path, kNever);
-    EXPECT_TRUE(store.ListSessions().empty());
-    EXPECT_TRUE(std::filesystem::exists(root.path / "main.db")) << "kept for a later attempt";
-    EXPECT_TRUE(std::filesystem::exists(root.SessionFile(id, ".db")));
 }
 
 TEST(SessionStore, AnAbandonedSessionsTurnsAreReadable) {
@@ -981,7 +843,7 @@ TEST(SessionStore, LossAccountingReachesTheChunkAndTheCatalog) {
 
         id = store.Begin({16000, "", ""});
         store.Append(id, Ramp(8000), 320);
-        store.Finalise(id);  // the audio goes; the count does not
+        store.Finalise(id);  // the audio goes but the count stays
     }
 
     Db catalog(root.DbPath());
@@ -1244,8 +1106,8 @@ TEST(SessionStore, ErasedKeysLeaveNoRemnantInTheFileOrWal) {
     EXPECT_FALSE(FileHolds(wal, needle));
 }
 
-// Listing unwraps one key per labelled session, so a long list holds the database lock;
-// the capture thread's append must not queue behind it
+// Listing unwraps one key per labelled session, so a long list holds the database lock.
+// The capture thread's append must not queue behind it
 TEST(SessionStore, AppendNeverWaitsOnTheDatabase) {
     TempRoot root;
     SqliteSessionStore store(root.path, kNever);

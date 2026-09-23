@@ -70,12 +70,9 @@ struct CountingDiariser : diar::IDiariser {
 
     explicit CountingDiariser(std::atomic<int>& counter) : discards(counter) {}
 
-    diar::DiariseResult Diarise(std::span<const float>, std::span<const std::uint64_t>) override {
+    diar::DiariseResult Diarise(std::span<const float>) override {
         return {};
     }
-
-    void AccrueDoctor(std::span<const float>, const std::vector<diar::LabelledSlice>&,
-                      int) override {}
 
     std::vector<double> AnchorSimilarities(std::span<const float>,
                                            const std::vector<diar::LabelledSlice>&,
@@ -99,8 +96,7 @@ struct CountingDiariser : diar::IDiariser {
 
     std::size_t settled_frames = 0;
 
-    void Settle(std::span<const float> audio, std::span<const asr::Turn>,
-                const diar::DecodeClipFn&) override {
+    void Settle(std::span<const float> audio, const diar::DecodeClipFn&) override {
         settled_frames = audio.size();
     }
 
@@ -114,7 +110,7 @@ struct CountingDiariser : diar::IDiariser {
     }
 };
 
-// The engine only ever sees the wrapper; a method it does not forward is a
+// The engine only ever sees the wrapper. A method it does not forward is a
 // method the product does not have (this one was missed once)
 TEST(DeferredDiariser, ForwardsAnchorSimilarities) {
     std::atomic<int> discards{0};
@@ -136,7 +132,7 @@ TEST(DeferredDiariser, ForwardsSettle) {
     });
     const std::vector<float> audio(320, 0.0f);
 
-    diariser.Settle(audio, {},
+    diariser.Settle(audio,
                     [](std::span<const float>, std::uint64_t) { return std::vector<asr::Turn>{}; });
 
     ASSERT_NE(inner, nullptr);
@@ -193,7 +189,7 @@ TEST(DeferredDiariser, DiscardBeforeTheLoadIsANoOp) {
     EXPECT_EQ(discards.load(), 0) << "nothing accumulated, nothing to wait for";
 
     release = true;
-    (void)diariser.Diarise({}, {});
+    (void)diariser.Diarise({});
     diariser.DiscardCapture();
     EXPECT_EQ(discards.load(), 1);
 }

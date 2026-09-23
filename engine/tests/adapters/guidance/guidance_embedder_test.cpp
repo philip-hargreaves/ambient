@@ -11,11 +11,11 @@
 
 #include "adapters/guidance/corpus_store.hpp"
 #include "adapters/guidance/embedder.hpp"
-#include "adapters/guidance/indexer.hpp"
 #include "adapters/guidance/retriever.hpp"
 #include "adapters/models/model_store.hpp"
 #include "core/guidance/guidance_scan.hpp"
 #include "guidance_fixture.hpp"
+#include "tools/corpus/indexer.hpp"
 
 namespace ambient::guidance {
 namespace {
@@ -124,7 +124,7 @@ TEST(GuidanceEmbedder, IndexesTheFixtureCorpusAndFindsTheRightGuideline) {
 
 // The retriever over the staged model and the fixture corpus: each fixture
 // note surfaces its guideline first and one of its expected recommendations in
-// the top three, never a guideline it must not. The non-clinical text is
+// the top three, and none of the guidelines it must avoid. The non-clinical text is
 // refused at the shipped floor. Ordering is asserted without the floor. What
 // the floor does with each note is printed, since the fixture is invented text
 TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {

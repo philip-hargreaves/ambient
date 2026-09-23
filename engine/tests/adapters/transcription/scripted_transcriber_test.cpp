@@ -7,60 +7,33 @@
 namespace ambient::asr {
 namespace {
 
-struct RecordingSink : ITurnSink {
-    std::vector<Turn> turns;
-
-    void OnTurn(const Turn& turn) override {
-        turns.push_back(turn);
-    }
-};
-
-TEST(ScriptedTranscriber, EmitsOneTurnPerWindowWithItsTiming) {
-    RecordingSink sink;
+TEST(ScriptedTranscriber, OneChunkPerClipWithItsTiming) {
     ScriptedTranscriber transcriber;
-    transcriber.Begin(sink);
+    const std::vector<float> clip(160);
 
-    const std::vector<float> window(160);
-    transcriber.Submit(window, 0);
-    transcriber.Submit(window, 160);
-    transcriber.Finish();
+    const auto chunks = transcriber.DecodeClipChunks(clip, 480);
 
-    ASSERT_EQ(sink.turns.size(), 2u);
-    EXPECT_EQ(sink.turns[0].first_frame, 0u);
-    EXPECT_EQ(sink.turns[0].frame_count, 160u);
-    EXPECT_EQ(sink.turns[1].first_frame, 160u);
-    EXPECT_TRUE(sink.turns[0].speaker.empty());
-    EXPECT_FALSE(sink.turns[0].text.empty());
+    ASSERT_EQ(chunks.size(), 1u);
+    EXPECT_EQ(chunks[0].first_frame, 480u);
+    EXPECT_EQ(chunks[0].frame_count, 160u);
+    EXPECT_TRUE(chunks[0].speaker.empty());
+    EXPECT_EQ(chunks[0].text, "scripted turn 0, 160 frames");
 }
 
-TEST(ScriptedTranscriber, TurnsAreDeterministic) {
-    RecordingSink first_sink;
-    RecordingSink second_sink;
+TEST(ScriptedTranscriber, ClipsAreNumberedInDecodeOrder) {
+    ScriptedTranscriber transcriber;
+    const std::vector<float> clip(320);
+
+    EXPECT_EQ(transcriber.DecodeClip(clip, 0), "scripted turn 0, 320 frames");
+    EXPECT_EQ(transcriber.DecodeClip(clip, 320), "scripted turn 1, 320 frames");
+}
+
+TEST(ScriptedTranscriber, TwoInstancesScriptTheSameText) {
     ScriptedTranscriber first;
     ScriptedTranscriber second;
-    first.Begin(first_sink);
-    second.Begin(second_sink);
+    const std::vector<float> clip(320);
 
-    const std::vector<float> window(320);
-    first.Submit(window, 0);
-    second.Submit(window, 0);
-
-    ASSERT_EQ(first_sink.turns.size(), 1u);
-    EXPECT_EQ(first_sink.turns[0].text, second_sink.turns[0].text);
-}
-
-TEST(ScriptedTranscriber, BeginResetsTheScript) {
-    RecordingSink sink;
-    ScriptedTranscriber transcriber;
-    const std::vector<float> window(160);
-
-    transcriber.Begin(sink);
-    transcriber.Submit(window, 0);
-    const std::string first_text = sink.turns[0].text;
-
-    transcriber.Begin(sink);
-    transcriber.Submit(window, 0);
-    EXPECT_EQ(sink.turns[1].text, first_text) << "a new session starts the script over";
+    EXPECT_EQ(first.DecodeClip(clip, 0), second.DecodeClip(clip, 0));
 }
 
 }  // namespace

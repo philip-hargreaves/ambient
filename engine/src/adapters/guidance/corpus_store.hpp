@@ -24,7 +24,7 @@ struct CorpusInfo {
     std::string attribution;
     std::string label;
     std::string source;
-    bool research = false;  // a demo or evaluation corpus, never shipped
+    bool research = false;  // a demo or evaluation corpus, kept out of the package
     std::string embedder_id;
     std::string embedder_rev;
     std::string built_at;

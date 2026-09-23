@@ -18,14 +18,15 @@ add_executable(engine_tests
     core/audio/audio_ring_test.cpp
     core/audio/buffered_sink_test.cpp
     core/common/cli_args_test.cpp
+    core/common/strings_test.cpp
     core/diarisation/clip_cuts_test.cpp
     core/diarisation/tidy_transcript_test.cpp
     core/audio/voice_enrolment_test.cpp
     core/note/note_gate_test.cpp
     core/diarisation/resplit_test.cpp
-    core/diarisation/diar_capture_test.cpp
+    core/diarisation/frontier_test.cpp
     core/diarisation/diar_regions_test.cpp
-    core/audio/endpointer_test.cpp
+    core/diarisation/embeddings_test.cpp
     ports/guidance_port_test.cpp
     core/guidance/guidance_query_test.cpp
     core/guidance/guidance_rank_test.cpp
@@ -33,16 +34,14 @@ add_executable(engine_tests
     core/audio/level_meter_test.cpp
     core/metrics/metrics_test.cpp
     core/note/note_label_test.cpp
-    core/diarisation/per_turn_test.cpp
+    core/diarisation/turn_decode_test.cpp
     core/diarisation/role_naming_test.cpp
     adapters/diarisation/seg_decode_test.cpp
     core/metrics/throughput_test.cpp
-    core/audio/playback_test.cpp
-    core/audio/session_controller_test.cpp
+    core/session/playback_test.cpp
+    core/session/session_controller_test.cpp
     core/diarisation/slice_refinement_test.cpp
     core/note/summary_scrub_test.cpp
-    core/transcription/turn_assembly_test.cpp
-    core/diarisation/turn_reconcile_test.cpp
     core/common/version_test.cpp
     adapters/diarisation/anchor_store_test.cpp
     adapters/demo/sample_year_test.cpp
@@ -63,6 +62,7 @@ add_executable(engine_tests
     adapters/guidance/guidance_retriever_test.cpp
     adapters/guidance/document_index_test.cpp
     adapters/guidance/document_ingest_test.cpp
+    adapters/guidance/folder_scan_test.cpp
     adapters/guidance/ingest_host_test.cpp
     core/guidance/document_units_test.cpp
     core/guidance/page_text_test.cpp
@@ -116,9 +116,9 @@ target_compile_definitions(engine_tests PRIVATE
     AMBIENT_FAKE_INGEST_HOST="$<TARGET_FILE:fake_ingest_host>"
     AMBIENT_INGEST_HOST="$<TARGET_FILE:ambient_ingest_host>")
 target_link_libraries(engine_tests PRIVATE
-    ambient_ipc ambient_audio ambient_diarisation ambient_guidance ambient_guidance_record
-    ambient_models ambient_note ambient_storage ambient_transcription ambient_warnings
-    openvino::genai GTest::gtest_main)
+    ambient_ipc ambient_audio ambient_corpus ambient_diarisation ambient_guidance
+    ambient_guidance_record ambient_models ambient_note ambient_storage ambient_transcription
+    ambient_warnings openvino::genai GTest::gtest_main)
 
 # Real-microphone tests live in their own binary under the microphone label,
 # so the ci presets can exclude what a runner without audio cannot execute
@@ -155,9 +155,9 @@ target_compile_definitions(models_tests PRIVATE
     AMBIENT_DIAR_FIXTURE_DIR="${ambient_SOURCE_DIR}/engine/tests/fixtures/diarisation"
     AMBIENT_GUIDANCE_FIXTURE_DIR="${ambient_SOURCE_DIR}/engine/tests/fixtures/guidance")
 target_link_libraries(models_tests PRIVATE
-    ambient_diarisation ambient_guidance ambient_models ambient_note ambient_transcription
-    ambient_translate ambient_vad ambient_warnings nlohmann_json::nlohmann_json openvino::genai
-    GTest::gtest_main)
+    ambient_corpus ambient_diarisation ambient_guidance ambient_models ambient_note
+    ambient_transcription ambient_translate ambient_vad ambient_warnings
+    nlohmann_json::nlohmann_json openvino::genai GTest::gtest_main)
 
 # Dev evaluation tool for the research acceptance scorer; never shipped
 add_executable(diar_eval_runner tools/diar_eval_runner.cpp)

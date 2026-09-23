@@ -8,10 +8,11 @@
 #include <vector>
 
 #include "adapters/diarisation/anchor_store.hpp"
-#include "adapters/diarisation/diar_worker.hpp"
+#include "adapters/diarisation/capture_stage.hpp"
 #include "adapters/diarisation/segmenter.hpp"
 #include "adapters/diarisation/speaker_embedder.hpp"
 #include "adapters/vad/silero_vad.hpp"
+#include "core/diarisation/embeddings.hpp"
 #include "ports/diariser.hpp"
 
 namespace ambient::diar {
@@ -24,27 +25,19 @@ class SpeakerDiariser : public IDiariser {
     SpeakerDiariser(const models::ModelStore& store, models::OvRuntime& runtime,
                     AnchorStore& anchors);
 
-    DiariseResult Diarise(std::span<const float> audio,
-                          std::span<const std::uint64_t> turn_boundaries = {}) override;
+    DiariseResult Diarise(std::span<const float> audio) override;
 
     std::vector<double> AnchorSimilarities(std::span<const float> audio,
                                            const std::vector<LabelledSlice>& slices,
                                            int cluster_count) override;
 
-    // Reuses the voiceprint AnchorSimilarities computed for the cluster;
-    // embeds only when there is none
-    void AccrueDoctor(std::span<const float> audio, const std::vector<LabelledSlice>& slices,
-                      int doctor_cluster) override;
-
-    // Capture-phase work; Diarise then finalises from the accumulated state
-    void Advance(std::span<const float> audio, std::span<const asr::Turn> turns,
-                 const DecodeClipFn& decode) override {
-        worker_.Advance(audio, turns, decode);
+    // Capture-phase work. Diarise then finalises from the accumulated state
+    void Advance(std::span<const float> audio, const DecodeClipFn& decode) override {
+        worker_.Advance(audio, decode);
     }
 
-    void Settle(std::span<const float> audio, std::span<const asr::Turn> turns,
-                const DecodeClipFn& decode) override {
-        worker_.Advance(audio, turns, decode, std::numeric_limits<int>::max());
+    void Settle(std::span<const float> audio, const DecodeClipFn& decode) override {
+        worker_.Advance(audio, decode, std::numeric_limits<int>::max());
     }
 
     TurnTexts TakeTurnTexts() override {
@@ -61,6 +54,8 @@ class SpeakerDiariser : public IDiariser {
 
     std::vector<float> EmbedVoice(std::span<const float> audio) override;
 
+    // Reuses the voiceprint AnchorSimilarities computed for the cluster.
+    // Embeds only when there is none
     std::vector<float> DoctorVoiceprint(std::span<const float> audio,
                                         const std::vector<LabelledSlice>& slices,
                                         int doctor_cluster) override;
@@ -77,7 +72,7 @@ class SpeakerDiariser : public IDiariser {
                                  std::uint64_t end) override {
         const auto it = chunk_embeddings_.find({first, end});
         if (it != chunk_embeddings_.end()) return it->second;
-        if (end <= first || end - first < 400 || end > audio.size()) return {};
+        if (end <= first || end - first < kEmbedMinFrames || end > audio.size()) return {};
         return embedder_.Embed(audio.subspan(first, end - first));
     }
 
@@ -106,7 +101,7 @@ class SpeakerDiariser : public IDiariser {
     Segmenter segmenter_;
     SpeakerEmbedder embedder_;
     AnchorStore& anchors_;
-    DiarWorker worker_;
+    CaptureStage worker_;
     TurnTexts texts_;
     TurnChunks chunks_;
     std::map<std::pair<std::uint64_t, std::uint64_t>, std::vector<float>> chunk_embeddings_;

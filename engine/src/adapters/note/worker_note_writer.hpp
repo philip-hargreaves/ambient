@@ -20,7 +20,7 @@ namespace ambient::note {
 class WorkerNoteWriter : public INoteWriter, public INoteLane {
    public:
     // store: resolves tiers for Configure and names the model in the
-    // state; null leaves the lane on its tier with no names (tests)
+    // state. Null leaves the lane on its tier with no names (tests)
     WorkerNoteWriter(std::filesystem::path host_exe, std::filesystem::path models_root,
                      std::filesystem::path prompt_path, const models::ModelStore* store = nullptr,
                      std::string tier = "default");
@@ -28,15 +28,11 @@ class WorkerNoteWriter : public INoteWriter, public INoteLane {
 
     void Prepare() override;
 
-    // Sent without waiting; dropped while a generation is streaming
+    // Sent without waiting, and dropped while a generation is streaming
     void Prefill(const std::vector<asr::Turn>& transcript, const NoteOptions& options) override;
 
     bool WritesPatient() const override {
         return true;
-    }
-
-    bool WantsTranscriberReleased() const override {
-        return false;
     }
 
     std::string Write(const std::vector<asr::Turn>& transcript, const NoteOptions& options,

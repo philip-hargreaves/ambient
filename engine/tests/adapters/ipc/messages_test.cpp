@@ -11,7 +11,7 @@ namespace {
 
 json LoadFixture(const std::string& name) {
     std::ifstream in(std::string(AMBIENT_FIXTURE_DIR) + "/" + name);
-    // Throwing here names the missing file; parsing a closed stream would not
+    // Throwing here names the missing file. Parsing a closed stream would not
     if (!in.is_open()) {
         throw std::runtime_error("missing fixture: " + name);
     }
@@ -52,16 +52,6 @@ TEST(Messages, AudioLevelNotificationMatchesFixture) {
     const auto built = MakeNotification("audio.level", {{"level", 0.5}, {"clipped", false}});
 
     EXPECT_EQ(built, LoadFixture("audio-level.json"));
-}
-
-TEST(Messages, TranscriptTurnNotificationMatchesFixture) {
-    const auto built =
-        MakeNotification("transcript.turn", {{"firstFrame", std::uint64_t{480000}},
-                                             {"frameCount", std::uint64_t{48000}},
-                                             {"speaker", ""},
-                                             {"text", "about three weeks now, mostly mornings"}});
-
-    EXPECT_EQ(built, LoadFixture("transcript-turn.json"));
 }
 
 TEST(Messages, SessionInterruptedNotificationMatchesFixture) {
@@ -144,13 +134,13 @@ TEST(Messages, RejectsIdBeyondInt64) {
 }
 
 TEST(Messages, RejectsOutOfRangeProtocolVersion) {
-    const std::uint64_t huge = static_cast<std::uint64_t>(1) << 33;  // truncates to 0, not 1
+    const std::uint64_t huge = static_cast<std::uint64_t>(1) << 33;  // truncates to 0
     EXPECT_EQ(PeerInfoFromJson(json{{"name", "x"}, {"version", "1"}, {"protocolVersion", huge}}),
               std::nullopt);
 }
 
 TEST(Messages, DeeplyNestedParamsDoesNotOverflow) {
-    // nlohmann parse and destruction are iterative; only a copy recurses, so
+    // nlohmann parse and destruction are iterative. Only a copy recurses, so
     // ParseRequest must move params out. Depth far past a 1 MB stack's frames.
     constexpr int kDepth = 200000;
     std::string nested;

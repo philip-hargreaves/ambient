@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "adapters/guidance/corpus_store.hpp"
-#include "adapters/guidance/indexer.hpp"
 #include "guidance_fixture.hpp"
+#include "tools/corpus/indexer.hpp"
 
 namespace ambient::guidance {
 namespace {

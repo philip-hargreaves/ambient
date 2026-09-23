@@ -14,8 +14,8 @@ inline constexpr std::uint64_t kMinCleanFrames = 8000;  // 0.5 s to prefer overl
 inline constexpr std::uint64_t kOverlapTurnMinFrames =
     6400;  // 0.4 s of overlap becomes its own turn
 
-// Split each region at the seg change points strictly inside it - the
-// zero-gap speaker handover Silero cannot see. Sub-slices under 0.2 s drop
+// Splits each region at the seg change points strictly inside it, the
+// zero-gap speaker handovers Silero cannot see. Sub-slices under 0.2 s drop
 inline std::vector<Region> RefineRegions(const std::vector<Region>& regions,
                                          const std::vector<std::uint64_t>& change_points) {
     std::vector<Region> slices;
@@ -37,8 +37,8 @@ inline std::vector<Region> RefineRegions(const std::vector<Region>& regions,
     return slices;
 }
 
-// Overlap frames excluded when at least 0.5 s of clean audio remains;
-// empty means too short to embed
+// Overlap frames excluded when at least 0.5 s of clean audio remains.
+// Empty means too short to embed
 inline std::vector<Region> EmbeddingRanges(const Region& slice,
                                            const std::vector<Region>& overlap_spans) {
     std::vector<Region> clean;

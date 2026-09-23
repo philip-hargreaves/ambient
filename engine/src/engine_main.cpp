@@ -1,13 +1,10 @@
 #include <chrono>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <exception>
 #include <filesystem>
-#include <map>
 #include <memory>
-#include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -26,6 +23,7 @@
 #include "adapters/audio/wav_source.hpp"
 #include "adapters/diarisation/anchor_store.hpp"
 #include "adapters/diarisation/deferred_diariser.hpp"
+#include "adapters/diarisation/scripted_diariser.hpp"
 #include "adapters/diarisation/speaker_diariser.hpp"
 #include "adapters/guidance/document_ingest.hpp"
 #include "adapters/guidance/embedder.hpp"
@@ -33,10 +31,12 @@
 #include "adapters/guidance/retriever.hpp"
 #include "adapters/ipc/handlers.hpp"
 #include "adapters/ipc/pipe_server.hpp"
+#include "adapters/ipc/wire_events.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/note/worker_note_writer.hpp"
 #include "adapters/storage/sqlite_session_store.hpp"
+#include "adapters/system/exe_paths.hpp"
 #include "adapters/system/power_throttling.hpp"
 #include "adapters/system/process_scan.hpp"
 #include "adapters/transcription/scripted_transcriber.hpp"
@@ -46,190 +46,168 @@
 #include "adapters/vad/deferred_vad.hpp"
 #include "adapters/vad/passthrough_vad.hpp"
 #include "adapters/vad/silero_vad.hpp"
-#include "core/audio/playback.hpp"
-#include "core/audio/session_controller.hpp"
 #include "core/common/cli_args.hpp"
-#include "core/common/env_flag.hpp"
 #include "core/metrics/metrics.hpp"
-#include "core/metrics/throughput.hpp"
+#include "core/session/playback.hpp"
+#include "core/session/session_controller.hpp"
 
 namespace {
 
-class WireEvents : public ambient::audio::ISessionEvents {
-   public:
-    WireEvents(ambient::ipc::PipeServer& server, ambient::store::ISessionStore& sessions)
-        : server_(server), sessions_(sessions) {}
-
-    void OnLevel(const ambient::audio::LevelReading& reading) override {
-        server_.PushNotification("audio.level",
-                                 {{"level", reading.level}, {"clipped", reading.clipped}});
+std::filesystem::path StoreRoot(const std::vector<std::string>& args) {
+    if (args.size() > 1) return args[1];
+    char* local_app_data = nullptr;
+    if (_dupenv_s(&local_app_data, nullptr, "LOCALAPPDATA") != 0 || local_app_data == nullptr) {
+        throw std::runtime_error("LOCALAPPDATA is not set and no store root was given");
     }
+    const auto root = std::filesystem::path(local_app_data) / "ambient" / "store";
+    std::free(local_app_data);
+    return root;
+}
 
-    void OnPlaybackLevel(const ambient::audio::LevelReading& reading, double seconds) override {
-        server_.PushNotification(
-            "audio.level",
-            {{"level", reading.level}, {"clipped", reading.clipped}, {"seconds", seconds}});
+// Added documents live in the user's Documents folder unless a run says otherwise
+std::filesystem::path GuidelinesFolder(const std::string& override) {
+    if (!override.empty()) return override;
+    PWSTR documents = nullptr;
+    std::filesystem::path folder;
+    if (SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &documents) == S_OK) {
+        folder = std::filesystem::path(documents) / "Ambient guidelines";
     }
+    CoTaskMemFree(documents);
+    if (folder.empty()) throw std::runtime_error("no Documents folder and no --guidelines given");
+    return folder;
+}
 
-    void OnTurn(const ambient::asr::Turn& turn) override {
-        server_.PushNotification("transcript.turn", {{"firstFrame", turn.first_frame},
-                                                     {"frameCount", turn.frame_count},
-                                                     {"speaker", turn.speaker},
-                                                     {"text", turn.text}});
-    }
+// True when a staged model has never been compiled on this machine
+bool Uncompiled(const ambient::models::ModelStore& store, const std::string& role) {
+    return !std::filesystem::exists(store.Resolve(role, "default").dir / ".cache");
+}
 
-    void OnInterrupted(ambient::audio::SourceEndReason reason, const std::string& detail) override {
-        server_.PushNotification("session/interrupted",
-                                 {{"reason", ReasonName(reason)}, {"detail", detail}});
-    }
-
-    void OnProgress(const std::string& stage) override {
-        server_.PushNotification("session/progress", {{"stage", stage}});
-    }
-
-    void OnEnrolProgress(const ambient::audio::EnrolProgress& progress) override {
-        server_.PushNotification("anchor/progress", {{"elapsed", progress.elapsed_s},
-                                                     {"speech", progress.speech_s},
-                                                     {"level", progress.level.level},
-                                                     {"clipped", progress.level.clipped}});
-    }
-
-    void OnEnrolDone(bool ok, const std::string& detail, double speech_s) override {
-        server_.PushNotification("anchor/enrolled",
-                                 {{"ok", ok}, {"detail", detail}, {"speechSeconds", speech_s}});
-    }
-
-    // Metered before the ~12 Hz notification cap, so tokensPerSecond is the
-    // model's real rate (Intel-requested figure)
-    void PushPartial(const std::string& method, nlohmann::json params) {
-        const auto now = std::chrono::steady_clock::now();
-        double rate = 0;
-        {
-            std::lock_guard<std::mutex> lock(throttle_mutex_);
-            auto& meter = meters_[method];
-            meter.Token(Seconds(now));
-            rate = meter.Rate(Seconds(now));
-            auto& last = last_partial_[method];
-            if (now - last < std::chrono::milliseconds(80)) {
-                return;
-            }
-            last = now;
+// A replay request plays a wav through the same port. A launch-time wav path
+// (CI, scripts) forces every session to replay that file
+ambient::session::SourceFactory MakeSourceFactory(std::string forced) {
+    return [forced = std::move(forced)](
+               const std::optional<ambient::session::ReplaySpec>& replay,
+               const std::string& mic_id) -> std::unique_ptr<ambient::audio::IAudioSource> {
+        if (replay.has_value()) {
+            return std::make_unique<ambient::audio::WavSource>(
+                replay->path, ambient::audio::WavSource::Config{replay->speed, replay->monitor,
+                                                                replay->start_frame});
         }
-        params["tokensPerSecond"] = Rounded(rate);
-        server_.PushNotification(method, std::move(params));
-    }
+        if (!forced.empty()) return std::make_unique<ambient::audio::WavSource>(forced);
+        return std::make_unique<ambient::audio::WasapiCapture>(ambient::audio::WideId(mic_id));
+    };
+}
 
-    // The end event carries the whole-generation average and retires the meter
-    void PushStreamEnd(const char* partial_method, const char* method, nlohmann::json params) {
-        double average = 0;
-        {
-            std::lock_guard<std::mutex> lock(throttle_mutex_);
-            average = meters_[partial_method].Average();
-            meters_.erase(partial_method);
-            last_partial_.erase(partial_method);
+// Real transcription when the ASR role is staged, scripted otherwise (CI)
+std::unique_ptr<ambient::asr::ITranscriber> BuildTranscriber(
+    const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
+    const std::string& device, ambient::metrics::Registry& metrics, bool& first_use) {
+    try {
+        first_use |= Uncompiled(store, "asr");
+        return std::make_unique<ambient::asr::WhisperTranscriber>(store, runtime, device, &metrics);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "ambient-engine: scripted transcripts (%s)\n", e.what());
+        return std::make_unique<ambient::asr::ScriptedTranscriber>();
+    }
+}
+
+// Compiles behind the serve loop. session/start waits on it, hello does not
+std::unique_ptr<ambient::audio::IStreamingVad> BuildVad(const ambient::models::ModelStore& store,
+                                                        ambient::models::OvRuntime& runtime,
+                                                        ambient::metrics::Registry& metrics) {
+    try {
+        store.Resolve("vad", "default");
+        return std::make_unique<ambient::audio::DeferredVad>(
+            [&store, &runtime] {
+                return std::make_unique<ambient::audio::SileroVad>(store, runtime);
+            },
+            &metrics);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "ambient-engine: capped windows (%s)\n", e.what());
+        return std::make_unique<ambient::audio::PassthroughVad>();
+    }
+}
+
+// Diarisation needs both its models, scripted otherwise (CI)
+std::unique_ptr<ambient::diar::IDiariser> BuildDiariser(const ambient::models::ModelStore& store,
+                                                        ambient::models::OvRuntime& runtime,
+                                                        ambient::diar::AnchorStore& anchors,
+                                                        ambient::metrics::Registry& metrics) {
+    try {
+        store.Resolve("diarisation", "default");
+        store.Resolve("segmentation", "default");
+        return std::make_unique<ambient::diar::DeferredDiariser>(
+            [&store, &runtime, &anchors] {
+                return std::make_unique<ambient::diar::SpeakerDiariser>(store, runtime, anchors);
+            },
+            &metrics);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "ambient-engine: scripted speakers (%s)\n", e.what());
+        return std::make_unique<ambient::diar::ScriptedDiariser>();
+    }
+}
+
+// Generation runs in its own supervised process: a GPU driver fault there
+// costs a respawn and leaves the engine standing. Null when nothing can write
+std::unique_ptr<ambient::note::WorkerNoteWriter> BuildNoteWriter(
+    ambient::models::ModelStore& store, const std::filesystem::path& models_root,
+    ambient::ipc::PipeServer& server, bool& first_use) {
+    try {
+        store.Resolve("note", "default");
+        const auto host = ambient::system::ExeDir() / "ambient_note_host.exe";
+        if (!std::filesystem::exists(host)) {
+            // Never write in-process: that is the configuration the driver fault corrupts
+            std::fprintf(stderr, "ambient-engine: note DISABLED, %s is missing\n",
+                         host.string().c_str());
+            return nullptr;
         }
-        if (average > 0) {
-            params["tokensPerSecond"] = Rounded(average);
+        auto worker = std::make_unique<ambient::note::WorkerNoteWriter>(
+            host, models_root, models_root.parent_path() / "prompts", &store);
+        // The shell configures the tier on connect. A non-default tier's
+        // first compile runs then
+        worker->SetListener([&server](const ambient::note::NoteModelState& state) {
+            server.PushNotification("note/model", ambient::ipc::NoteModelJson(state));
+        });
+        // First use only: the one-off compile runs on an idle GPU, ahead of any recording
+        if (Uncompiled(store, "note")) {
+            first_use = true;
+            std::fprintf(stderr, "ambient-engine: first use, compiling the note model\n");
+            worker->Prepare();
         }
-        server_.PushNotification(method, std::move(params));
+        return worker;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "ambient-engine: stub note (%s)\n", e.what());
+        return nullptr;
     }
+}
 
-    void DropStream(const char* partial_method) {
-        std::lock_guard<std::mutex> lock(throttle_mutex_);
-        meters_.erase(partial_method);
-        last_partial_.erase(partial_method);
-    }
-
-    void OnNoteRefused(const std::string& reason, bool overridable) override {
-        server_.PushNotification("note/refused",
-                                 {{"reason", reason}, {"overridable", overridable}});
-    }
-
-    void OnNotePartial(const std::string& text) override {
-        PushPartial("note/partial", {{"text", text}});
-    }
-
-    void OnNoteReady(const std::string& text) override {
-        PushStreamEnd("note/partial", "note/ready", {{"text", text}});
-        // The translator warms while the patient sheet writes, so the first
-        // translation is as fast as the rest
-        if (translator_ != nullptr) {
-            translator_->Prepare();
+// Translation runs on the CPU, so it never contends with the GPU. Null when
+// the model is not staged
+std::unique_ptr<ambient::translate::NllbTranslator> BuildTranslator(
+    const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
+    bool& first_use) {
+    try {
+        store.Resolve("translation", "default");
+        auto translator = std::make_unique<ambient::translate::NllbTranslator>(store, runtime);
+        // The CPU compile joins the one-off warm-up, so the first translation
+        // is as fast as every other
+        if (Uncompiled(store, "translation")) {
+            first_use = true;
+            std::fprintf(stderr, "ambient-engine: first use, compiling the translator\n");
+            translator->Prepare();
         }
+        return translator;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "ambient-engine: no translation (%s)\n", e.what());
+        return nullptr;
     }
-
-    void SetTranslator(ambient::translate::ITranslator* translator) {
-        translator_ = translator;
-    }
-
-    // The note's guidance search starts as soon as the note is stored
-    void OnNoteSaved(const std::string& session, const ambient::store::Document& note) override {
-        if (guidance_ == nullptr) return;
-        guidance_->Run(ambient::ipc::GuidanceSearchRequest(
-            sessions_, session, note, ambient::ipc::kGuidanceLimit,
-            [this](const std::string& method, nlohmann::json params) {
-                server_.PushNotification(method, std::move(params));
-            }));
-    }
-
-    void SetGuidance(ambient::guidance::IGuidanceLane* lane) {
-        guidance_ = lane;
-    }
-
-    void OnNoteFailed(const std::string& detail) override {
-        DropStream("note/partial");
-        server_.PushNotification("note/failed", {{"detail", detail}});
-    }
-
-    void OnPatientPartial(const std::string& text) override {
-        PushPartial("patient/partial", {{"text", text}});
-    }
-
-    void OnPatientReady(const std::string& text) override {
-        PushStreamEnd("patient/partial", "patient/ready", {{"text", text}});
-    }
-
-    void OnPatientFailed(const std::string& detail) override {
-        DropStream("patient/partial");
-        server_.PushNotification("patient/failed", {{"detail", detail}});
-    }
-
-    void OnSummaryReady(const std::string& session, const std::string& text) override {
-        server_.PushNotification("reflection/summary", {{"id", session}, {"text", text}});
-    }
-
-    void OnSummaryFailed(const std::string& session, const std::string& detail) override {
-        server_.PushNotification("reflection/summaryFailed", {{"id", session}, {"detail", detail}});
-    }
-
-   private:
-    static const char* ReasonName(ambient::audio::SourceEndReason reason) {
-        return reason == ambient::audio::SourceEndReason::kDeviceLost ? "deviceLost" : "failed";
-    }
-
-    double Seconds(std::chrono::steady_clock::time_point now) const {
-        return std::chrono::duration<double>(now - started_).count();
-    }
-
-    static double Rounded(double rate) {
-        return std::round(rate * 10.0) / 10.0;
-    }
-
-    ambient::ipc::PipeServer& server_;
-    ambient::store::ISessionStore& sessions_;
-    ambient::translate::ITranslator* translator_ = nullptr;
-    ambient::guidance::IGuidanceLane* guidance_ = nullptr;
-    std::mutex throttle_mutex_;
-    std::map<std::string, std::chrono::steady_clock::time_point> last_partial_;
-    std::map<std::string, ambient::metrics::ThroughputMeter> meters_;
-    const std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now();
-};
+}
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
 #ifdef _DEBUG
-    // A debug-CRT assert must reach stderr and abort, never hang the
+    // Assertions and CRT errors go to stderr as text rather than parking a
     // headless engine behind a modal dialog
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
@@ -242,11 +220,13 @@ int main(int argc, char* argv[]) {
         const std::string asr_device = ambient::TakeFlag(args, "--asr-device");
         const std::string corpora_override = ambient::TakeFlag(args, "--corpora");
         const std::string guidelines_override = ambient::TakeFlag(args, "--guidelines");
-        // Dev builds only: a demo corpus marked research is searched when this is set
+        // Dev builds only: a demo corpus marked research is searched when set
         const bool include_research = ambient::TakeSwitch(args, "--include-research");
-        // AMBIENT_NOTE_PREFILL: whisper and the note host take turns on the GPU;
-        // with whisper on the NPU there is nothing to share
-        if (ambient::EnvFlag("AMBIENT_NOTE_PREFILL") && asr_device != "NPU") {
+        // Evaluation only: a held-out run must not teach the voiceprint
+        const bool freeze_anchor = ambient::TakeSwitch(args, "--freeze-anchor");
+        // Whisper and the note host take turns on the GPU. With whisper on the
+        // NPU there is nothing to share
+        if (asr_device != "NPU") {
             const std::string lease = "Local\\ambient-gpu-" + std::to_string(GetCurrentProcessId());
             _putenv_s("AMBIENT_GPU_LEASE", lease.c_str());
             std::fprintf(stderr, "ambient-engine: note prefill on, GPU lease %s\n", lease.c_str());
@@ -258,34 +238,9 @@ int main(int argc, char* argv[]) {
         if (args.size() > 0) {
             pipe_name = L"\\\\.\\pipe\\" + std::wstring(args[0].begin(), args[0].end());
         }
-
-        std::filesystem::path store_root;
-        if (args.size() > 1) {
-            store_root = args[1];
-        } else {
-            char* local_app_data = nullptr;
-            if (_dupenv_s(&local_app_data, nullptr, "LOCALAPPDATA") != 0 ||
-                local_app_data == nullptr) {
-                throw std::runtime_error("LOCALAPPDATA is not set and no store root was given");
-            }
-            store_root = std::filesystem::path(local_app_data) / "ambient" / "store";
-            std::free(local_app_data);
-        }
-
-        // Beside the executable is the production shape: the MSIX package dir
-        std::filesystem::path models_root;
-        if (args.size() > 2) {
-            models_root = args[2];
-        } else {
-            wchar_t exe_path[MAX_PATH];
-            GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
-            const auto exe_dir = std::filesystem::path(exe_path).parent_path();
-            models_root = exe_dir / "models";
-            // Packaged debug runs put the exe one level below the layout
-            if (!std::filesystem::exists(models_root)) {
-                models_root = exe_dir.parent_path() / "models";
-            }
-        }
+        const std::filesystem::path store_root = StoreRoot(args);
+        const std::filesystem::path models_root =
+            args.size() > 2 ? std::filesystem::path(args[2]) : ambient::system::DefaultModelsRoot();
         // Guidance corpora sit beside the models, each replaced as a directory
         const std::filesystem::path corpora_root = corpora_override.empty()
                                                        ? models_root.parent_path() / "corpora"
@@ -293,85 +248,20 @@ int main(int argc, char* argv[]) {
 
         ambient::ipc::PipeServer server(pipe_name);
         ambient::store::SqliteSessionStore session_store(store_root);
-        WireEvents events(server, session_store);
+        ambient::ipc::WireEvents events(server, session_store);
         // A consultation left by closing the app is left all the same
         session_store.EraseUnretained();
         ambient::models::ModelStore model_store(models_root);
-
-        // A replay request plays a wav through the same port; a launch-time
-        // wav path (CI, scripts) forces every session to replay that file
-        ambient::audio::SourceFactory factory =
-            [forced = args.size() > 3 ? args[3] : std::string()](
-                const std::optional<ambient::audio::ReplaySpec>& replay,
-                const std::string& mic_id) -> std::unique_ptr<ambient::audio::IAudioSource> {
-            if (replay.has_value()) {
-                return std::make_unique<ambient::audio::WavSource>(
-                    replay->path, ambient::audio::WavSource::Config{replay->speed, replay->monitor,
-                                                                    replay->start_frame});
-            }
-            if (!forced.empty()) {
-                return std::make_unique<ambient::audio::WavSource>(forced);
-            }
-            return std::make_unique<ambient::audio::WasapiCapture>(ambient::audio::WideId(mic_id));
-        };
-        // Real transcription when the ASR role is staged, scripted otherwise (CI)
         ambient::models::OvRuntime ov_runtime;
         ambient::metrics::Registry metrics;
-        bool first_use = false;
-        std::unique_ptr<ambient::asr::ITranscriber> transcriber;
-        try {
-            model_store.Resolve("asr", "default");
-            first_use =
-                !std::filesystem::exists(model_store.Resolve("asr", "default").dir / ".cache");
-            transcriber = std::make_unique<ambient::asr::WhisperTranscriber>(
-                model_store, ov_runtime, asr_device, &metrics);
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: scripted transcripts (%s)\n", e.what());
-            transcriber = std::make_unique<ambient::asr::ScriptedTranscriber>();
-        }
-        // Same pattern for the VAD: real endpointing when staged. Compiles
-        // behind the serve loop; session/start waits on it, hello does not
-        std::unique_ptr<ambient::audio::IStreamingVad> vad;
-        try {
-            model_store.Resolve("vad", "default");
-            vad = std::make_unique<ambient::audio::DeferredVad>([&model_store, &ov_runtime,
-                                                                 &metrics] {
-                const auto t0 = std::chrono::steady_clock::now();
-                auto built = std::make_unique<ambient::audio::SileroVad>(model_store, ov_runtime);
-                metrics.RecordLoad(
-                    "vad",
-                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
-                return built;
-            });
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: capped windows (%s)\n", e.what());
-            vad = std::make_unique<ambient::audio::PassthroughVad>();
-        }
-        // Diarisation needs both its models; without them turns simply keep
-        // an empty speaker
         ambient::diar::AnchorStore anchors(store_root);
-        std::unique_ptr<ambient::diar::IDiariser> diariser;
-        try {
-            model_store.Resolve("diarisation", "default");
-            model_store.Resolve("segmentation", "default");
-            diariser = std::make_unique<ambient::diar::DeferredDiariser>([&model_store, &ov_runtime,
-                                                                          &anchors, &metrics] {
-                const auto t0 = std::chrono::steady_clock::now();
-                auto built = std::make_unique<ambient::diar::SpeakerDiariser>(model_store,
-                                                                              ov_runtime, anchors);
-                metrics.RecordLoad(
-                    "diarisation",
-                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
-                return built;
-            });
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: no speaker labels (%s)\n", e.what());
-        }
-        // Generation runs in its own supervised process: a GPU driver fault there
-        // costs a respawn, never the engine
-        std::unique_ptr<ambient::note::INoteWriter> note_writer;
-        ambient::note::INoteLane* note_lane = nullptr;
-        // A host from the engine that just died takes a moment to leave. One
+
+        bool first_use = false;
+        auto transcriber =
+            BuildTranscriber(model_store, ov_runtime, asr_device, metrics, first_use);
+        auto vad = BuildVad(model_store, ov_runtime, metrics);
+        auto diariser = BuildDiariser(model_store, ov_runtime, anchors, metrics);
+        // A host from an engine that has died takes a moment to leave. One
         // still here after that is wedged in the driver, and only a reboot ends it
         const bool stray_note_host =
             !ambient::system::WaitUntilGone(L"ambient_note_host.exe", std::chrono::seconds(5));
@@ -380,72 +270,15 @@ int main(int argc, char* argv[]) {
                          "ambient-engine: a note host from an earlier engine is still running; "
                          "the GPU is not ours until the computer restarts\n");
         }
-        try {
-            model_store.Resolve("note", "default");
-            const auto prompt = models_root.parent_path() / "prompts";
-            wchar_t exe_path[MAX_PATH]{};
-            GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
-            const auto host =
-                std::filesystem::path(exe_path).parent_path() / "ambient_note_host.exe";
-            if (std::filesystem::exists(host)) {
-                auto worker = std::make_unique<ambient::note::WorkerNoteWriter>(
-                    host, models_root, prompt, &model_store);
-                // The shell configures the tier on connect; a non-default tier's
-                // first compile runs then
-                worker->SetListener([&server](const ambient::note::NoteModelState& state) {
-                    server.PushNotification("note/model", ambient::ipc::NoteModelJson(state));
-                });
-                note_lane = worker.get();
-                note_writer = std::move(worker);
-                // First use only: the one-off compile runs on an idle GPU, never inside a recording
-                const auto note_dir = model_store.Resolve("note", "default").dir;
-                if (!std::filesystem::exists(note_dir / ".cache")) {
-                    first_use = true;
-                    std::fprintf(stderr, "ambient-engine: first use, compiling the note model\n");
-                    note_writer->Prepare();
-                }
-            } else {
-                // Never write in-process: that is the configuration the driver fault corrupts
-                std::fprintf(stderr, "ambient-engine: note DISABLED, %s is missing\n",
-                             host.string().c_str());
-            }
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: stub note (%s)\n", e.what());
-        }
-        // Translation runs on the CPU, so it never contends with the GPU
-        std::unique_ptr<ambient::translate::NllbTranslator> translator;
+        auto note_writer = BuildNoteWriter(model_store, models_root, server, first_use);
+        auto translator = BuildTranslator(model_store, ov_runtime, first_use);
         std::unique_ptr<ambient::translate::TranslateLane> translate_lane;
-        try {
-            model_store.Resolve("translation", "default");
-            translator =
-                std::make_unique<ambient::translate::NllbTranslator>(model_store, ov_runtime);
+        if (translator != nullptr) {
             translate_lane = std::make_unique<ambient::translate::TranslateLane>(
-                *translator,
-                [&server, &events](const std::string& method, const nlohmann::json& params) {
-                    if (method == "translate/partial") {
-                        events.PushPartial(method, params);
-                    } else {
-                        if (method == "translate/ready") {
-                            events.PushStreamEnd("translate/partial", "translate/ready", params);
-                        } else if (method == "translate/failed") {
-                            events.DropStream("translate/partial");
-                            server.PushNotification(method, params);
-                        } else {
-                            server.PushNotification(method, params);
-                        }
-                    }
+                *translator, [&events](const std::string& method, const nlohmann::json& params) {
+                    events.OnTranslation(method, params);
                 });
             events.SetTranslator(translator.get());
-            // First use: the CPU compile joins the one-off warm-up, so the
-            // first translation is as fast as every other
-            const auto translation_dir = model_store.Resolve("translation", "default").dir;
-            if (!std::filesystem::exists(translation_dir / ".cache")) {
-                first_use = true;
-                std::fprintf(stderr, "ambient-engine: first use, compiling the translator\n");
-                translator->Prepare();
-            }
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: no translation (%s)\n", e.what());
         }
         // Guidance retrieval runs on the CPU in its own lane. The embedder loads
         // in the background so the first note's search is warm
@@ -462,32 +295,19 @@ int main(int argc, char* argv[]) {
             });
         events.SetGuidance(&guidance_lane);
         guidance_lane.Prepare();
-        // 10 s, not 3: a Bluetooth microphone link waking measured 1.6-8.8 s
-        // before first audio; wired mics answer in well under a second either way
-        ambient::audio::SessionController controller(
-            std::move(factory), events, session_store, *transcriber, *vad, std::chrono::seconds(10),
-            diariser.get(), 5 * ambient::audio::kSampleRate, note_writer.get(), &metrics);
 
-        // Added documents live in her guidelines folder, embed between note
-        // searches and wait while a consultation runs
-        std::filesystem::path guidelines = guidelines_override;
-        if (guidelines.empty()) {
-            PWSTR documents = nullptr;
-            if (SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &documents) ==
-                S_OK) {
-                guidelines = std::filesystem::path(documents) / "Ambient guidelines";
-            }
-            CoTaskMemFree(documents);
-            if (guidelines.empty()) {
-                throw std::runtime_error("no Documents folder and no --guidelines given");
-            }
-        }
-        wchar_t engine_path[MAX_PATH]{};
-        GetModuleFileNameW(nullptr, engine_path, MAX_PATH);
-        const auto ingest_host =
-            std::filesystem::path(engine_path).parent_path() / "ambient_ingest_host.exe";
+        // 10 s rather than 3: a Bluetooth microphone link waking measured 1.6-8.8 s
+        // before first audio. Wired mics answer in well under a second either way
+        ambient::session::SessionController controller(
+            MakeSourceFactory(args.size() > 3 ? args[3] : std::string()), events, session_store,
+            *transcriber, *vad, *diariser, std::chrono::seconds(10),
+            5 * ambient::audio::kSampleRate, note_writer.get(), &metrics);
+        if (freeze_anchor) controller.FreezeAnchor();
+
+        // Added documents embed between note searches and wait while a consultation runs
+        const auto ingest_host = ambient::system::ExeDir() / "ambient_ingest_host.exe";
         ambient::guidance::DocumentIngest ingest(
-            guidance_retriever, guidelines, store_root / "documents",
+            guidance_retriever, GuidelinesFolder(guidelines_override), store_root / "documents",
             [&controller] { return controller.Running(); },
             std::filesystem::exists(ingest_host) ? ingest_host : std::filesystem::path());
         ingest.SetListener(
@@ -501,7 +321,7 @@ int main(int argc, char* argv[]) {
                 }
             });
         // Demo playback ends in a review of the copy, its note searched like any other
-        ambient::audio::Playback playback(
+        ambient::session::Playback playback(
             events, session_store,
             {.finalised = [&controller](const std::string& id) { controller.Open(id); },
              .guidance =
@@ -516,9 +336,19 @@ int main(int argc, char* argv[]) {
                          }));
                  }});
         ambient::ipc::RegisterMethods(
-            server, controller, model_store, session_store, &metrics, &ov_runtime, translator.get(),
-            translate_lane.get(), first_use, &anchors, note_lane, stray_note_host,
-            models_root.parent_path() / "demo" / "reflections", &playback);
+            server, {.controller = controller,
+                     .models = model_store,
+                     .sessions = session_store,
+                     .metrics = &metrics,
+                     .runtime = &ov_runtime,
+                     .translator = translator.get(),
+                     .translate_lane = translate_lane.get(),
+                     .first_use = first_use,
+                     .anchors = &anchors,
+                     .note_lane = note_writer.get(),
+                     .stray_note_host = stray_note_host,
+                     .demo_dir = models_root.parent_path() / "demo" / "reflections",
+                     .playback = &playback});
         ambient::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
                                               guidance_lane, ingest);
         server.ServeOneClient();

@@ -12,25 +12,26 @@
 #include <string>
 #include <vector>
 
+#include "adapters/diarisation/anchor_store.hpp"
+#include "adapters/diarisation/speaker_diariser.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/transcription/whisper_transcriber.hpp"
-#include "adapters/vad/silero_vad.hpp"
-#include "core/audio/endpointer.hpp"
+#include "core/diarisation/turn_decode.hpp"
 #include "ports/audio_source.hpp"
 
 namespace ambient::asr {
 namespace {
 
-// Not in the repo; the test skips without it
+// Not in the repo. The test skips without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 constexpr const char* kRef =
     "C:/dev/intelliscribe/bench/transcription/references/day1_consultation01.json";
 
-// Long-form parity on this consult is 21.28%; VAD endpointing measured
-// 20.37%, the full boundary stack (anchor + trim + dedup) 20.58%, so the
-// gate holds the reclaim, not just the baseline
+// Long-form parity on this consult is 21.28%. The shipped per-turn decode
+// (each diarised turn from its own audio) measured under it on the
+// 57-consult sweep, so the gate holds the baseline
 constexpr double kMaxWer = 0.22;
 
 std::vector<float> LoadWav(const char* path) {
@@ -93,16 +94,6 @@ double Wer(const std::vector<std::string>& ref, const std::vector<std::string>& 
     return static_cast<double>(previous[hyp.size()]) / static_cast<double>(ref.size());
 }
 
-struct RecordingSink : ITurnSink {
-    std::mutex mutex;
-    std::vector<Turn> turns;
-
-    void OnTurn(const Turn& turn) override {
-        const std::lock_guard<std::mutex> lock(mutex);
-        turns.push_back(turn);
-    }
-};
-
 TEST(AsrWer, ProductionPathHoldsTheBaseline) {
     if (!std::filesystem::exists(kWav) || !std::filesystem::exists(kRef)) {
         GTEST_SKIP() << "research corpus not mounted";
@@ -116,36 +107,37 @@ TEST(AsrWer, ProductionPathHoldsTheBaseline) {
     WhisperTranscriber transcriber(store, runtime);
     const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - load_start);
+    // A throwaway anchor root: evaluation must never touch a real anchor
+    const auto anchor_root = std::filesystem::temp_directory_path() / "ambient-asr-wer-anchor";
+    std::filesystem::create_directories(anchor_root);
+    diar::AnchorStore anchors(anchor_root);
+    diar::SpeakerDiariser diariser(store, runtime, anchors);
 
-    audio::SileroVad vad(store, runtime);
-    audio::Endpointer endpointer(vad);
-    RecordingSink sink;
-    transcriber.Begin(sink);
+    // The production finalise: each diarised turn decodes its own audio
     const auto decode_start = std::chrono::steady_clock::now();
-    for (const auto& window : endpointer.Push(frames)) {
-        transcriber.Submit(window.frames, window.first_frame, window.first_new_frame);
-    }
-    if (const auto tail = endpointer.Flush()) {
-        transcriber.Submit(tail->frames, tail->first_frame, tail->first_new_frame);
-    }
-    transcriber.Finish();
+    const auto result = diariser.Diarise(frames);
+    const auto turns = diar::MergeByCluster(result.slices);
+    const auto texts = diar::DecodeTurnTexts(
+        turns, frames, [&transcriber](std::span<const float> clip, std::uint64_t first) {
+            return transcriber.DecodeClipChunks(clip, first);
+        });
     const auto decode =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - decode_start);
 
     std::string joined;
-    for (const auto& turn : sink.turns) joined += turn.text + " ";
+    for (const auto& text : texts) joined += text + " ";
     const auto hyp = NormalisedWords(joined);
     const double wer = Wer(gold, hyp);
     const double speed = (static_cast<double>(frames.size()) / audio::kSampleRate) / decode.count();
 
-    std::printf(
-        "production WER %.2f%% (baseline 21.28%%), %.1fx realtime, load %lld ms, "
-        "%zu turns\n",
-        wer * 100, speed, static_cast<long long>(load_ms.count()), sink.turns.size());
+    std::printf("per-turn WER %.2f%% (baseline 21.28%%), %.1fx realtime, load %lld ms, %zu turns\n",
+                wer * 100, speed, static_cast<long long>(load_ms.count()), turns.size());
     EXPECT_LE(wer, kMaxWer);
-    // Release measures ~29x; the floor tolerates the Debug harness, and the
-    // decode span now includes the worker's background model load
+    // Release measures well past realtime. The floor tolerates the Debug harness
+    // and the diarisation inside the timed span
     EXPECT_GT(speed, 3.0) << "decode must stay well past realtime";
+    std::error_code ec;
+    std::filesystem::remove_all(anchor_root, ec);
 }
 
 }  // namespace

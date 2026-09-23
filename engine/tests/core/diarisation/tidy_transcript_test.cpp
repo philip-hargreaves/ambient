@@ -27,11 +27,11 @@ TEST(TidyTranscript, DisfluencyAndSliverTurnsAreDroppedAnswersAreNot) {
 }
 
 TEST(TidyTranscript, AContentWordKeepsAShortTurn) {
-    EXPECT_FALSE(detail::NoContent("um, peanuts"));
-    EXPECT_FALSE(detail::NoContent("Okay."));
-    EXPECT_FALSE(detail::NoContent("Right."));
-    EXPECT_TRUE(detail::NoContent("So I"));
-    EXPECT_FALSE(detail::NoContent("so I want to"));  // three function words: a real fragment
+    EXPECT_FALSE(NoContent("um, peanuts"));
+    EXPECT_FALSE(NoContent("Okay."));
+    EXPECT_FALSE(NoContent("Right."));
+    EXPECT_TRUE(NoContent("So I"));
+    EXPECT_FALSE(NoContent("so I want to"));  // three function words: a real fragment
 }
 
 TEST(TidyTranscript, OneSpeakersFragmentsUnderASecondApartMerge) {

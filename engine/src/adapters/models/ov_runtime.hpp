@@ -16,8 +16,8 @@ struct LoadedModel {
     std::chrono::milliseconds load_time{0};
 };
 
-// Compiles cleared models for their manifest device; an unavailable device
-// is a loud error naming what exists, no fallback
+// Compiles cleared models for their manifest device. An unavailable device
+// is a loud error naming what exists, with no fallback
 class OvRuntime {
    public:
     LoadedModel Load(const ModelStore& store, std::string_view task, std::string_view tier,

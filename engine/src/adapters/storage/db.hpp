@@ -28,13 +28,13 @@ class Db {
         // Empty binds NULL: the store's optional texts are empty strings in C++
         void BindTextOrNull(int index, std::string_view value);
 
-        bool Step();  // true: a row is ready; false: done
+        bool Step();  // true when a row is ready, false when done
         void Reset();
 
         std::int64_t ColumnInt64(int index) const;
         std::string ColumnText(int index) const;
         std::vector<std::uint8_t> ColumnBlob(int index) const;
-        // Valid until the next Step or Reset; for large blobs read once
+        // Valid until the next Step or Reset. For large blobs read once
         std::span<const std::uint8_t> ColumnBlobView(int index) const;
 
        private:
@@ -81,7 +81,7 @@ class Db {
     std::int64_t UserVersion();
     void SetUserVersion(std::int64_t version);
 
-    // Folds the WAL into the file and truncates it; false when a reader held the log
+    // Folds the WAL into the file and truncates it. False when a reader held the log
     bool CheckpointTruncate();
 
    private:

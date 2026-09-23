@@ -19,7 +19,7 @@ class IStreamingVad {
 
     virtual void Reset() = 0;
 
-    // False while a background load is pending; callers buffer, never block
+    // False while a background load is pending. Callers buffer instead of blocking
     virtual bool Ready() const {
         return true;
     }

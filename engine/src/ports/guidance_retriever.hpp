@@ -16,7 +16,7 @@ struct Corpus {
     std::string attribution;
     std::string label;      // the chip's name for the publisher, "NICE", empty when the name serves
     std::string source;     // the importer that built it, "upload" for an added document
-    bool research = false;  // a demo or evaluation corpus, never shipped, dev builds only
+    bool research = false;  // a demo or evaluation corpus for dev builds, kept out of the package
     std::string embedder;
     std::string sha256;
     int chunks = 0;

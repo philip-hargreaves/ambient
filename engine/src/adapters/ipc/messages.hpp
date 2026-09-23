@@ -8,12 +8,13 @@
 #include <utility>
 #include <variant>
 
+#include "ports/transcriber.hpp"
+
 namespace ambient::ipc {
 
 using nlohmann::json;
 
 // JSON-RPC 2.0 reserved codes, plus the engine range -32000..-32099.
-inline constexpr int kParseError = -32700;
 inline constexpr int kInvalidRequest = -32600;
 inline constexpr int kMethodNotFound = -32601;
 inline constexpr int kInvalidParams = -32602;
@@ -46,7 +47,7 @@ struct PeerInfo {
     int protocol_version = 0;
 };
 
-// Whisper output can carry invalid UTF-8; replace rather than throw
+// Whisper output can carry invalid UTF-8, so replace rather than throw
 inline std::string Serialize(const json& j) {
     return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
@@ -124,6 +125,40 @@ inline std::optional<PeerInfo> PeerInfoFromJson(const json& j) {
     }
     return PeerInfo{j["name"].get<std::string>(), j["version"].get<std::string>(),
                     kProtocolVersion};
+}
+
+// The two error shapes every handler returns
+inline Error InvalidParams(std::string detail) {
+    return Error{kInvalidParams, "Invalid params", json(std::move(detail))};
+}
+
+inline Error SessionError(std::string detail) {
+    return Error{kSessionError, "Session error", json(std::move(detail))};
+}
+
+inline std::variant<std::string, Error> IdFrom(const json& params) {
+    if (!params.contains("id") || !params["id"].is_string()) {
+        return InvalidParams("id must be a string");
+    }
+    return params["id"].get<std::string>();
+}
+
+// Optional stamps are empty strings in the store and null on the wire
+inline json NullWhenEmpty(const std::string& value) {
+    return value.empty() ? json(nullptr) : json(value);
+}
+
+// A transcript turn as every message carries it
+inline json TurnJson(const asr::Turn& turn) {
+    return {{"firstFrame", turn.first_frame},
+            {"frameCount", turn.frame_count},
+            {"speaker", turn.speaker},
+            {"text", turn.text}};
+}
+
+inline asr::Turn TurnFromJson(const json& t) {
+    return {t.value("firstFrame", std::uint64_t{0}), t.value("frameCount", std::uint64_t{0}),
+            t.value("speaker", ""), t.value("text", "")};
 }
 
 }  // namespace ambient::ipc

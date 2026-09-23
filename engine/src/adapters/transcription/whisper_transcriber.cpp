@@ -9,11 +9,8 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/system/gpu_lease.hpp"
-#include "core/common/env_flag.hpp"
 #include "core/metrics/metrics.hpp"
-#include "core/transcription/turn_assembly.hpp"
 #include "ports/audio_source.hpp"
-#include "ports/diariser.hpp"
 
 namespace ambient::asr {
 
@@ -46,7 +43,7 @@ DecodeFn MakeWhisperDecode(const models::ModelStore& store, models::OvRuntime& r
     // rejected: it worsened WER even with register effects folded out
     return [pipeline, config](std::span<const float> frames, std::uint64_t first_frame) {
         const ov::genai::RawSpeechInput audio(frames.begin(), frames.end());
-        // Bound: the longest legitimate hold, a cold 35B load; past it the holder is wedged
+        // Bound: the longest legitimate hold, a cold 35B load. Past it the holder is wedged
         auto& gpu = system::GpuLease::Global();
         const bool was_broken = gpu.Broken();
         const auto lease = gpu.Acquire(std::chrono::minutes(10));
@@ -95,27 +92,14 @@ WhisperTranscriber::WhisperTranscriber(const models::ModelStore& store, models::
     : WhisperTranscriber(DecodeLoader([&store, &runtime, device = device_override, metrics] {
                              return MakeWhisperDecode(store, runtime, device, metrics);
                          }),
-                         metrics,
-                         // One Whisper on the chosen device; the low-power mode pays
-                         // the finalise burst at NPU speed rather than load a GPU copy
-                         DecodeLoader{}) {}
+                         metrics) {}
 
 WhisperTranscriber::WhisperTranscriber(DecodeFn decode) : decode_(std::move(decode)) {
     worker_ = std::thread([this] { WorkerLoop(); });
 }
 
-WhisperTranscriber::WhisperTranscriber(DecodeFn decode, DecodeFn clip_decode)
-    : decode_(std::move(decode)), clip_decode_(std::move(clip_decode)) {
-    worker_ = std::thread([this] { WorkerLoop(); });
-}
-
-WhisperTranscriber::WhisperTranscriber(DecodeLoader loader, metrics::Registry* metrics,
-                                       DecodeLoader clip_loader)
-    : factory_(loader),
-      loader_(std::move(loader)),
-      clip_factory_(clip_loader),
-      clip_loader_(std::move(clip_loader)),
-      metrics_(metrics) {
+WhisperTranscriber::WhisperTranscriber(DecodeLoader loader, metrics::Registry* metrics)
+    : loader_(std::move(loader)), metrics_(metrics) {
     worker_ = std::thread([this] { WorkerLoop(); });
 }
 
@@ -128,45 +112,9 @@ WhisperTranscriber::~WhisperTranscriber() {
     worker_.join();
 }
 
-void WhisperTranscriber::Begin(ITurnSink& sink) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    sink_ = &sink;
-    // The dedup backstop never reaches across sessions
-    previous_turn_.reset();
-}
-
-void WhisperTranscriber::Submit(std::span<const float> frames, std::uint64_t first_frame,
-                                std::uint64_t first_new_frame) {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push_back({{frames.begin(), frames.end()}, first_frame, first_new_frame});
-    }
-    cv_.notify_all();
-}
-
-void WhisperTranscriber::Finish() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    cv_.wait(lock, [this] { return (queue_.empty() && !busy_) || stopping_; });
-}
-
-void WhisperTranscriber::Release() {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (!factory_) {
-        return;  // an injected decode has nothing to reload from
-    }
-    release_requested_ = true;
-    cv_.notify_all();
-    cv_.wait(lock, [this] { return !release_requested_ || stopping_; });
-}
-
 std::vector<std::uint64_t> WhisperTranscriber::TakeClipCuts() {
     std::lock_guard<std::mutex> lock(mutex_);
     return std::exchange(clip_cuts_, {});
-}
-
-std::string WhisperTranscriber::DecodeClip(std::span<const float> frames,
-                                           std::uint64_t first_frame) {
-    return diar::JoinedText(DecodeClipChunks(frames, first_frame));
 }
 
 std::vector<Turn> WhisperTranscriber::DecodeClipChunks(std::span<const float> frames,
@@ -182,17 +130,17 @@ std::vector<Turn> WhisperTranscriber::DecodeClipChunks(std::span<const float> fr
     return chunks.get();
 }
 
-// Load off the hot path; a failed load drains windows without turns, so
-// nothing hangs
 void WhisperTranscriber::RecordDecode(std::size_t frames,
                                       std::chrono::steady_clock::time_point t0) {
     if (metrics_ != nullptr) {
         metrics_->RecordDecode(
-            static_cast<double>(frames) / 16000.0,
+            static_cast<double>(frames) / audio::kSampleRate,
             std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
     }
 }
 
+// Load off the hot path. A failed load drains clips without turns, so
+// nothing hangs
 void WhisperTranscriber::LoadIfPending() {
     if (!loader_) {
         return;
@@ -209,123 +157,53 @@ void WhisperTranscriber::LoadIfPending() {
         std::fprintf(stderr, "ambient-engine: transcription unavailable (%s)\n", e.what());
     }
     loader_ = {};
-
-    if (clip_loader_) {
-        try {
-            clip_decode_ = clip_loader_();
-        } catch (const std::exception& e) {
-            // Clips then share the live pipeline: slower, never wrong
-            std::fprintf(stderr, "ambient-engine: finalise stays on the live device (%s)\n",
-                         e.what());
-        }
-        clip_loader_ = {};
-    }
 }
 
 void WhisperTranscriber::WorkerLoop() {
     LoadIfPending();
 
     std::unique_lock<std::mutex> lock(mutex_);
-    // Clips yield to live windows but are never starved: one clip per two
-    // windows keeps speculation alive under an accelerated-replay backlog
-    int windows_since_clip = 0;
     while (!stopping_) {
-        cv_.wait(lock, [this] {
-            return !queue_.empty() || !clips_.empty() || release_requested_ || stopping_;
-        });
+        cv_.wait(lock, [this] { return !clips_.empty() || stopping_; });
         if (stopping_) break;
-
-        // Release only once drained; the next work item reloads
-        if (release_requested_ && queue_.empty() && clips_.empty()) {
-            decode_ = {};
-            clip_decode_ = {};
-            loader_ = factory_;
-            clip_loader_ = clip_factory_;
-            release_requested_ = false;
-            cv_.notify_all();
-            continue;
-        }
-        if (loader_ && (!queue_.empty() || !clips_.empty())) {
+        if (loader_) {
             lock.unlock();
             LoadIfPending();
             lock.lock();
         }
 
-        if (!clips_.empty() && (queue_.empty() || windows_since_clip >= 2)) {
-            windows_since_clip = 0;
-            Clip clip = std::move(clips_.front());
-            clips_.pop_front();
-            busy_ = true;
-            lock.unlock();
-            std::vector<Turn> chunks;
-            std::vector<std::uint64_t> cuts;
-            try {
-                // The burst pipeline when the live device is the slow one
-                const DecodeFn& decode = clip_decode_ ? clip_decode_ : decode_;
-                if (decode) {
-                    const auto t0 = std::chrono::steady_clock::now();
-                    const std::uint64_t clip_end = clip.first_frame + clip.frames.size();
-                    for (const Turn& turn : decode(clip.frames, clip.first_frame)) {
-                        if (turn.text.empty()) continue;
-                        chunks.push_back(turn);
-                        // Chunk edges: where a short answer inside a long clip
-                        // begins and ends
-                        for (const std::uint64_t edge :
-                             {turn.first_frame, turn.first_frame + turn.frame_count}) {
-                            if (edge > clip.first_frame && edge < clip_end) cuts.push_back(edge);
-                        }
-                    }
-                    RecordDecode(clip.frames.size(), t0);
-                }
-            } catch (...) {  // NOLINT(bugprone-empty-catch)
-            }
-            // The cuts land before the caller is released, so a TakeClipCuts
-            // right after the decode sees them
-            lock.lock();
-            clip_cuts_.insert(clip_cuts_.end(), cuts.begin(), cuts.end());
-            lock.unlock();
-            clip.chunks.set_value(std::move(chunks));
-            lock.lock();
-            busy_ = false;
-            cv_.notify_all();
-            continue;
-        }
-
-        if (queue_.empty()) continue;  // spurious wake
-        Window window = std::move(queue_.front());
-        queue_.pop_front();
-        ++windows_since_clip;
-        busy_ = true;
-        ITurnSink* sink = sink_;
-        std::optional<Turn> previous = previous_turn_;
+        Clip clip = std::move(clips_.front());
+        clips_.pop_front();
         lock.unlock();
-
-        // A failed decode loses this window's turns, never the session;
-        // the audio is already stored
+        std::vector<Turn> chunks;
+        std::vector<std::uint64_t> cuts;
+        // A failed decode loses only this clip's text. The audio is
+        // already stored
         try {
             if (decode_) {
                 const auto t0 = std::chrono::steady_clock::now();
-                auto turns = decode_(window.frames, window.first_frame);
-                RecordDecode(window.frames.size(), t0);
-                AnchorFirstTurn(turns, window.first_frame);
-                DropReheardTurns(turns, window.first_new_frame);
-                // Boundary-only dedup: within a window, stripping would eat genuine repetition
-                if (!turns.empty() && previous.has_value()) {
-                    StripBoundaryDuplicates(*previous, turns.front());
-                }
-                for (Turn& turn : turns) {
+                const std::uint64_t clip_end = clip.first_frame + clip.frames.size();
+                for (const Turn& turn : decode_(clip.frames, clip.first_frame)) {
                     if (turn.text.empty()) continue;
-                    if (sink != nullptr) sink->OnTurn(turn);
-                    previous = turn;
+                    chunks.push_back(turn);
+                    // Chunk edges: where a short answer inside a long clip
+                    // begins and ends
+                    for (const std::uint64_t edge :
+                         {turn.first_frame, turn.first_frame + turn.frame_count}) {
+                        if (edge > clip.first_frame && edge < clip_end) cuts.push_back(edge);
+                    }
                 }
+                RecordDecode(clip.frames.size(), t0);
             }
         } catch (...) {  // NOLINT(bugprone-empty-catch)
         }
-
+        // The cuts land before the caller is released, so a TakeClipCuts
+        // right after the decode sees them
         lock.lock();
-        previous_turn_ = std::move(previous);
-        busy_ = false;
-        cv_.notify_all();
+        clip_cuts_.insert(clip_cuts_.end(), cuts.begin(), cuts.end());
+        lock.unlock();
+        clip.chunks.set_value(std::move(chunks));
+        lock.lock();
     }
     // A caller may still be blocked on a pending clip at shutdown
     for (auto& clip : clips_) clip.chunks.set_value({});

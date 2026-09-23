@@ -14,7 +14,7 @@ enum class AnchorOrigin { kNone, kAccrued, kEnrolled };
 struct AnchorStatus {
     AnchorOrigin origin = AnchorOrigin::kNone;
     std::uint64_t sessions = 0;     // consultations accrued since the print began
-    std::uint64_t enrolled_at = 0;  // unix seconds; 0 when never enrolled
+    std::uint64_t enrolled_at = 0;  // unix seconds, 0 when never enrolled
 };
 
 namespace detail {
@@ -26,14 +26,14 @@ struct AnchorRecord {
     std::uint64_t enrolled_at = 0;
 };
 
-// Version 2 layout; version 1 (no enrolment fields) still parses
+// Version 2 layout. Version 1 (no enrolment fields) still parses
 std::vector<std::uint8_t> SerializeAnchor(const AnchorRecord& record);
 std::optional<AnchorRecord> ParseAnchor(std::span<const std::uint8_t> plain);
 
 }  // namespace detail
 
 // The clinician's voiceprint, DPAPI-protected. It starts from an enrolment or
-// from the first consultation and every consultation refines it; a corrupt
+// from the first consultation and every consultation refines it. A corrupt
 // file resets to empty and rebuilds
 class AnchorStore {
    public:
@@ -43,7 +43,7 @@ class AnchorStore {
 
     explicit AnchorStore(const std::filesystem::path& root);
 
-    // Unit-norm voiceprint; empty before any enrolment or consultation
+    // Unit-norm voiceprint, empty before any enrolment or consultation
     std::optional<std::vector<float>> Anchor() const;
     std::uint64_t Sessions() const;
     AnchorStatus Status() const;

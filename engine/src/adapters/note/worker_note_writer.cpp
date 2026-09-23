@@ -18,9 +18,11 @@
 #include <nlohmann/json.hpp>
 
 #include "adapters/ipc/framing.hpp"
+#include "adapters/ipc/messages.hpp"
+#include "adapters/ipc/pipe_client.hpp"
 #include "adapters/models/model_store.hpp"
+#include "adapters/system/child_process.hpp"
 #include "adapters/system/gpu_lease.hpp"
-#include "adapters/system/power_throttling.hpp"
 
 namespace ambient::note {
 
@@ -28,8 +30,8 @@ using nlohmann::json;
 
 namespace {
 
-// The GPU lease gave up waiting on the host: it is wedged in a driver
-// call; the lane reports it rather than retrying
+// The GPU lease gave up waiting on the host, which is wedged in a driver
+// call. The lane reports it rather than retrying
 constexpr const char* kWedged =
     "the note process is stuck in the graphics driver; restart the computer";
 
@@ -41,19 +43,17 @@ struct WorkerNoteWriter::Impl {
     std::filesystem::path prompt_path;
     const models::ModelStore* store;
 
-    std::mutex state_mutex;  // guards spawn and the handles
-    std::mutex write_mutex;  // frames interleave whole, never torn
-    std::mutex read_mutex;   // one reader of the pipe at a time: the attempt or the watcher
-    HANDLE process = nullptr;
-    HANDLE job = nullptr;  // kill-on-close: the engine's death is the worker's
-    HANDLE pipe = INVALID_HANDLE_VALUE;
-    ipc::FrameDecoder decoder;
+    std::mutex state_mutex;     // guards spawn and the handles
+    std::mutex write_mutex;     // frames are written whole
+    std::mutex read_mutex;      // one reader of the pipe at a time: the attempt or the watcher
+    system::ChildProcess host;  // kill-on-close: the engine's death is the worker's
+    ipc::PipeClient pipe;
     std::int64_t next_id = 1;
-    // Process-wide: a host winding down keeps its pipe name briefly; a
+    // Process-wide: a host winding down keeps its pipe name briefly, so a
     // second writer must not reuse it
     static inline std::atomic<int> spawn_count{0};
     bool closing = false;
-    bool respawning = false;                  // state_mutex; Run is between its two attempts
+    bool respawning = false;                  // under state_mutex: Run is between attempts
     std::atomic<bool> attempt_active{false};  // the note thread owns the pipe's read side
 
     // The lane: which tier, whether resident. lane_mutex is never held
@@ -64,7 +64,7 @@ struct WorkerNoteWriter::Impl {
     std::thread watcher;  // reads the host's load outcome while nothing else reads
     std::atomic<bool> watch_stop{false};
 
-    // A generation streams partials constantly; this much silence means the
+    // A generation streams partials constantly, so this much silence means the
     // worker is wedged inside a driver call and only a respawn recovers it.
     // A request queued behind a load is silent for as long as the load
     // takes (hash + compile of a 19 GB model: minutes), so that wait has
@@ -73,28 +73,13 @@ struct WorkerNoteWriter::Impl {
     static constexpr DWORD kLoadTimeoutMs = 20 * 60'000;
 
     bool WorkerAlive() const {
-        return process != nullptr && WaitForSingleObject(process, 0) == WAIT_TIMEOUT &&
-               pipe != INVALID_HANDLE_VALUE;
+        return host.Alive() && pipe.IsOpen();
     }
 
     void CloseWorker() {
-        if (pipe != INVALID_HANDLE_VALUE) {
-            CloseHandle(pipe);
-            pipe = INVALID_HANDLE_VALUE;
-        }
-        if (process != nullptr) {
-            // Losing the pipe ends the host's serve loop; give it that exit
-            if (WaitForSingleObject(process, 2000) == WAIT_TIMEOUT) {
-                TerminateProcess(process, 1);
-            }
-            CloseHandle(process);
-            process = nullptr;
-        }
-        if (job != nullptr) {
-            CloseHandle(job);
-            job = nullptr;
-        }
-        decoder = ipc::FrameDecoder{};
+        pipe.Close();
+        // Losing the pipe ends the host's serve loop. The grace period lets it exit
+        host.End(2000);
     }
 
     std::string Tier() const {
@@ -102,7 +87,7 @@ struct WorkerNoteWriter::Impl {
         return state.tier;
     }
 
-    // Spawns the host and connects its private pipe; throws when the host
+    // Spawns the host and connects its private pipe. Throws when the host
     // cannot start, which surfaces as a failed note
     void EnsureWorker() {
         std::lock_guard<std::mutex> lock(state_mutex);
@@ -115,55 +100,24 @@ struct WorkerNoteWriter::Impl {
                                        std::to_wstring(GetCurrentProcessId()) + L"-" +
                                        std::to_wstring(++spawn_count);
         const std::string tier = Tier();
-        std::wstring command = L"\"" + host_exe.wstring() + L"\" \"" + pipe_path + L"\" \"" +
-                               models_root.wstring() + L"\" \"" + prompt_path.wstring() + L"\" \"" +
-                               std::wstring(tier.begin(), tier.end()) + L"\"";
-        // The worker shares the engine's stderr so its diagnostics land in
-        // the same log
-        STARTUPINFOW startup{};
-        startup.cb = sizeof(startup);
-        startup.dwFlags = STARTF_USESTDHANDLES;
-        startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-        SetHandleInformation(startup.hStdError, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
-        // Suspended until it is in the job, so it can never outlive the engine
-        PROCESS_INFORMATION info{};
-        if (!CreateProcessW(host_exe.wstring().c_str(), command.data(), nullptr, nullptr, TRUE,
-                            CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &startup,
-                            &info)) {
+        const std::wstring args = L"\"" + pipe_path + L"\" \"" + models_root.wstring() + L"\" \"" +
+                                  prompt_path.wstring() + L"\" \"" +
+                                  std::wstring(tier.begin(), tier.end()) + L"\"";
+        try {
+            host = system::ChildProcess::Spawn(host_exe, args, {.exempt_from_throttling = true});
+        } catch (const std::exception&) {
             throw std::runtime_error("note worker failed to start");
         }
-        job = CreateJobObjectW(nullptr, nullptr);
-        if (job != nullptr) {
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits,
-                                    sizeof(limits));
-            AssignProcessToJobObject(job, info.hProcess);
-        }
-        system::DisableThrottling(info.hProcess);  // the host repeats this on itself
-        ResumeThread(info.hThread);
-        CloseHandle(info.hThread);
-        process = info.hProcess;
-
-        // The host claims the pipe before any model work, so this is quick
+        // The host claims the pipe before any model work, so the connect is quick
         for (int attempt = 0; attempt < 150; ++attempt) {
-            pipe = CreateFileW(pipe_path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
-                               nullptr);
-            if (pipe != INVALID_HANDLE_VALUE) {
-                break;
-            }
-            if (WaitForSingleObject(process, 100) != WAIT_TIMEOUT) {
-                break;  // died before serving
-            }
+            if (pipe.Open(pipe_path)) break;
+            if (host.WaitFor(100)) break;  // died before serving
         }
-        if (pipe == INVALID_HANDLE_VALUE) {
+        if (!pipe.IsOpen()) {
             CloseWorker();
             throw std::runtime_error("note worker pipe did not open");
         }
-        ULONG server_pid = 0;
-        if (!GetNamedPipeServerProcessId(pipe, &server_pid) ||
-            server_pid != GetProcessId(process)) {
+        if (pipe.ServerPid() != host.Pid()) {
             CloseWorker();
             throw std::runtime_error("note worker pipe is not the spawned process");
         }
@@ -177,14 +131,10 @@ struct WorkerNoteWriter::Impl {
         const std::string frame =
             ipc::EncodeFrame(request.dump(-1, ' ', false, json::error_handler_t::replace));
         std::lock_guard<std::mutex> lock(write_mutex);
-        DWORD written = 0;
-        if (!WriteFile(pipe, frame.data(), static_cast<DWORD>(frame.size()), &written, nullptr) ||
-            written != frame.size()) {
+        if (!pipe.Write(frame)) {
             throw std::runtime_error("note worker went away");
         }
     }
-
-    // ---- the lane -------------------------------------------------------
 
     void Transition(const std::function<void(NoteModelState&)>& mutate) {
         NoteModelState snapshot;
@@ -204,7 +154,7 @@ struct WorkerNoteWriter::Impl {
     }
 
     // Names the model a tier resolves to, and whether its compile cache
-    // exists; throws the store's own message when nothing claims the tier
+    // exists. Throws the store's own message when nothing claims the tier
     void Describe(const std::string& tier, NoteModelState& into) const {
         if (store == nullptr) {
             into.id.clear();
@@ -237,27 +187,19 @@ struct WorkerNoteWriter::Impl {
         }
     }
 
-    // Reads whatever frames are waiting and dispatches load events; the
+    // Reads whatever frames are waiting and dispatches load events. The
     // caller holds read_mutex. False when the pipe is gone
     bool PumpFrames() {
         for (;;) {
-            DWORD available = 0;
-            if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr)) {
-                return false;
+            switch (pipe.Read(4096)) {
+                case ipc::PipeClient::Poll::kGone:
+                    return false;
+                case ipc::PipeClient::Poll::kNothing:
+                    return true;
+                case ipc::PipeClient::Poll::kRead:
+                    break;
             }
-            if (available == 0) {
-                return true;
-            }
-            char buffer[4096];
-            DWORD read = 0;
-            if (!ReadFile(pipe, buffer,
-                          static_cast<DWORD>(std::min<DWORD>(available, sizeof(buffer))), &read,
-                          nullptr) ||
-                read == 0) {
-                return false;
-            }
-            decoder.Push({buffer, read});
-            while (auto payload = decoder.Next()) {
+            while (auto payload = pipe.NextFrame()) {
                 const json message = json::parse(*payload, nullptr, false);
                 if (message.is_object() && message.contains("method")) {
                     OnHostEvent(message["method"].get<std::string>(),
@@ -284,7 +226,7 @@ struct WorkerNoteWriter::Impl {
                     alive = WorkerAlive();
                 }
                 if (!alive || !PumpFrames()) {
-                    // Only a host that died on its own is a failure; a
+                    // Only a host that died on its own is a failure. A
                     // deliberate close stopped this thread first
                     std::lock_guard<std::mutex> lock(state_mutex);
                     if (closing || respawning) return;
@@ -310,8 +252,6 @@ struct WorkerNoteWriter::Impl {
         }
     }
 
-    // ---- attempts -------------------------------------------------------
-
     // Bounded: a worker wedged inside a driver call must not wedge the
     // note thread with it
     json ReadMessage() {
@@ -321,21 +261,16 @@ struct WorkerNoteWriter::Impl {
         for (;;) {
             {
                 std::lock_guard<std::mutex> reading(read_mutex);
-                if (auto payload = decoder.Next()) {
+                if (auto payload = pipe.NextFrame()) {
                     return json::parse(*payload, nullptr, false);
                 }
-                DWORD available = 0;
-                if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr)) {
-                    throw std::runtime_error("note worker died");
-                }
-                if (available > 0) {
-                    char buffer[64 * 1024];
-                    DWORD read = 0;
-                    if (!ReadFile(pipe, buffer, sizeof(buffer), &read, nullptr) || read == 0) {
+                switch (pipe.Read()) {
+                    case ipc::PipeClient::Poll::kGone:
                         throw std::runtime_error("note worker died");
-                    }
-                    decoder.Push({buffer, read});
-                    continue;
+                    case ipc::PipeClient::Poll::kRead:
+                        continue;
+                    case ipc::PipeClient::Poll::kNothing:
+                        break;
                 }
             }
             if (std::chrono::steady_clock::now() >= deadline) {
@@ -345,8 +280,8 @@ struct WorkerNoteWriter::Impl {
         }
     }
 
-    // Prefill acks pile up unread between attempts; drained here so the
-    // host's pipe writes never block. Only when no attempt owns the reads
+    // Prefill acks pile up unread between attempts. Draining them keeps the
+    // host's pipe writes from blocking. Only when no attempt owns the reads
     void DrainAcks() {
         std::lock_guard<std::mutex> reading(read_mutex);
         PumpFrames();
@@ -458,30 +393,20 @@ WorkerNoteWriter::~WorkerNoteWriter() {
     impl_->CloseWorker();
 }
 
-// Spawn and load hide inside capture; AMBIENT_NOTE_LOAD=stop defers the load
-// (co-residency experiment knob). Failure surfaces on Write
+// Spawn and load hide inside capture. Failure surfaces on Write
 void WorkerNoteWriter::Prepare() {
-    static const bool load_at_stop = [] {
-        char* value = nullptr;
-        const bool at_stop = _dupenv_s(&value, nullptr, "AMBIENT_NOTE_LOAD") == 0 &&
-                             value != nullptr && std::string(value) == "stop";
-        std::free(value);
-        return at_stop;
-    }();
     if (impl_->Wedged()) return;
     try {
         impl_->EnsureWorker();
-        if (!load_at_stop) {
-            bool starting = false;
-            impl_->Transition([&starting](NoteModelState& s) {
-                if (s.phase == NoteModelState::Phase::kReady) return;
-                starting = s.phase != NoteModelState::Phase::kLoading;
-                s.phase = NoteModelState::Phase::kLoading;
-                s.detail.clear();
-            });
-            impl_->Send("prepare", json::object());
-            if (starting) impl_->StartWatcher();
-        }
+        bool starting = false;
+        impl_->Transition([&starting](NoteModelState& s) {
+            if (s.phase == NoteModelState::Phase::kReady) return;
+            starting = s.phase != NoteModelState::Phase::kLoading;
+            s.phase = NoteModelState::Phase::kLoading;
+            s.detail.clear();
+        });
+        impl_->Send("prepare", json::object());
+        if (starting) impl_->StartWatcher();
     } catch (const std::exception& e) {
         std::fprintf(stderr, "ambient-engine: note worker prepare failed (%s)\n", e.what());
         impl_->Transition([&e](NoteModelState& s) {
@@ -491,7 +416,7 @@ void WorkerNoteWriter::Prepare() {
     }
 }
 
-// A different tier is a new host; the same tier is a no-op unless its last
+// A different tier is a new host. The same tier is a no-op unless its last
 // load failed. Loads immediately so a failure surfaces at the setting
 NoteModelState WorkerNoteWriter::Configure(const std::string& tier) {
     NoteModelState described;
@@ -536,12 +461,7 @@ namespace {
 
 json TurnsJson(const std::vector<asr::Turn>& transcript) {
     json turns = json::array();
-    for (const auto& turn : transcript) {
-        turns.push_back({{"firstFrame", turn.first_frame},
-                         {"frameCount", turn.frame_count},
-                         {"speaker", turn.speaker},
-                         {"text", turn.text}});
-    }
+    for (const auto& turn : transcript) turns.push_back(ipc::TurnJson(turn));
     return turns;
 }
 
@@ -586,7 +506,7 @@ std::string WorkerNoteWriter::WriteSummary(const std::string& note) {
     return impl_->Run("summary", {{"note", note}}, nullptr);
 }
 
-// A failed title is no title, never a failed note: no respawn, no throw
+// A failed title leaves the note without a title: no respawn, no throw
 std::string WorkerNoteWriter::WriteLabel(const std::string& note) {
     if (note.empty()) {
         return {};

@@ -12,8 +12,9 @@ public class SessionContractTest
     // The stopped session reports its transcript stage before the seal; the
     // cancelled one reports nothing. No diariser is staged here, so no
     // "speakers" stage
+    // The three finalise stages (transcript, speakers, turns), then the documents
     private static readonly string[] ExpectedNotifications =
-        ["session/progress", "note/ready", "patient/ready"];
+        ["session/progress", "session/progress", "session/progress", "note/ready", "patient/ready"];
 
     // Two seconds of PCM16 silence: sessions replay it instead of a microphone
     internal static string WriteSilenceWav()
@@ -55,7 +56,6 @@ public class SessionContractTest
             await using var engine =
                 EngineProcess.Start($"LOCAL\\ambient-session-{Guid.NewGuid():N}", wav);
             var notifications = new List<string>();
-            var turnTexts = new List<string>();
             var patientReady = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -66,10 +66,6 @@ public class SessionContractTest
                     lock (notifications)
                     {
                         notifications.Add(method);
-                        if (method == "transcript.turn")
-                        {
-                            turnTexts.Add(parameters.GetProperty("text").GetString() ?? "");
-                        }
                     }
 
                     if (method == "patient/ready")
@@ -89,19 +85,14 @@ public class SessionContractTest
                 await patientReady.Task.WaitAsync(Timeout);
                 lock (notifications)
                 {
-                    // Sessions stream levels and turns and the embedder announces itself
-                    // once; the pipeline ordering holds among the rest
+                    // Sessions stream levels and the embedder announces itself once;
+                    // the pipeline ordering holds among the rest
                     Assert.Contains("audio.level", notifications);
                     Assert.Equal(
                         ExpectedNotifications,
                         notifications
-                            .Where(n => n is not (
-                                "audio.level" or "transcript.turn" or "guidance/model"))
+                            .Where(n => n is not ("audio.level" or "guidance/model"))
                             .ToArray());
-
-                    // The cancelled session emits no turn; the stopped one flushes its tail
-                    var turn = Assert.Single(turnTexts);
-                    Assert.StartsWith("scripted turn 0", turn);
                 }
             }
 

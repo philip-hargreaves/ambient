@@ -8,7 +8,7 @@
 namespace ambient::diar {
 namespace {
 
-// 589 frames like the real model; helpers author class runs
+// 589 frames like the real model. Helpers author class runs
 std::vector<std::int8_t> Frames(std::initializer_list<std::pair<int, int>> runs) {
     std::vector<std::int8_t> classes;
     for (const auto& [cls, count] : runs) {

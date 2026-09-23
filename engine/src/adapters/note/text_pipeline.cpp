@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "adapters/models/model_store.hpp"
-#include "core/common/env_flag.hpp"
 
 namespace ambient::note {
 
@@ -43,17 +42,11 @@ class LlmTextPipeline : public TextPipeline {
         return {result.perf_metrics.get_num_input_tokens()};
     }
 
-    // The stateful pipeline on the Intel GPU keeps one KV history across
-    // calls (measured)
-    bool ExtendsKv() const override {
-        return true;
-    }
-
    private:
     ov::genai::LLMPipeline pipeline_;
 };
 
-// The multimodal export used text-only; the vision towers load and idle
+// The multimodal export used text-only. The vision towers load and idle
 class VlmTextPipeline : public TextPipeline {
    public:
     VlmTextPipeline(const models::ModelInfo& info, const std::string& device)
@@ -64,12 +57,6 @@ class VlmTextPipeline : public TextPipeline {
         ov::genai::VLMDecodedResults result =
             pipeline_.generate(prompt, std::vector<ov::Tensor>{}, config, Wrap(streamer));
         return {result.perf_metrics.get_num_input_tokens()};
-    }
-
-    // Measured to extend the KV like the LLM pipeline; AMBIENT_VLM_PREFILL=0
-    // turns the capture-phase prefill off here
-    bool ExtendsKv() const override {
-        return EnvFlag("AMBIENT_VLM_PREFILL");
     }
 
    private:

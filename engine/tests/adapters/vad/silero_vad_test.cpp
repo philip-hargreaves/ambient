@@ -14,7 +14,7 @@
 namespace ambient::audio {
 namespace {
 
-// Not in the repo; these tests skip without it
+// Not in the repo. These tests skip without it
 constexpr const char* kWav =
     "C:/dev/intelliscribe/bench/transcription/mixed/day1_consultation01_mixed.wav";
 
@@ -63,7 +63,7 @@ TEST(SileroVad, SeparatesSpeechFromSilenceAtTheShippedThresholds) {
                 per_hop);
     EXPECT_GT(max_speech, 0.40f) << "real speech must clear the enter threshold";
     EXPECT_LT(max_silence, 0.25f) << "digital silence must stay under the exit threshold";
-    // Release measures 0.097 ms, matching the spec's ~0.1; the slack is Debug
+    // Release measures 0.097 ms, matching the spec's ~0.1. The slack is Debug
     // harness overhead, and a 32 ms hop budget keeps inline capture safe
     EXPECT_LT(per_hop, 2.0) << "inline on the audio pipeline requires margin";
 }

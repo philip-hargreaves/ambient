@@ -11,21 +11,27 @@
 #include <thread>
 #include <utility>
 
+#include "core/metrics/metrics.hpp"
+
 namespace ambient::models {
 
-// Builds T on a background thread; Get waits and rethrows a load failure
+// Builds T on a background thread. Get waits and rethrows a load failure.
+// A successful build records its seconds under `name`
 template <typename T>
 class DeferredLoad {
    public:
-    DeferredLoad(std::string name, std::function<std::unique_ptr<T>()> build)
+    DeferredLoad(std::string name, std::function<std::unique_ptr<T>()> build,
+                 metrics::Registry* metrics = nullptr)
         : name_(std::move(name)) {
-        loader_ = std::thread([this, build = std::move(build)] {
+        loader_ = std::thread([this, build = std::move(build), metrics] {
             const auto t0 = std::chrono::steady_clock::now();
             try {
                 built_ = build();
-                std::fprintf(
-                    stderr, "ambient-engine: %s ready in %.1f s\n", name_.c_str(),
-                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+                const double seconds =
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                std::fprintf(stderr, "ambient-engine: %s ready in %.1f s\n", name_.c_str(),
+                             seconds);
+                if (metrics != nullptr) metrics->RecordLoad(name_, seconds);
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "ambient-engine: %s unavailable (%s)\n", name_.c_str(),
                              e.what());
@@ -56,12 +62,12 @@ class DeferredLoad {
         return *built_;
     }
 
-    // True only for a successful build; never blocks
+    // True only for a successful build. Never blocks
     bool Loaded() const {
         return ready_.load() && error_ == nullptr;
     }
 
-    // True once the build finished, loaded or failed; never blocks
+    // True once the build finished, loaded or failed. Never blocks
     bool Settled() const {
         return ready_.load();
     }

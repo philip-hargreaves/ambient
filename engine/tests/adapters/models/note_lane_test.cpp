@@ -16,7 +16,7 @@ namespace {
 
 using Phase = NoteModelState::Phase;
 
-// A store with a note model per tier; the fake host loads none of them
+// A store with a note model per tier. The fake host loads none of them
 struct TieredStore {
     std::filesystem::path root;
 

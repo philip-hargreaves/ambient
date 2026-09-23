@@ -1,5 +1,5 @@
 // The note model's own process: a driver fault here costs a respawn, never
-// the engine. Speaks JSON-RPC on a private pipe; exits when the engine goes.
+// the engine. Speaks JSON-RPC on a private pipe and exits when the engine goes.
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -15,10 +15,11 @@
 #include <crtdbg.h>
 #endif
 
+#include "adapters/ipc/messages.hpp"
 #include "adapters/ipc/pipe_server.hpp"
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
-#include "adapters/note/qwen_note_writer.hpp"
+#include "adapters/note/llm_note_writer.hpp"
 #include "adapters/system/power_throttling.hpp"
 #include "ports/transcriber.hpp"
 
@@ -84,9 +85,7 @@ class GenerationLane {
 std::vector<ambient::asr::Turn> TurnsFrom(const nlohmann::json& params) {
     std::vector<ambient::asr::Turn> turns;
     for (const auto& t : params.value("turns", nlohmann::json::array())) {
-        turns.push_back({t.value("firstFrame", std::uint64_t{0}),
-                         t.value("frameCount", std::uint64_t{0}), t.value("speaker", ""),
-                         t.value("text", "")});
+        turns.push_back(ambient::ipc::TurnFromJson(t));
     }
     return turns;
 }
@@ -110,20 +109,20 @@ int main(int argc, char* argv[]) {
         const std::wstring pipe_name = std::filesystem::path(argv[1]).wstring();
         const std::filesystem::path models_root = argv[2];
         const std::filesystem::path prompt_path = argv[3];
-        // The tier is a role; the store inside this process resolves it
+        // The tier is a role that the store inside this process resolves
         const std::string tier = argc > 4 ? argv[4] : "default";
 
         ambient::ipc::PipeServer server(pipe_name);
         ambient::models::ModelStore store(models_root);
         ambient::models::OvRuntime runtime;
-        ambient::note::QwenNoteWriter writer(store, runtime, prompt_path, nullptr, tier);
+        ambient::note::LlmNoteWriter writer(store, runtime, prompt_path, nullptr, tier);
         GenerationLane lane(server);
 
         using ambient::ipc::Error;
         using ambient::ipc::json;
         using ambient::ipc::kSessionError;
-        // The engine supervises the load through these two, never by polling
-        writer.SetLoadListener([&server](const ambient::note::QwenNoteWriter::LoadReport& r) {
+        // The engine supervises the load through these two events
+        writer.SetLoadListener([&server](const ambient::note::LlmNoteWriter::LoadReport& r) {
             if (r.ok) {
                 server.PushNotification("loaded", {{"id", r.id},
                                                    {"name", r.name},
@@ -142,8 +141,8 @@ int main(int argc, char* argv[]) {
             writer.Cancel();
             return json::object();
         });
-        // Inline: short, and a failure is only a lost guess, never an error
-        // the engine's next attempt could mistake for its own
+        // Inline: short, and a failure is only a lost guess. Reporting it as an
+        // error would let the engine's next attempt mistake it for its own
         server.RegisterMethod("prefill", [&writer](const json& params) {
             try {
                 writer.Prefill(TurnsFrom(params), {params.value("style", "prose"), "standard"});
@@ -197,7 +196,7 @@ int main(int argc, char* argv[]) {
                 return json::object();
             });
 
-        // The engine is the one client; its death ends this serve loop and
+        // The engine is the one client. Its death ends this serve loop and
         // the process with it, so a worker can never outlive its engine
         server.ServeOneClient();
         return 0;

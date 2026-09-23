@@ -6,8 +6,8 @@
 
 namespace ambient::note {
 
-// The note's first sentence, cut at a word; "1.5 mg" does not end a
-// sentence, whitespace collapses
+// The note's first sentence, cut at a word. "1.5 mg" does not end a
+// sentence, and whitespace collapses
 inline std::string LabelFrom(std::string_view note, std::size_t max_chars = 80) {
     std::string label;
     bool space_pending = false;
@@ -37,7 +37,7 @@ inline std::string LabelFrom(std::string_view note, std::size_t max_chars = 80) 
     return label;
 }
 
-// Model titles held to the list's standard; empty falls back to the date,
+// Model titles held to the list's standard. Empty falls back to the date,
 // so rejection is safe
 inline std::string SanitiseLabel(std::string_view raw, std::size_t max_chars = 60) {
     const auto line_end = raw.find('\n');

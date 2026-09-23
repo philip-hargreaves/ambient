@@ -69,8 +69,8 @@ TEST(DiariserPipeline, ADoctorPatientConsultDiarisesToTwoSpeakers) {
     std::filesystem::remove_all(anchor_root, ec);
 }
 
-// The voiceprints moved off the Diarise path (they now overlap the GPU turn
-// decode) and AccrueDoctor reuses them: the numbers must be the ones the
+// The voiceprints are computed off the Diarise path, overlapping the GPU turn
+// decode, and DoctorVoiceprint reuses them: the numbers must be the ones the
 // reference method produces, and the reuse must actually skip the embed
 TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReusesThem) {
     if (!std::filesystem::exists(kWav)) {
@@ -88,7 +88,7 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
     // Session one teaches the anchor from cluster 0
     const auto first = diariser.Diarise(audio);
     ASSERT_EQ(first.cluster_count, 2);
-    diariser.AccrueDoctor(audio, first.slices, 0);
+    diariser.AccrueVoiceprint(diariser.DoctorVoiceprint(audio, first.slices, 0));
 
     // Session two: similarities equal the reference voiceprint against the anchor
     const auto second = diariser.Diarise(audio);
@@ -108,9 +108,9 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
     }
     EXPECT_GT(similarity[0], similarity[1]) << "the taught cluster ranks nearer";
 
-    // Accrue reuses the voiceprint just computed: no second embed of the cluster
+    // Accrue reuses the voiceprint Diarise computed: no second embed of the cluster
     const auto start = std::chrono::steady_clock::now();
-    diariser.AccrueDoctor(audio, second.slices, 0);
+    diariser.AccrueVoiceprint(diariser.DoctorVoiceprint(audio, second.slices, 0));
     const auto took = std::chrono::duration<double>(std::chrono::steady_clock::now() - start);
     EXPECT_LT(took.count(), 0.05) << "a re-embed of the cluster takes hundreds of ms";
     std::error_code ec;
@@ -133,18 +133,8 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
     AnchorStore fed_anchors(root / "b");
     SpeakerDiariser fed(store, runtime, fed_anchors);
 
-    // Synthetic reconciled turns, 6 s each; edges double as slice cuts
-    std::vector<asr::Turn> turns;
-    std::vector<std::uint64_t> boundaries;
-    for (std::uint64_t f = 0; f + 96000 <= audio.size(); f += 96000) {
-        asr::Turn turn;
-        turn.first_frame = f;
-        turn.frame_count = 96000;
-        turn.text = "spoken words";
-        turns.push_back(std::move(turn));
-        boundaries.push_back(f);
-        boundaries.push_back(f + 96000);
-    }
+    // Synthetic reconciled turns, 6 s each. Edges double as slice cuts
+
     const DecodeClipFn decode = [](std::span<const float> clip, std::uint64_t first) {
         asr::Turn chunk;
         chunk.first_frame = first;
@@ -153,11 +143,11 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
         return std::vector<asr::Turn>{chunk};
     };
     for (std::uint64_t fed_to = 80000; fed_to < audio.size(); fed_to += 80000) {  // 5 s steps
-        fed.Advance(std::span(audio).first(fed_to), turns, decode);
+        fed.Advance(std::span(audio).first(fed_to), decode);
     }
 
-    const auto want = batch.Diarise(audio, boundaries);
-    const auto got = fed.Diarise(audio, boundaries);
+    const auto want = batch.Diarise(audio);
+    const auto got = fed.Diarise(audio);
 
     ASSERT_EQ(got.slices.size(), want.slices.size());
     for (std::size_t i = 0; i < got.slices.size(); ++i) {

@@ -17,7 +17,7 @@
 namespace ambient::audio {
 namespace {
 
-// Records what arrives, in order; can be held so the ring fills behind it
+// Records what arrives, in order. Holding it lets the ring fill behind it
 struct RecordingSink : IAudioSink {
     std::vector<float> frames;
     std::vector<std::uint64_t> lost_per_packet;
@@ -91,7 +91,7 @@ TEST(BufferedSink, AStallBehindTheSinkCostsNothingWithinTheRing) {
     inner.hold = true;
     BufferedSink sink(inner, 16000);
     const auto audio = Ramp(8000);
-    // The source keeps delivering while the sink is stuck; half the ring fills
+    // The source keeps delivering while the sink is stuck, filling half the ring
     for (std::size_t at = 0; at < audio.size(); at += 160) {
         sink.OnAudio(std::span<const float>(audio).subspan(at, 160), 0);
     }
@@ -104,14 +104,14 @@ TEST(BufferedSink, AStallBehindTheSinkCostsNothingWithinTheRing) {
 TEST(BufferedSink, AnOverrunIsCountedAsLossNotDroppedSilently) {
     RecordingSink inner;
     inner.hold = true;
-    BufferedSink sink(inner, 1024);  // rounds to 1024
+    BufferedSink sink(inner, 1024);
     const auto audio = Ramp(3000);
     for (std::size_t at = 0; at < audio.size(); at += 100) {
         sink.OnAudio(std::span<const float>(audio).subspan(at, 100), 0);
     }
     inner.hold = false;
     sink.OnEnd({SourceEndReason::kStopped, ""});
-    // What fitted arrived intact and in order; the rest is on the record
+    // What fitted arrived intact and in order. The rest is counted as lost
     ASSERT_LE(inner.frames.size(), 1024u);
     EXPECT_EQ(inner.frames, Ramp(inner.frames.size()));
     EXPECT_EQ(inner.frames.size() + inner.TotalLost(), 3000u);

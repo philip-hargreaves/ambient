@@ -4,7 +4,7 @@
 
 namespace {
 
-// Real enumeration; a runner with no microphone legitimately lists nothing
+// Real enumeration. A runner with no microphone legitimately lists nothing
 TEST(CaptureDevices, EveryListedDeviceIsWellFormed) {
     const auto devices = ambient::audio::ListCaptureDevices();
     int defaults = 0;

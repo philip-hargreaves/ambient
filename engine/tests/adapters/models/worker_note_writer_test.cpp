@@ -93,7 +93,7 @@ TEST(WorkerNoteWriter, AKilledWorkerRespawnsAndTheNoteStillArrives) {
     std::atomic<bool> killed{false};
     const std::string note =
         writer.Write(ElbowTranscript(), {}, [&killed](const std::string& partial) {
-            // The first streamed words prove generation is mid-flight; then
+            // The first streamed words prove generation is mid-flight, then
             // the worker dies under it
             if (partial.size() > 20 && !killed.exchange(true)) {
                 std::system("taskkill /IM ambient_note_host.exe /F >nul 2>&1");
@@ -139,8 +139,8 @@ TEST(WorkerNoteWriter, TheAccuracyTierWritesANoteThroughItsOwnPipeline) {
                  note.size());
 }
 
-// One tier through the real host, for the per-tier sweep: AMBIENT_SWEEP_TIER
-// names it; the host's own log carries verify, load and decode figures
+// One tier through the real host, for the per-tier sweep. AMBIENT_SWEEP_TIER
+// names it, and the host's own log carries verify, load and decode figures
 TEST(WorkerNoteWriter, NoteTierSweep) {
     char* wanted = nullptr;
     const std::string tier =

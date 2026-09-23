@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 
+#include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/guidance_scan.hpp"
 
@@ -186,7 +187,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
             out.searched.push_back(item.corpus);
         }
     }
-    const std::string whole(detail::Trim(text));
+    const std::string whole(strings::Trim(text));
     std::vector<std::string> queries;
     if (mode == SearchMode::kQuery) {
         if (!whole.empty()) queries.push_back(whole);

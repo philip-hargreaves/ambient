@@ -9,7 +9,7 @@
 
 namespace ambient::store {
 
-// Keeps each stream's IVs disjoint; every domain counts seq from zero
+// Keeps each stream's IVs disjoint. Every domain counts seq from zero
 enum class Domain : std::uint8_t {
     kAudio = 0,
     kTurns = 1,
@@ -30,14 +30,14 @@ enum class Domain : std::uint8_t {
     kUploadFile = 15,
 };
 
-// AES-256-GCM per session; IV = domain + sequence, both authenticated.
+// AES-256-GCM per session. IV = domain + sequence, both authenticated.
 // Destroying the key is the erase
 class ChunkCipher {
    public:
     static ChunkCipher Generate();
     static ChunkCipher FromWrapped(std::span<const std::uint8_t> wrapped);
 
-    // The key, DPAPI-protected for the current user; safe to persist
+    // The key, DPAPI-protected for the current user, safe to persist
     std::vector<std::uint8_t> Wrapped(const wchar_t* description = L"ambient session key") const;
 
     // Another cipher's key sealed under this one, so a store key can hold each

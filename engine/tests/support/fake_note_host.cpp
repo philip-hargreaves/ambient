@@ -1,6 +1,6 @@
 // A note host that loads nothing: speaks the host protocol so the lane's
 // state machine can be exercised with no weights and no GPU. A tier whose
-// model id contains "broken" fails to load; everything else loads in 100 ms
+// model id contains "broken" fails to load. Everything else loads in 100 ms
 #include <chrono>
 #include <cstdio>
 #include <filesystem>

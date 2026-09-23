@@ -12,7 +12,7 @@ struct ModelInfo;
 
 namespace ambient::note {
 
-// One resident model behind whichever GenAI pipeline its manifest names; the
+// One resident model behind whichever GenAI pipeline its manifest names. The
 // writer never learns which. A single history: a prompt that extends the
 // last one costs the delta, one that diverges re-prefills
 class TextPipeline {
@@ -25,14 +25,9 @@ class TextPipeline {
 
     virtual ~TextPipeline() = default;
 
-    // Streams pieces to the streamer when given; the streamer's STOP ends the generation
+    // Streams pieces to the streamer when given. The streamer's STOP ends the generation
     virtual Result Generate(const std::string& prompt, const ov::genai::GenerationConfig& config,
                             const Streamer& streamer) = 0;
-
-    // Whether a generate call extends the previous call's KV on this
-    // pipeline (measured per implementation): the capture-phase prefill and
-    // the prefix warm are pointless work otherwise
-    virtual bool ExtendsKv() const = 0;
 };
 
 // Builds the pipeline the manifest names, on the resolved device, with the

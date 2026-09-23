@@ -5,14 +5,14 @@
 
 namespace ambient::note {
 
-// Which tier is configured and whether its model is resident;
-// transitions feed the shell's status
+// Which tier is configured and whether its model is resident.
+// Transitions feed the shell's status
 struct NoteModelState {
     enum class Phase { kIdle, kLoading, kReady, kFailed };
 
     Phase phase = Phase::kIdle;
     std::string tier = "default";
-    std::string id;          // the model the tier resolves to; empty when none is staged
+    std::string id;          // the model the tier resolves to, empty when none is staged
     std::string name;        // its display name
     std::string detail;      // the reason, on kFailed
     double seconds = 0;      // verify + load, on kReady
@@ -22,7 +22,7 @@ struct NoteModelState {
 const char* PhaseName(NoteModelState::Phase phase);
 
 // The note lane's configuration surface: a tier is a role the model store
-// resolves, never a model. Separate from INoteWriter so a writer that
+// resolves to a model. Separate from INoteWriter so a writer that
 // serves one model needs none of this
 class INoteLane {
    public:

@@ -10,18 +10,19 @@
 
 namespace ambient::audio {
 
-// VAD behind a background load; a failed load throws on the first
+// VAD behind a background load. A failed load throws on the first
 // probability, loud rather than silent
 class DeferredVad : public IStreamingVad {
    public:
-    explicit DeferredVad(std::function<std::unique_ptr<IStreamingVad>()> build)
-        : inner_("vad", std::move(build)) {}
+    explicit DeferredVad(std::function<std::unique_ptr<IStreamingVad>()> build,
+                         metrics::Registry* metrics = nullptr)
+        : inner_("vad", std::move(build), metrics) {}
 
     float SpeechProbability(std::span<const float> hop) override {
         return inner_.Get().SpeechProbability(hop);
     }
 
-    // A fresh model starts reset; only an already-loaded one needs it
+    // A fresh model starts reset, so only an already-loaded one needs it
     void Reset() override {
         if (inner_.Loaded()) {
             inner_.Get().Reset();

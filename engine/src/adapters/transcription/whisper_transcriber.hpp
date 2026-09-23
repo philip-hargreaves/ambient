@@ -7,7 +7,6 @@
 #include <functional>
 #include <future>
 #include <mutex>
-#include <optional>
 #include <span>
 #include <string>
 #include <thread>
@@ -31,42 +30,25 @@ using DecodeFn = std::function<std::vector<Turn>(std::span<const float>, std::ui
 
 using DecodeLoader = std::function<DecodeFn()>;
 
-// Whisper behind the transcriber port: one worker thread loads then
-// decodes, so capture never waits on the GPU; Finish drains the backlog
+// Whisper behind the transcriber port: one worker thread loads then decodes
+// clips in order, so the load never blocks a caller
 class WhisperTranscriber : public ITranscriber {
    public:
-    // device_override applies to LIVE windows only; clips keep the manifest
-    // GPU, so low-power finalise pays GPU rate (the burst)
+    // device_override: the device every decode runs on, else the manifest's
     WhisperTranscriber(const models::ModelStore& store, models::OvRuntime& runtime,
                        std::string device_override = "", metrics::Registry* metrics = nullptr);
     explicit WhisperTranscriber(DecodeFn decode);  // Tests inject the decode
-    explicit WhisperTranscriber(DecodeLoader loader, metrics::Registry* metrics = nullptr,
-                                DecodeLoader clip_loader = {});  // Tests pace the load
-    WhisperTranscriber(DecodeFn decode, DecodeFn clip_decode);   // Tests split the devices
+    explicit WhisperTranscriber(DecodeLoader loader,
+                                metrics::Registry* metrics = nullptr);  // Tests pace the load
     ~WhisperTranscriber() override;
 
-    void Begin(ITurnSink& sink) override;
-    void Submit(std::span<const float> frames, std::uint64_t first_frame,
-                std::uint64_t first_new_frame = 0) override;
-    void Finish() override;
-
-    // Same worker queue, after pending windows; blocks until decoded and never
-    // touches the sink
-    std::string DecodeClip(std::span<const float> frames, std::uint64_t first_frame) override;
+    // Blocks until the worker has decoded the clip
     std::vector<Turn> DecodeClipChunks(std::span<const float> frames,
                                        std::uint64_t first_frame) override;
-
-    // Frees the pipeline once the queues drain; the next Submit reloads it
-    void Release() override;
 
     std::vector<std::uint64_t> TakeClipCuts() override;
 
    private:
-    struct Window {
-        std::vector<float> frames;
-        std::uint64_t first_frame;
-        std::uint64_t first_new_frame;
-    };
     struct Clip {
         std::vector<float> frames;
         std::uint64_t first_frame;
@@ -77,23 +59,14 @@ class WhisperTranscriber : public ITranscriber {
     void LoadIfPending();
     void RecordDecode(std::size_t frames, std::chrono::steady_clock::time_point t0);
 
-    DecodeLoader factory_;  // The reload recipe Release re-arms from
     DecodeLoader loader_;
     DecodeFn decode_;  // Worker-thread only once the loader has run
-    DecodeLoader clip_factory_;
-    DecodeLoader clip_loader_;
-    DecodeFn clip_decode_;  // Empty: clips share the live pipeline
     metrics::Registry* metrics_ = nullptr;
     std::mutex mutex_;
     std::condition_variable cv_;
-    std::deque<Window> queue_;
     std::deque<Clip> clips_;
-    ITurnSink* sink_ = nullptr;
-    std::optional<Turn> previous_turn_;     // for the boundary dedup backstop
     std::vector<std::uint64_t> clip_cuts_;  // segment edges inside decoded clips
-    bool busy_ = false;
     bool stopping_ = false;
-    bool release_requested_ = false;
     std::thread worker_;
 };
 

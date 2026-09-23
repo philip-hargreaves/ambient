@@ -40,7 +40,7 @@ struct NllbTranslator::Impl {
     nlohmann::json languages;
     std::int64_t eos = 2;
     std::int64_t decoder_start = 2;
-    std::mutex mutex;  // one translation at a time; guards the requests
+    std::mutex mutex;  // one translation at a time, guards the requests
     bool loaded = false;
     std::mutex prepare_mutex;  // guards the one warm thread
     std::thread loader;
@@ -106,7 +106,7 @@ struct NllbTranslator::Impl {
         ov::Tensor beam(ov::element::i32, {1});
         beam.data<std::int32_t>()[0] = 0;
         // The first step carries the decoder start token and the forced
-        // target language; the state carries everything after
+        // target language. The state carries everything after
         std::vector<std::int64_t> step = {decoder_start, target};
         std::vector<std::int64_t> generated;
         while (generated.size() < kMaxTokens && !cancel.load()) {
@@ -124,8 +124,8 @@ struct NllbTranslator::Impl {
             const float* last = logits.data<float>() + (shape[1] - 1) * vocab;
             auto token = static_cast<std::int64_t>(
                 std::distance(last, std::max_element(last, last + vocab)));
-            // Greedy decoding can lock onto one token; break the loop with
-            // the runner-up
+            // Greedy decoding can lock onto one token. The runner-up breaks
+            // the loop
             const auto size = generated.size();
             if (size >= 2 && token == generated[size - 1] && token == generated[size - 2]) {
                 std::vector<float> copy(last, last + vocab);

@@ -300,7 +300,7 @@ TEST(DocumentIngest, ADeletedFolderIsMadeAgainEmptyAndAnUnreachableParentHoldsTh
     ASSERT_TRUE(h.WaitUntil([&] { return std::filesystem::exists(h.folder / kReadMe); }));
     EXPECT_TRUE(h.ingest.List().found);
 
-    // A folder under a parent that went is out of reach, and nothing is acted on
+    // A folder whose parent is gone is out of reach, and nothing is acted on
     fixture::TempDir dir{"ingest-unreachable"};
     auto retriever = MakeRetriever(dir.path);
     retriever.Prepare();
@@ -377,7 +377,7 @@ TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
     EXPECT_TRUE(results.shown[0].citation.starts_with("gout, page 1 (added "))
         << results.shown[0].citation;
 
-    // The page view draws a bitmap under scratch with the chunk boxes. Open gets her file
+    // The page view draws a bitmap with the chunk boxes under scratch. Path gives the file
     const auto drawn = h.ingest.Render(id, 0, 0);
     EXPECT_EQ(drawn.width, 1190);
     EXPECT_EQ(drawn.height, 1684);

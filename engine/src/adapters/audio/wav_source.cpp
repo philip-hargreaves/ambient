@@ -50,7 +50,7 @@ bool TagIs(const std::array<char, 4>& tag, const char* expected) {
     return std::memcmp(tag.data(), expected, 4) == 0;
 }
 
-// Walks the chunk list to fmt and data; skips anything else, honouring the
+// Walks the chunk list to fmt and data. Skips other chunks, honouring the
 // pad byte after every odd-sized chunk
 std::variant<WavHeader, std::string> ParseHeader(std::ifstream& in) {
     std::array<char, 4> tag{};
@@ -174,7 +174,7 @@ SourceEnd WavSource::RunToEnd(IAudioSink& sink) {
         if (stop_requested_.load(std::memory_order_relaxed)) {
             return {SourceEndReason::kStopped, ""};
         }
-        // Hold the packet while paused, never drop it - the downstream
+        // Held while paused rather than dropped, since the downstream
         // clock is delivered audio. Stop still wins
         const bool was_paused = paused_.load(std::memory_order_relaxed);
         while (paused_.load(std::memory_order_relaxed) &&
@@ -206,7 +206,7 @@ SourceEnd WavSource::RunToEnd(IAudioSink& sink) {
         }
         sink.OnAudio(std::span<const float>(frames.data(), count), 0);
         // After the sink and best-effort, so playback never throttles the
-        // feed; the toggle opens and closes the device mid-stream
+        // feed. The toggle opens and closes the device mid-stream
         const bool monitor = monitor_.load(std::memory_order_relaxed);
         if (monitor && !player && !player_failed) {
             player = WasapiPlayer::Open();
@@ -220,8 +220,8 @@ SourceEnd WavSource::RunToEnd(IAudioSink& sink) {
             player->Write(decimated);
         }
         remaining -= count;
-        // Sleep to a deadline from a fixed origin, never for a duration -
-        // per-packet sleeps drift, and the drift compounds
+        // Sleeps to a deadline from a fixed origin. Per-packet sleeps
+        // drift, and the drift compounds
         if (config_.speed > 0) {
             frames_sent += count;
             const auto due = static_cast<std::int64_t>(static_cast<double>(frames_sent) * 1e6 /

@@ -1,6 +1,24 @@
 # core has no deps; OpenVINO and Win32 live in adapters
-add_library(ambient_core INTERFACE)
-target_include_directories(ambient_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_library(ambient_core STATIC
+    src/core/diarisation/resplit.cpp
+    src/core/diarisation/role_naming.cpp
+    src/core/diarisation/tidy_transcript.cpp
+    src/core/diarisation/turn_decode.cpp
+    src/core/guidance/document_units.cpp
+    src/core/guidance/guidance_query.cpp
+    src/core/guidance/guidance_rank.cpp
+    src/core/guidance/page_clean.cpp
+    src/core/guidance/page_text.cpp
+    src/core/guidance/patient_screen.cpp
+    src/core/guidance/recommendation_marks.cpp
+    src/core/guidance/reference_tail.cpp
+    src/core/session/enrolment.cpp
+    src/core/session/note_lane.cpp
+    src/core/session/playback.cpp
+    src/core/session/session_controller.cpp
+    src/core/session/transcribe_recording.cpp)
+target_include_directories(ambient_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(ambient_core PRIVATE ambient_warnings)
 
 # Toolchain is fetched and pinned by tools/get-openvino.ps1
 if(NOT EXISTS "${ambient_SOURCE_DIR}/external/openvino")
@@ -61,9 +79,12 @@ target_link_libraries(ambient_guidance_record
     PRIVATE ambient_warnings)
 
 add_library(ambient_ipc STATIC
-    src/adapters/ipc/handlers.cpp
+    src/adapters/ipc/engine_handlers.cpp
+    src/adapters/ipc/guidance_handlers.cpp
+    src/adapters/ipc/session_handlers.cpp
     src/adapters/ipc/pipe_security.cpp
-    src/adapters/ipc/pipe_server.cpp)
+    src/adapters/ipc/pipe_server.cpp
+    src/adapters/ipc/wire_events.cpp)
 target_link_libraries(ambient_ipc
     PUBLIC ambient_core ambient_guidance_record ambient_models nlohmann_json::nlohmann_json
     PRIVATE ambient_warnings ambient_audio advapi32)
@@ -105,7 +126,8 @@ configure_file(src/adapters/storage/schema.hpp.in
 add_library(ambient_storage STATIC
     src/adapters/storage/chunk_cipher.cpp
     src/adapters/storage/db.cpp
-    src/adapters/storage/sqlite_session_store.cpp)
+    src/adapters/storage/sqlite_session_store.cpp
+    src/adapters/storage/store_migrations.cpp)
 target_include_directories(ambient_storage PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(ambient_storage
     PUBLIC ambient_core
@@ -125,7 +147,7 @@ target_link_libraries(ambient_transcription
     PRIVATE ambient_models ambient_warnings openvino::genai)
 
 add_library(ambient_note STATIC
-    src/adapters/note/qwen_note_writer.cpp
+    src/adapters/note/llm_note_writer.cpp
     src/adapters/note/text_pipeline.cpp
     src/adapters/note/worker_note_writer.cpp)
 target_link_libraries(ambient_note
@@ -148,15 +170,13 @@ configure_file(src/adapters/guidance/schema.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/adapters/guidance/schema.hpp @ONLY)
 
 add_library(ambient_guidance STATIC
-    src/adapters/guidance/chunker.cpp
-    src/adapters/guidance/corpus_builder.cpp
     src/adapters/guidance/document_index.cpp
     src/adapters/guidance/document_ingest.cpp
+    src/adapters/guidance/folder_scan.cpp
     src/adapters/guidance/ingest_host.cpp
     src/adapters/guidance/corpus_store.cpp
     src/adapters/guidance/embedder.cpp
     src/adapters/guidance/guidance_lane.cpp
-    src/adapters/guidance/indexer.cpp
     src/adapters/guidance/retriever.cpp)
 target_include_directories(ambient_guidance PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(ambient_guidance
@@ -203,7 +223,7 @@ set_target_properties(kaldi-native-fbank-core kissfft PROPERTIES COMPILE_WARNING
 add_library(ambient_diarisation STATIC
     src/adapters/diarisation/anchor_store.cpp
     src/adapters/diarisation/cluster_voiceprint.cpp
-    src/adapters/diarisation/diar_worker.cpp
+    src/adapters/diarisation/capture_stage.cpp
     src/adapters/diarisation/fbank.cpp
     src/adapters/diarisation/segmenter.cpp
     src/adapters/diarisation/speaker_clustering.cpp
@@ -247,15 +267,27 @@ add_custom_command(TARGET ambient_ingest_host POST_BUILD
     VERBATIM)
 add_dependencies(ambient_engine ambient_ingest_host)
 
-# Builds guidance corpora with the staged embedder; deployed beside the engine
-add_executable(ambient_index src/index_main.cpp)
-target_link_libraries(ambient_index PRIVATE ambient_guidance ambient_models ambient_warnings)
+# Corpus building: the chunker, builder and indexer the engine never runs.
+# ambient_index builds a corpus with the staged embedder, so index and query
+# embeddings come from the same code; neither tool is deployed
+add_library(ambient_corpus STATIC
+    tools/corpus/chunker.cpp
+    tools/corpus/corpus_builder.cpp
+    tools/corpus/indexer.cpp)
+target_include_directories(ambient_corpus
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(ambient_corpus
+    PUBLIC ambient_guidance ambient_models nlohmann_json::nlohmann_json
+    PRIVATE ambient_storage ambient_warnings openvino::genai)
 
-# Prints a PDF's units, to check the chunker on real documents. A dev tool that is not deployed
-add_executable(ambient_units src/units_main.cpp)
+add_executable(ambient_index tools/corpus/index_main.cpp)
+target_link_libraries(ambient_index PRIVATE ambient_corpus ambient_warnings)
+add_dependencies(ambient_index ov_engine_runtime)
+
+# Prints a PDF's units, to check the chunker on real documents
+add_executable(ambient_units tools/units_main.cpp)
 target_link_libraries(ambient_units PRIVATE ambient_guidance nlohmann_json::nlohmann_json ambient_warnings)
 add_dependencies(ambient_units ambient_ingest_host)
-add_dependencies(ambient_index ov_engine_runtime)
-add_dependencies(ambient_engine ambient_index)
 
 add_subdirectory(tests)
