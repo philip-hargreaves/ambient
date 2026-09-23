@@ -11,11 +11,11 @@
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <!-- Dev and stakeholder runs are unpackaged; MSIX returns with the
-         distribution work. Self-contained: no runtime install needed -->
+    <!-- Dev and stakeholder runs are unpackaged. MSIX returns with the
+         distribution work. Self-contained, so no runtime install is needed -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <!-- English-only satellite resources; ~90 culture folders otherwise -->
+    <!-- English-only satellite resources, otherwise ~90 culture folders -->
     <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
   </PropertyGroup>
 
@@ -25,7 +25,8 @@
     <ProjectReference Include="..\Ambient.App.Platform\Ambient.App.Platform.csproj" />
   </ItemGroup>
 
-  <!-- Ship the engine beside the app when it has been built; F5 works without it.
+  <!-- Ship the engine beside the app when it has been built. F5 works without it.
+       Hidden from Solution Explorer: they are payload, not source.
        Always the Release engine: a Debug engine is 5-10x slower through the
        models and makes every timing observation misleading -->
   <PropertyGroup>
@@ -33,18 +34,18 @@
     <EngineBinary>..\..\build\$(EnginePreset)\engine\ambient_engine.exe</EngineBinary>
   </PropertyGroup>
   <ItemGroup Condition="Exists('$(EngineBinary)')">
-    <Content Include="$(EngineBinary)" Link="ambient_engine.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(EngineBinary)" Link="ambient_engine.exe" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <!-- The PDF reader. Without it added PDFs are skipped -->
-    <Content Include="..\..\build\$(EnginePreset)\engine\ambient_ingest_host.exe" Link="ambient_ingest_host.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\build\$(EnginePreset)\engine\ambient_ingest_host.exe')" />
-    <Content Include="..\..\engine\licences\pdfium\*.txt" Link="licences\pdfium\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The note worker; without it the engine writes notes in-process -->
-    <Content Include="..\..\build\$(EnginePreset)\engine\ambient_note_host.exe" Link="ambient_note_host.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\build\$(EnginePreset)\engine\ambient_note_host.exe')" />
+    <Content Include="..\..\build\$(EnginePreset)\engine\ambient_ingest_host.exe" Link="ambient_ingest_host.exe" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('..\..\build\$(EnginePreset)\engine\ambient_ingest_host.exe')" />
+    <Content Include="..\..\engine\licences\pdfium\*.txt" Link="licences\pdfium\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <!-- The note worker. Without it the engine writes notes in-process -->
+    <Content Include="..\..\build\$(EnginePreset)\engine\ambient_note_host.exe" Link="ambient_note_host.exe" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('..\..\build\$(EnginePreset)\engine\ambient_note_host.exe')" />
     <!-- The engine's OpenVINO runtime, deployed beside it by the CMake build -->
-    <Content Include="..\..\build\$(EnginePreset)\engine\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\build\$(EnginePreset)\engine\cache.json" Link="cache.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\build\$(EnginePreset)\engine\*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <Content Include="..\..\build\$(EnginePreset)\engine\cache.json" Link="cache.json" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
-  <!-- Dev runs see the repo model store via a junction; packaging replaces this -->
+  <!-- Dev runs see the repo model store via a junction. Packaging replaces this -->
   <Target Name="LinkModelStore" AfterTargets="Build"
           Condition="Exists('$(MSBuildProjectDirectory)\..\..\models') And !Exists('$(TargetDir)models')">
     <Exec Command='mklink /J "$(TargetDir)models" "$(MSBuildProjectDirectory)\..\..\models"' />
@@ -97,7 +98,7 @@
     <!-- Read back at runtime by AppWindow.SetIcon, so it must ship -->
     <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-    <!-- Partner marks; the json decides what shows, per showcase -->
+    <!-- Partner marks. The json decides what shows, per showcase -->
     <Content Include="Assets\logos\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -142,7 +143,7 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <!-- trimming breaks XAML reflection too easily; revisit if package size matters -->
+    <!-- Trimming breaks XAML reflection too easily. Revisit if package size matters -->
     <PublishTrimmed>False</PublishTrimmed>
   </PropertyGroup>
 </Project>
