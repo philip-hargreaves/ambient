@@ -1,14 +1,12 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Settings;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Settings;
 
 public class EnrolmentViewModelTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     [Fact]
     public async Task StartAsksTheEngineForTheReadingWindowOnTheChosenMicrophone()
     {

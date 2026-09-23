@@ -5,6 +5,7 @@ using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Features.Settings;
 
@@ -175,14 +176,14 @@ public class SettingsViewModelTest
         var settings = new SettingsViewModel(preferences, dialogs: dialogs);
 
         settings.Privacy.KeepConsultations = true;
-        await Task.Delay(20);
+        await WaitUntilAsync(() => asked == 1);
         Assert.Equal(1, asked);
         Assert.False(settings.Privacy.KeepConsultations, "declined: the toggle stays off");
         Assert.False(preferences.KeepConsultations, "and nothing was persisted");
 
         dialogs.Answer = true;
         settings.Privacy.KeepConsultations = true;
-        await Task.Delay(20);
+        await WaitUntilAsync(() => asked == 2);
         Assert.Equal(2, asked);
         Assert.True(settings.Privacy.KeepConsultations);
         Assert.True(preferences.KeepConsultations);

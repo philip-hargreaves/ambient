@@ -7,14 +7,13 @@ using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 /// <summary>A stored consultation played back as a demo walks the real states.</summary>
 public class PlaybackSessionTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     private static readonly DemoMaster Elbow = new("s-real", 542);
 
     private static string MastersFile(params (string Name, string Id, double Seconds)[] masters)

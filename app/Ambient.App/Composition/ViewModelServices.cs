@@ -1,12 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Ambient.App.Core.Features.Appraisal;
-using Ambient.App.Core.Features.Consultation;
+using Ambient.App.Core.Composition;
 using Ambient.App.Core.Features.Demo;
-using Ambient.App.Core.Features.Documents;
-using Ambient.App.Core.Features.Guidance;
-using Ambient.App.Core.Features.Sessions;
-using Ambient.App.Core.Features.Settings;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Metrics;
 using Ambient.App.Core.Ports;
@@ -38,27 +33,8 @@ internal static class ViewModelServices
             memoryGb: () => sp.GetRequiredService<IProcessMetrics>()
                 .WorkingSetGb(EngineLayout.EngineProcess, EngineLayout.NoteHostProcess),
             logger: sp.GetRequiredService<ILogger<StatusBarViewModel>>()));
-        services.AddSingleton<TranscriptViewModel>();
-        services.AddSingleton<NoteViewModel>();
-        services.AddSingleton<DocumentExportViewModel>();
-        services.AddSingleton<GuidanceViewModel>();
-        services.AddSingleton<PageViewModel>();
-        services.AddSingleton<MicViewModel>();
-        // The engine host reads the session through LiveSessionState, which follows this one
-        services.AddSingleton(sp =>
-        {
-            var session = ActivatorUtilities.CreateInstance<ConsultationViewModel>(sp);
-            sp.GetRequiredService<LiveSessionState>().Follow(session);
-            return session;
-        });
-        services.AddSingleton<SessionControlsViewModel>();
-        services.AddSingleton<ShellViewModel>();
-        services.AddSingleton<SettingsViewModel>();
-        services.AddSingleton<VoiceViewModel>();
-        services.AddSingleton<SessionsViewModel>();
-        services.AddSingleton<AppraisalsViewModel>();
-        services.AddSingleton<DemoTrayViewModel>();
         services.AddSingleton<CreditsViewModel>();
+        services.AddCoreViewModels();
         return services;
     }
 }

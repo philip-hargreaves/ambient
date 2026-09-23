@@ -28,6 +28,12 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
     /// <summary>Every request, as (method, serialised params).</summary>
     public List<(string Method, string Params)> Requests { get; } = [];
 
+    /// <summary>A scripted reply per method, served before anything below.</summary>
+    public Dictionary<string, object> Responses { get; } = [];
+
+    /// <summary>Methods that refuse every time.</summary>
+    public HashSet<string> Failing { get; } = [];
+
     /// <summary>Thrown by the next matching request, once; null answers normally.</summary>
     public Func<string, Exception?>? FailNext { get; set; }
 
@@ -49,7 +55,16 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
             return Task.FromException<JsonElement>(failure);
         }
 
+        if (Failing.Contains(method))
+        {
+            return Task.FromException<JsonElement>(new InvalidOperationException($"{method} refused"));
+        }
+
         BeforeReply?.Invoke(method);
+        if (Responses.TryGetValue(method, out var scripted))
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(scripted));
+        }
 
         if (method == "engine/hello")
         {
@@ -252,6 +267,16 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
                 style = "",
                 detail = "",
                 generatedAt = "2026-09-13T00:00:00Z",
+                editedAt = StoredNoteEditedAt,
+            }));
+        }
+
+        if (method == "session/patient" && StoredPatient is not null)
+        {
+            return Task.FromResult(JsonSerializer.SerializeToElement(new
+            {
+                text = StoredPatient,
+                generatedAt = StoredPatientGeneratedAt,
                 editedAt = (string?)null,
             }));
         }
@@ -344,6 +369,13 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
 
     /// <summary>Served by session/note when set; the stored note is empty otherwise.</summary>
     public string? StoredNote { get; set; }
+
+    public string? StoredNoteEditedAt { get; set; }
+
+    /// <summary>Served by session/patient when set.</summary>
+    public string? StoredPatient { get; set; }
+
+    public string? StoredPatientGeneratedAt { get; set; }
 
     /// <summary>Served by session/guidance; null until a record is stored.</summary>
     public JsonElement? StoredGuidance { get; set; }

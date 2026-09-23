@@ -4,6 +4,7 @@ using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Wire;
 
 
 namespace Ambient.App.Tests.Features.Consultation;
@@ -284,9 +285,6 @@ public class SessionCommandsTest
         await session.StopRecordingAsync();
         Assert.Equal(FinalisePhase.Note, session.Phase);
     }
-
-    private static System.Text.Json.JsonElement Params(object value) =>
-        System.Text.Json.JsonSerializer.SerializeToElement(value);
 
     [Fact]
     public async Task ARestartedEngineResumesTheLiveSession()

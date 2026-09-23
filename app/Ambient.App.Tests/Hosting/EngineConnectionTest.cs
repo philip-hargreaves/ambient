@@ -1,23 +1,13 @@
 using System.Text.Json;
 using Ambient.App.Core.Hosting;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Hosting;
 
 public class EngineConnectionTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
-
-    // The connect path is fire-and-forget, so its effects land asynchronously
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        for (var i = 0; i < 500 && !condition(); i++)
-        {
-            await Task.Delay(10);
-        }
-
-        Assert.True(condition());
-    }
 
     private static readonly JsonElement Empty = JsonSerializer.SerializeToElement(new { });
 

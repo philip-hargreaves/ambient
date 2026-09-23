@@ -8,6 +8,7 @@ using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
@@ -439,16 +440,6 @@ public class ReplaySessionTest
         }
 
         Assert.True(crashes == 0, $"{crashes}/6 accelerated session starts crashed the engine");
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan limit)
-    {
-        var deadline = DateTime.UtcNow + limit;
-        while (!condition())
-        {
-            Assert.True(DateTime.UtcNow < deadline, "condition not reached in time");
-            await Task.Delay(100);
-        }
     }
 
     private static string? FindModels()

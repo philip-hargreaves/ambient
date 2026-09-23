@@ -1,4 +1,5 @@
 using System.Globalization;
+using Ambient.App.Core.Ports;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
@@ -65,9 +66,7 @@ public sealed record GuidanceRecommendation(
     public bool CanOpen => FromDocument || HasWebLink;
 
     /// <summary>A plain-text corpus carries a file name here, which nothing can open.</summary>
-    private bool HasWebLink =>
-        Uri.TryCreate(Link, UriKind.Absolute, out var uri)
-        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    private bool HasWebLink => WebLinks.IsWeb(Link);
 
     /// <summary>The citation, with the web address on its own line when there is one.</summary>
     public string CitationText => HasWebLink ? $"{Citation}\n{Link}" : Citation;

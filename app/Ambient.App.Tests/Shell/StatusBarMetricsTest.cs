@@ -1,15 +1,14 @@
-using System.Text.Json;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Shell;
 
 /// <summary>The live numbers behind the status bar's model chips.</summary>
 public class StatusBarMetricsTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     private static (StatusBarViewModel Status, FakeEngineClient Engine) Create()
     {
         var engine = new FakeEngineClient(autoNotify: false);
@@ -38,7 +37,7 @@ public class StatusBarMetricsTest
     public async Task TheEngineMeasuredRateBeatsTheArrivalCount()
     {
         var (status, engine) = Create();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => status.NoteChip.Length > 0);
 
         // The engine meters at the source, before its 12 Hz throttle: the
         // shell shows that figure, not how often notifications arrived
@@ -104,7 +103,7 @@ public class StatusBarMetricsTest
     public async Task ChipsNameTheModelsAndCarryTheirLiveFigures()
     {
         var (status, engine) = Create();
-        await Task.Delay(50);  // the connect-time model fetch
+        await WaitUntilAsync(() => status.AsrChip.Length > 0);  // the connect-time model fetch
 
         Assert.Equal("Whisper Large v3 Turbo · GPU", status.AsrChip);
         Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
@@ -139,7 +138,7 @@ public class StatusBarMetricsTest
     public async Task TheNoteChipMetersTheStream()
     {
         var (status, engine) = Create();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => status.NoteChip.Length > 0);
         Assert.DoesNotContain("tok/s", status.NoteChip);
 
         engine.RaiseNotification("note/partial", Params(new { text = "The" }));

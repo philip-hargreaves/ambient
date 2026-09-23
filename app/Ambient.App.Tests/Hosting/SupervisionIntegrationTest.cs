@@ -8,6 +8,7 @@ namespace Ambient.App.Tests.Hosting;
 /// The assembled supervision loop on real processes: a stand-in engine is
 /// killed externally, exactly like Task Manager, and the recovery observed.
 /// </summary>
+[Trait("Requires", "Processes")]
 public class SupervisionIntegrationTest
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

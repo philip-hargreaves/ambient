@@ -18,8 +18,6 @@ internal static class EngineServices
             AppPaths.EngineExe, stderrPath: paths.EngineLog,
             extraArguments: () => EngineArguments(sp.GetRequiredService<AppPreferences>())));
         services.AddSingleton<ICrashLog>(_ => new FileCrashLog(paths.Crashes));
-        services.AddSingleton<LiveSessionState>();
-        services.AddSingleton<ISessionState>(sp => sp.GetRequiredService<LiveSessionState>());
         services.AddSingleton<IEngineHost>(sp => new EngineSupervisor(
             sp.GetRequiredService<IEngineLauncher>(),
             sp.GetRequiredService<ISessionState>(),

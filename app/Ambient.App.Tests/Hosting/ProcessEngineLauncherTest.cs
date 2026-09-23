@@ -3,6 +3,7 @@ using Ambient.App.Platform;
 
 namespace Ambient.App.Tests.Hosting;
 
+[Trait("Requires", "Processes")]
 public class ProcessEngineLauncherTest
 {
     private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(5);

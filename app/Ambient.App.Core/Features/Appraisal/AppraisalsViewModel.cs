@@ -90,6 +90,12 @@ public sealed partial class ReflectionCard : ObservableObject
 public sealed record MonthMarker(int Month, string Name, int Count, bool Current = false, bool Selected = false)
 {
     public bool Filled => Count > 0;
+
+    /// <summary>What pressing the cell does, as its tooltip.</summary>
+    public string Tip => Count == 0 ? "No reflections"
+        : Selected ? "Show the whole year"
+        : Count == 1 ? "1 reflection, press to show only this month"
+        : $"{Count} reflections, press to show only this month";
 }
 
 /// <summary>

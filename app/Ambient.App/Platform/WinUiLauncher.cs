@@ -10,9 +10,8 @@ public sealed class WinUiLauncher : ILauncher
     {
         try
         {
-            return Uri.TryCreate(link, UriKind.Absolute, out var uri)
-                && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                && await Windows.System.Launcher.LaunchUriAsync(uri);
+            return WebLinks.IsWeb(link)
+                && await Windows.System.Launcher.LaunchUriAsync(new Uri(link));
         }
         catch (Exception)
         {

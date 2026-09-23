@@ -4,6 +4,7 @@ using Ambient.App.Platform;
 
 namespace Ambient.App.Tests.Hosting;
 
+[Trait("Requires", "Processes")]
 public class JobObjectTest
 {
     // A process that stays alive without needing a console or stdin.

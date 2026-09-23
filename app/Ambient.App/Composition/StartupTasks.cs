@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -15,6 +16,7 @@ internal static class StartupTasks
     {
         services.AddSingleton<IStartupTask>(sp => new MigrateSottoData(paths, sp.GetRequiredService<ILogger<MigrateSottoData>>()));
         services.AddSingleton<IStartupTask>(_ => new RegisterCrashDumps(paths));
+        services.AddSingleton<IStartupTask, AttachSessionState>();
         services.AddSingleton<IStartupTask, ApplySavedPreferences>();
         services.AddSingleton<IStartupTask, ApplyTheme>();
         services.AddSingleton<IStartupTask, StartEngine>();
@@ -43,6 +45,16 @@ internal static class StartupTasks
                     throwOnMissingSubKey: false);
             }
         }
+    }
+
+    // The engine host reads the session through LiveSessionState, which follows the view model
+    private sealed class AttachSessionState(LiveSessionState state, ConsultationViewModel session) : IStartupTask
+    {
+        public string Name => "attach session state";
+
+        public StartupStage Stage => StartupStage.BeforeWindow;
+
+        public void Run() => state.Follow(session);
     }
 
     private sealed class RegisterCrashDumps(AppPaths paths) : IStartupTask

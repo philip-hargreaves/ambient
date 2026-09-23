@@ -54,12 +54,7 @@ public sealed partial class MonthMarkerView : UserControl
 
     public FontWeight Weight => Marker is { Current: true } ? FontWeights.SemiBold : FontWeights.Normal;
 
-    public string Tip => Marker is null
-        ? ""
-        : Marker.Count == 0 ? "No reflections"
-        : Marker.Selected ? "Show the whole year"
-        : Marker.Count == 1 ? "1 reflection, press to show only this month"
-        : $"{Marker.Count} reflections, press to show only this month";
+    public string Tip => Marker?.Tip ?? "";
 
     private void OnClick(object sender, RoutedEventArgs e)
     {

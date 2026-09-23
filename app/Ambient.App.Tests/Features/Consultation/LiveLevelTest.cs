@@ -1,14 +1,12 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Tests.Support;
+using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 public class LiveLevelTest
 {
-    private static JsonElement Params(object value) => JsonSerializer.SerializeToElement(value);
-
     [Fact]
     public void LevelNotificationsReachTheStatusBar()
     {

@@ -7,6 +7,7 @@ namespace Ambient.Client.Tests.Contract;
 /// feature reports itself unavailable, a search fails with the loader's reason and a recorded
 /// session carries no record.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class GuidanceContractTest
 {

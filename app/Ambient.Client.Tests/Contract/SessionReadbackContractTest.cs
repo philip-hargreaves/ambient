@@ -5,6 +5,7 @@ namespace Ambient.Client.Tests.Contract;
 /// <summary>
 /// The record, read back, delete loop against the real engine.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class SessionReadbackContractTest
 {

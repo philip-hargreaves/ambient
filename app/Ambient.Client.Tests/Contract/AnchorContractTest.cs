@@ -5,6 +5,7 @@ namespace Ambient.Client.Tests.Contract;
 /// <summary>
 /// The anchor/status and anchor/clear methods against the real engine.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class AnchorContractTest
 {

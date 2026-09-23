@@ -249,16 +249,22 @@ public class ReviewSessionTest
     }
 
     [Fact]
-    public void AStoredSheetOlderThanTheNoteEditLoadsStale()
+    public async Task AStoredSheetOlderThanTheNoteEditLoadsStale()
     {
-        var note = new NoteViewModel();
-        note.LoadStored("text", "sheet", "", "prose", "standard", "Edited 10:31");
-        // The consultation VM computes this from the stamps; the property is
-        // the contract the views bind to
-        note.PatientStale = true;
-        Assert.True(note.PatientStale);
-        note.Reset();
-        Assert.False(note.PatientStale);
+        var (session, engine, note) = TestSession.Create();
+        engine.StoredNote = "text";
+        engine.StoredNoteEditedAt = "2026-08-17T10:31:00Z";
+        engine.StoredPatient = "sheet";
+        engine.StoredPatientGeneratedAt = "2026-08-17T10:24:00Z";
+
+        Assert.True(await session.OpenStoredSessionAsync("abc"));
+        Assert.True(note.PatientStale, "the sheet predates the note edit");
+
+        engine.StoredPatientGeneratedAt = "2026-08-17T10:32:00Z";
+        await session.CloseReviewAsync();
+        Assert.False(note.PatientStale, "leaving clears it");
+        Assert.True(await session.OpenStoredSessionAsync("abc"));
+        Assert.False(note.PatientStale, "a sheet rewritten after the edit is current");
     }
 
     [Fact]

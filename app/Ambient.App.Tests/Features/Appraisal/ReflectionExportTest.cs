@@ -1,5 +1,5 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Appraisal;
+using Ambient.App.Tests.Support;
 
 namespace Ambient.App.Tests.Features.Appraisal;
 
@@ -65,15 +65,7 @@ public class ReflectionExportTest
     [Fact]
     public void TheEngineScrubFixtureAgreesWithTheCheck()
     {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null && !Directory.Exists(Path.Combine(dir, "schema", "fixtures")))
-        {
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        Assert.NotNull(dir);
-        var rows = JsonDocument.Parse(
-            File.ReadAllText(Path.Combine(dir, "schema", "fixtures", "summary-scrub.json"))).RootElement;
+        var rows = Fixtures.Load("summary-scrub.json");
 
         foreach (var row in rows.EnumerateArray())
         {

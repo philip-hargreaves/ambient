@@ -4,6 +4,7 @@ namespace Ambient.Client.Tests.Contract;
 /// The session methods and the notifications they produce, against the real
 /// engine. Runs on a private pipe, so it is independent of the engine group.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class SessionContractTest
 {

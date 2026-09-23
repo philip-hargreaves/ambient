@@ -6,6 +6,7 @@ namespace Ambient.Client.Tests.Contract;
 /// The note/tier method against the real engine, with no weights staged:
 /// the parameter checks and the lane-absent answer are the engine's own.
 /// </summary>
+[Collection("engine")]
 [Trait("Requires", "Engine")]
 public class NoteTierContractTest
 {
