@@ -1,0 +1,266 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Preferences;
+using Ambient.App.Core.Shell;
+using Ambient.Client;
+
+namespace Ambient.App.Core.Features.Settings;
+
+/// <summary>
+/// The note model tier: the staged models as a ladder, the switch, and a failed switch's
+/// way back. The engine's store resolves a tier to a model.
+/// </summary>
+public sealed partial class NoteModelSettings : ObservableObject
+{
+    private readonly AppPreferences? _preferences;
+    private readonly IEngineApi? _client;
+    private readonly ISessionState? _session;
+    private readonly StatusBarViewModel? _status;
+
+    // Tier keys in ladder order, parallel to NoteModelOptions
+    private readonly List<string> _tiers = [];
+    private string _noteTier;
+    private string? _revertTier;  // where a failed switch goes back to
+    private bool _populating;
+    private bool _reverting;
+
+    public NoteModelSettings(
+        AppPreferences? preferences, IEngineApi? client, ISessionState? session, StatusBarViewModel? status)
+    {
+        _preferences = preferences;
+        _client = client;
+        _session = session;
+        _status = status;
+        _noteTier = preferences?.NoteTier ?? "default";
+    }
+
+    /// <summary>Display names of the staged note models, smallest first.</summary>
+    public ObservableCollection<string> NoteModelOptions { get; } = [];
+
+    /// <summary>The chosen note model as the control's selection.</summary>
+    [ObservableProperty]
+    public partial int NoteModelIndex { get; set; } = -1;
+
+    /// <summary>False while the lane loads, and when there is nothing to choose between.</summary>
+    [ObservableProperty]
+    public partial bool NoteModelEnabled { get; set; }
+
+    /// <summary>Lane status; empty when nothing is happening.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoteModelCaption))]
+    public partial string NoteModelStatus { get; set; } = "";
+
+    /// <summary>The caption under the control: the status while there is one, else the description.</summary>
+    public string NoteModelCaption =>
+        string.IsNullOrEmpty(NoteModelStatus) ? "Larger models are more accurate and use more memory." : NoteModelStatus;
+
+    /// <summary>The tier the shell wants; the engine's store resolves it.</summary>
+    public string NoteTier => _noteTier;
+
+    /// <summary>The engine connected: the options come from its store.</summary>
+    public void Connected() => _ = LoadNoteModelsAsync();
+
+    /// <summary>The lane's state drives the control.</summary>
+    public void Apply(NoteModelState model) =>
+        ApplyNoteModel(model.State, model.Tier, model.FirstUse, model.Detail ?? "");
+
+    private static int LadderRank(string tier) => tier switch
+    {
+        "constrained" => 0,
+        "default" => 1,
+        "accuracy" => 2,
+        _ => 3,
+    };
+
+    private async Task LoadNoteModelsAsync()
+    {
+        if (_client is null || !_client.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            var models = await _client.ListModelsAsync().ConfigureAwait(true);
+            var staged = models
+                .Where(m => m.Task == "note")
+                .Select(m => (
+                    m.Tier,
+                    Name: string.IsNullOrWhiteSpace(m.Name)
+                        ? StatusBarViewModel.FriendlyModelName(m.Id)
+                        : m.Name))
+                .Where(m => AppPreferences.NoteTiers.Contains(m.Tier))
+                .OrderBy(m => LadderRank(m.Tier))
+                .ToList();
+
+            _populating = true;
+            // Rebuilt only when the store's contents changed: clearing ComboBox items
+            // under an open popup or a live selection can fault in XAML, and every
+            // reconnect would otherwise do it
+            var tiers = staged.Select(m => m.Tier).ToList();
+            var names = staged.Select(m => m.Name).ToList();
+            if (!tiers.SequenceEqual(_tiers) || !names.SequenceEqual(NoteModelOptions))
+            {
+                NoteModelIndex = -1;  // clear the selection before the items
+                _tiers.Clear();
+                NoteModelOptions.Clear();
+                foreach (var (tier, name) in staged)
+                {
+                    _tiers.Add(tier);
+                    NoteModelOptions.Add(name);
+                }
+            }
+
+            NoteModelStatus = _tiers.Count <= 1 ? "Only one model installed" : "";
+            // Preference for an unstaged tier: the engine stayed on the default,
+            // and the control shows that
+            if (!_tiers.Contains(_noteTier) && _tiers.Contains("default"))
+            {
+                NoteModelStatus = "Saved model not installed; using the default";
+                _noteTier = "default";
+                PersistTier();
+            }
+
+            NoteModelIndex = _tiers.IndexOf(_noteTier);
+            _populating = false;
+            NoteModelEnabled = _tiers.Count > 1;
+        }
+        catch (Exception)
+        {
+            _populating = false;
+        }
+    }
+
+    private string NameOf(string tier)
+    {
+        var index = _tiers.IndexOf(tier);
+        return index >= 0 && index < NoteModelOptions.Count ? NoteModelOptions[index] : tier;
+    }
+
+    partial void OnNoteModelIndexChanged(int value)
+    {
+        if (_reverting || _populating || value < 0 || value >= _tiers.Count)
+        {
+            return;
+        }
+
+        var tier = _tiers[value];
+        if (tier == _noteTier)
+        {
+            return;
+        }
+
+        // The switch ends the resident model; a consultation needs it
+        if (_session?.ConsultationActive == true)
+        {
+            _reverting = true;
+            NoteModelIndex = _tiers.IndexOf(_noteTier);
+            _reverting = false;
+            _status?.Append("finish the consultation before changing the note model");
+            return;
+        }
+
+        _revertTier = _noteTier;
+        _noteTier = tier;
+        PersistTier();
+        NoteModelEnabled = false;
+        NoteModelStatus = "Loading";
+        _status?.Append($"Loading {NameOf(tier)}", busy: true);
+        _ = SendTierAsync(tier);
+    }
+
+    private void PersistTier()
+    {
+        if (_preferences is not null)
+        {
+            _preferences.NoteTier = _noteTier;
+            _preferences.Save();
+        }
+    }
+
+    private async Task SendTierAsync(string tier)
+    {
+        if (_client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var reply = await _client.SetNoteTierAsync(tier).ConfigureAwait(true);
+            // Already resident (the same tier after a restart): nothing to wait for
+            if (reply.State == "ready")
+            {
+                ApplyNoteModel(reply.State, reply.Tier, firstUse: false, detail: "");
+            }
+        }
+        catch (Exception e)
+        {
+            RevertTier(e.Message);
+        }
+    }
+
+    // A refused or failed switch reverts to the previous tier, once; the
+    // engine is told
+    private void RevertTier(string reason)
+    {
+        var back = _revertTier;
+        _revertTier = null;
+        NoteModelStatus = $"Could not switch: {reason}";
+        _status?.Append($"Could not switch note model: {reason}");
+        if (back is null)
+        {
+            NoteModelEnabled = _tiers.Count > 1;
+            return;
+        }
+
+        _noteTier = back;
+        PersistTier();
+        _reverting = true;
+        NoteModelIndex = _tiers.IndexOf(back);
+        _reverting = false;
+        _ = SendTierAsync(back);
+    }
+
+    private void ApplyNoteModel(string state, string tier, bool firstUse, string detail)
+    {
+        switch (state)
+        {
+            case "loading":
+                NoteModelEnabled = false;
+                NoteModelStatus = firstUse
+                    ? "Preparing for this computer, a few minutes the first time"
+                    : "Loading";
+                break;
+            case "ready":
+                _revertTier = null;
+                NoteModelEnabled = _tiers.Count > 1;
+                NoteModelStatus = "";
+                // The engine is authoritative about what is resident
+                if (_tiers.Contains(tier) && tier != _noteTier)
+                {
+                    _noteTier = tier;
+                    PersistTier();
+                    _reverting = true;
+                    NoteModelIndex = _tiers.IndexOf(tier);
+                    _reverting = false;
+                }
+
+                break;
+            case "failed":
+                if (tier == _noteTier)
+                {
+                    RevertTier(detail);
+                }
+                else
+                {
+                    NoteModelStatus = $"Load failed: {detail}";
+                }
+
+                break;
+            default:
+                break;
+        }
+    }
+}

@@ -56,11 +56,11 @@ public sealed partial class ConsultationView : UserControl
 
         // The tray exists only while the settings toggle says so
         void Apply() => DemoTrayHost.Visibility =
-            settings.DemoTrayEnabled ? Visibility.Visible : Visibility.Collapsed;
+            settings.Appearance.DemoTrayEnabled ? Visibility.Visible : Visibility.Collapsed;
         Apply();
-        settings.PropertyChanged += (_, e) =>
+        settings.Appearance.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(SettingsViewModel.DemoTrayEnabled))
+            if (e.PropertyName == nameof(AppearanceAndDiagnostics.DemoTrayEnabled))
             {
                 Apply();
             }
