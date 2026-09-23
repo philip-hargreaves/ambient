@@ -118,7 +118,12 @@ ModelInfo ParseManifest(const std::filesystem::path& dir) {
 
 ModelStore::ModelStore(const std::filesystem::path& root) {
     if (!std::filesystem::exists(root)) return;  // valid empty store
-    for (const auto& entry : std::filesystem::directory_iterator(root)) {
+    // OpenVINO keys its compile cache on the path string, so each model
+    // needs one spelling
+    std::error_code error;
+    auto canonical = std::filesystem::canonical(root, error);
+    if (error) canonical = root;
+    for (const auto& entry : std::filesystem::directory_iterator(canonical)) {
         if (!entry.is_directory()) continue;
         if (!std::filesystem::exists(entry.path() / "manifest.json")) continue;
         models_.push_back(ParseManifest(entry.path()));
