@@ -405,7 +405,10 @@ void SessionController::DiarLoop() {
                 auto guess = diar::TidyTranscript(diariser_.SpeculativeTranscript());
                 if (!guess.empty()) note_writer_->Prefill(guess, note_lane_.Options());
             }
-        } catch (...) {  // NOLINT(bugprone-empty-catch)
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "ambient-engine: capture tick failed: %s\n", e.what());
+        } catch (...) {
+            std::fprintf(stderr, "ambient-engine: capture tick failed\n");
         }
         lock.lock();
         cv_.wait_for(lock, kMinTickGap, [this] { return diar_stop_; });
@@ -482,7 +485,10 @@ void SessionController::FinishSession(Outcome outcome) {
                              });
             const auto cuts = transcriber_.TakeClipCuts();
             if (!cuts.empty()) diariser_.AddCutPoints(cuts);
-        } catch (...) {  // NOLINT(bugprone-empty-catch)
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "ambient-engine: capture settle failed: %s\n", e.what());
+        } catch (...) {
+            std::fprintf(stderr, "ambient-engine: capture settle failed\n");
         }
         stage("capture settled");
         events_.OnProgress("transcript");
