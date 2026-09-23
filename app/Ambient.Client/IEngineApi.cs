@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Ambient.Client;
 
 /// <summary>
@@ -14,7 +12,7 @@ public interface IEngineApi
 
     event Action<bool>? ConnectedChanged;
 
-    event Action<string, JsonElement>? NotificationReceived;
+    event Action<EngineNotification>? NotificationReceived;
 
     // Engine
     Task<EngineReadiness> ReadinessAsync();
@@ -55,7 +53,7 @@ public interface IEngineApi
     Task<StoredPatient> StoredPatientAsync(string id);
 
     /// <summary>The guidance record saved with the note, or null when there is none.</summary>
-    Task<JsonElement?> StoredGuidanceAsync(string id);
+    Task<GuidanceRecord?> StoredGuidanceAsync(string id);
 
     Task LabelSessionAsync(string id, string text);
 

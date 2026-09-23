@@ -9,7 +9,7 @@ namespace Ambient.App.Tests.Features.Guidance;
 public class PageViewModelTest
 {
     private static GuidanceRecommendation Found(int page = 1, int pages = 5) =>
-        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(new
+        GuidanceRecommendation.From(Protocol.Parse<GuidanceResult>(JsonSerializer.SerializeToElement(new
         {
             corpus = "upload:7",
             chunkId = "upload:7-4",
@@ -28,7 +28,7 @@ public class PageViewModelTest
             document = 7L,
             page,
             pages,
-        }), "", true);
+        }))!, "", true);
 
     private static object Box(int page, double left, double top, double right, double bottom) =>
         new { page, left, top, right, bottom };

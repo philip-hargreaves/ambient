@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Demo;
@@ -98,30 +97,28 @@ public sealed partial class SettingsViewModel : ObservableObject
                     }
                 }
             });
-            client.NotificationReceived += (method, parameters) =>
+            client.NotificationReceived += notification =>
             {
-                if (method == "note/model")
+                switch (notification)
                 {
-                    var snapshot = parameters.Clone();
-                    Post(() => OnNoteModel(snapshot));
-                }
-                else if (method == "guidance/model")
-                {
-                    Post(() =>
-                    {
-                        _ = LoadGuidanceCorporaAsync();
-                        _ = LoadDocumentsAsync();
-                    });
-                }
-                else if (method == "guidance/document"
-                    && Protocol.Parse<DocumentInfo>(parameters) is { } document)
-                {
-                    Post(() => Upsert(document));
-                }
-                else if (method == "guidance/progress")
-                {
-                    var progress = parameters.Clone();
-                    Post(() => ApplyProgress(progress));
+                    case NoteModelState model:
+                        Post(() => ApplyNoteModel(model.State, model.Tier, model.FirstUse, model.Detail ?? ""));
+                        break;
+                    case GuidanceModelChanged:
+                        Post(() =>
+                        {
+                            _ = LoadGuidanceCorporaAsync();
+                            _ = LoadDocumentsAsync();
+                        });
+                        break;
+                    case GuidanceDocumentChanged changed:
+                        Post(() => Upsert(changed.Document));
+                        break;
+                    case GuidanceProgress progress:
+                        Post(() => Documents.FirstOrDefault(r => r.Id == progress.Id)?.ApplyProgress(progress));
+                        break;
+                    default:
+                        break;
                 }
             };
             if (client.Connected)
@@ -338,20 +335,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         NoteModelIndex = _tiers.IndexOf(back);
         _reverting = false;
         _ = SendTierAsync(back);
-    }
-
-    private void OnNoteModel(JsonElement parameters)
-    {
-        if (parameters.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
-
-        ApplyNoteModel(
-            parameters.TryGetProperty("state", out var s) ? s.GetString() ?? "" : "",
-            parameters.TryGetProperty("tier", out var t) ? t.GetString() ?? "" : "",
-            parameters.TryGetProperty("firstUse", out var f) && f.GetBoolean(),
-            parameters.TryGetProperty("detail", out var d) ? d.GetString() ?? "" : "");
     }
 
     private void ApplyNoteModel(string state, string tier, bool firstUse, string detail)
@@ -687,14 +670,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         return i;
-    }
-
-    private void ApplyProgress(JsonElement progress)
-    {
-        if (progress.TryGetProperty("id", out var id) && id.TryGetInt64(out var value))
-        {
-            Documents.FirstOrDefault(r => r.Id == value)?.ApplyProgress(progress);
-        }
     }
 
     private static readonly string[] OneDriveVariables =

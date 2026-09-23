@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
@@ -176,27 +175,25 @@ public sealed partial class StatusBarViewModel : ObservableObject
             StartPolling();
         }
 
-        engine.NotificationReceived += (method, parameters) => dispatcher.Post(() =>
+        engine.NotificationReceived += notification => dispatcher.Post(() =>
         {
-            switch (method)
+            switch (notification)
             {
-                case "note/partial" or "patient/partial" or "translate/partial":
+                case NotePartial or PatientPartial or TranslationPartial:
                     _meter.Token(Now());
-                    PublishThroughput(SourceRate(parameters));
+                    PublishThroughput(SourceRate(notification));
                     break;
-                case "note/ready" or "patient/ready" or "translate/ready":
+                case NoteReady or PatientReady or TranslationReady:
                     _meter.End(Now());
                     // The ready event carries the whole-generation average
-                    PublishThroughput(SourceRate(parameters));
+                    PublishThroughput(SourceRate(notification));
                     break;
-                case "note/failed" or "patient/failed" or "translate/failed":
+                case NoteFailed or PatientFailed or TranslationFailed:
                     _meter.End(Now());
                     PublishThroughput(null);
                     break;
                 // A tier switch changes which model the chip names
-                case "note/model" when parameters.ValueKind == JsonValueKind.Object
-                    && parameters.TryGetProperty("state", out var laneState)
-                    && laneState.GetString() == "ready":
+                case NoteModelState { State: "ready" }:
                     _ = LoadModelsAsync();
                     break;
                 default:
@@ -209,12 +206,8 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
     // The engine measures at the source, before its notification throttle,
     // so its figure beats the local arrival count whenever it is present
-    private static double? SourceRate(JsonElement parameters) =>
-        parameters.ValueKind == JsonValueKind.Object
-            && parameters.TryGetProperty("tokensPerSecond", out var rate)
-            && rate.ValueKind == JsonValueKind.Number
-        ? rate.GetDouble()
-        : null;
+    private static double? SourceRate(EngineNotification notification) =>
+        (notification as IMetered)?.TokensPerSecond;
 
     private void PublishThroughput(double? sourceRate = null)
     {

@@ -85,6 +85,29 @@ public sealed record GuidancePage(
     public IReadOnlyList<PassageBox> Boxes { get; init; } = [];
 }
 
+/// <summary>One recommendation of a guidance search, as the wire gives it.</summary>
+public sealed record GuidanceResult(
+    string? Corpus = null, string? ChunkId = null, string? Code = null, string? Number = null,
+    string? Title = null, string? Section = null, string? Text = null, string? Url = null,
+    string? LastUpdated = null, string? UpdateTag = null, string? Source = null,
+    string? Citation = null, string? Trigger = null, long Document = 0, int Page = 0, int Pages = 0);
+
+/// <summary>A corpus the search covered; labelled when its manifest names a publisher.</summary>
+public sealed record SearchedCorpus(string Id = "", string Name = "", string? Label = null);
+
+/// <summary>
+/// A guidance search: the note's when Id is set, a typed query's otherwise. Also the record
+/// stored with a note.
+/// </summary>
+public sealed record GuidanceRecord(
+    string? Id = null, string? Detail = null, string? StoreError = null, bool? Stale = false,
+    bool DocumentsChanged = false)
+{
+    public IReadOnlyList<GuidanceResult> Shown { get; init; } = [];
+
+    public IReadOnlyList<SearchedCorpus> Searched { get; init; } = [];
+}
+
 public sealed record AnchorStatus(string Origin = "none", int Sessions = 0, long? EnrolledAt = null);
 
 public sealed record ReflectionSummary(

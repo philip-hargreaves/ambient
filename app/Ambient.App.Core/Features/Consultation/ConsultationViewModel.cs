@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Core.Features.Documents;
@@ -167,7 +166,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
         Note.OptionsChanged = OnNoteOptionsChanged;
         _engine.NotificationReceived +=
-            (method, parameters) => dispatcher.Post(() => HandleNotification(method, parameters));
+            notification => dispatcher.Post(() => HandleNotification(notification));
         // The status-bar label carries readiness; only the loss is log-worthy
         _engine.ConnectedChanged += connected => dispatcher.Post(() =>
         {
@@ -292,52 +291,54 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     // Results are keyed to the consultation on screen; a typed query has no id.
     // A search replaced by a newer one says so and changes nothing
-    private void ApplyGuidance(JsonElement parameters, bool ready)
+    private void ApplyGuidance(GuidanceRecord record)
     {
-        var detail = Text(parameters, "detail");
-        if (detail == "superseded")
+        if (record.Detail == "superseded")
         {
             return;
         }
 
-        var id = parameters.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String
-            ? i.GetString()
-            : null;
-        if (id is null)
+        if (record.Id is null)
         {
-            if (ready)
-            {
-                Guidance.ApplyQueryReady(parameters);
-            }
-            else
-            {
-                Guidance.ApplyQueryFailed();
-                Status.Log($"guidance search failed: {detail}");
-            }
-
+            Guidance.ApplyQueryReady(record);
             return;
         }
 
-        if (id != _finalisedSessionId)
+        if (record.Id != _finalisedSessionId)
         {
-            Status.Log($"guidance for another session dropped: {id}");
+            Status.Log($"guidance for another session dropped: {record.Id}");
             return;
         }
 
-        if (ready)
+        Guidance.ApplyReady(record);
+        if (record.StoreError is { Length: > 0 } storeError)
         {
-            Guidance.ApplyReady(parameters);
-            var storeError = Text(parameters, "storeError");
-            if (storeError.Length > 0)
-            {
-                Status.Log($"guidance not stored: {storeError}");
-            }
+            Status.Log($"guidance not stored: {storeError}");
+        }
+    }
+
+    private void ApplyGuidanceFailed(GuidanceFailed failed)
+    {
+        if (failed.Detail == "superseded")
+        {
+            return;
+        }
+
+        if (failed.Id is null)
+        {
+            Guidance.ApplyQueryFailed();
+        }
+        else if (failed.Id != _finalisedSessionId)
+        {
+            Status.Log($"guidance for another session dropped: {failed.Id}");
+            return;
         }
         else
         {
             Guidance.ApplyFailed();
-            Status.Log($"guidance search failed: {detail}");
         }
+
+        Status.Log($"guidance search failed: {failed.Detail}");
     }
 
     // Tier before readiness: readiness reports the configured tier's compile cache
@@ -640,12 +641,6 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         return true;
     }
 
-    private static string Text(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty(property, out var value)
-            && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
 
     /// <summary>Leaves the review or a refusal: edits saved, the engine told
     /// (which deletes a refused session), panes cleared.</summary>
@@ -935,40 +930,24 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public void StartNewConsultation() => _ = CloseReviewAsync();
 
-    // The engine's own token rate, when the notification carries one
-    private static double? Rate(JsonElement parameters) =>
-        parameters.ValueKind == JsonValueKind.Object
-            && parameters.TryGetProperty("tokensPerSecond", out var rate)
-            && rate.ValueKind == JsonValueKind.Number
-        ? rate.GetDouble()
-        : null;
-
-    private void HandleNotification(string method, JsonElement parameters)
+    private void HandleNotification(EngineNotification notification)
     {
-        if (method == "note/model" && parameters.ValueKind == JsonValueKind.Object
-            && parameters.TryGetProperty("state", out var lane) && lane.GetString() == "ready")
+        if (notification is NoteModelState { State: "ready" } resident)
         {
-            _metrics?.NoteModel(
-                parameters.TryGetProperty("name", out var name) ? name.GetString() : null,
-                parameters.TryGetProperty("tier", out var tier) ? tier.GetString() : null,
-                parameters.TryGetProperty("seconds", out var sec) && sec.ValueKind == JsonValueKind.Number
-                    ? sec.GetDouble() : null);
+            _metrics?.NoteModel(resident.Name, resident.Tier, resident.Seconds);
         }
 
-        switch (method)
+        switch (notification)
         {
             // A warm model load never blocks recording; only the first-use compile does
-            case "note/model" when State == SessionState.Idle
-                && parameters.ValueKind == JsonValueKind.Object:
-                var laneState = parameters.TryGetProperty("state", out var s) ? s.GetString() : "";
-                var firstUse = parameters.TryGetProperty("firstUse", out var f) && f.GetBoolean();
-                if (laneState == "loading" && firstUse)
+            case NoteModelState model when State == SessionState.Idle:
+                if (model.State == "loading" && model.FirstUse)
                 {
                     ModelsReady = false;
                     Status.Append("Preparing note model for this computer - this can take a few minutes",
                         busy: true);
                 }
-                else if ((laneState is "ready" or "failed") && !ModelsReady)
+                else if (model.State is "ready" or "failed" && !ModelsReady)
                 {
                     ModelsReady = true;
                     Status.Append("Ready");
@@ -977,10 +956,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 break;
             // Stages the engine skips never show; a late stage cannot move the
             // phase backwards
-            case "session/progress" when State == SessionState.Finalising
-                && Phase < FinalisePhase.Note
-                && parameters.ValueKind == JsonValueKind.Object:
-                Phase = parameters.GetProperty("stage").GetString() switch
+            case SessionProgress progress when State == SessionState.Finalising
+                && Phase < FinalisePhase.Note:
+                Phase = progress.Stage switch
                 {
                     "transcript" => FinalisePhase.Transcript,
                     "speakers" => FinalisePhase.Speakers,
@@ -990,26 +968,24 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 break;
             // Writing is claimed only once tokens stream; Review included because
             // a regenerate streams there
-            case "note/partial" when State is SessionState.Finalising or SessionState.Review
-                && parameters.ValueKind == JsonValueKind.Object:
+            case NotePartial chunk when State is SessionState.Finalising or SessionState.Review:
                 if (Note.ClinicalNoteText.Length == 0)
                 {
                     Status.Append("Writing clinical note", busy: true);
                     Phase = FinalisePhase.Streaming;  // the panes open on the first token
                 }
 
-                Note.ClinicalNoteText = parameters.GetProperty("text").GetString() ?? "";
+                Note.ClinicalNoteText = chunk.Text;
                 if (!_regenerating)
                 {
-                    _metrics?.NotePartial(Rate(parameters));
+                    _metrics?.NotePartial(chunk.TokensPerSecond);
                 }
 
                 break;
-            case "note/ready" when State is SessionState.Finalising or SessionState.Review:
-                if (parameters.ValueKind == JsonValueKind.Object
-                    && parameters.TryGetProperty("text", out var noteText))
+            case NoteReady ready when State is SessionState.Finalising or SessionState.Review:
+                if (ready.Text is { } noteText)
                 {
-                    Note.ClinicalNoteText = noteText.GetString() ?? "";
+                    Note.ClinicalNoteText = noteText;
                 }
 
                 Note.Apply(NotePipelineEvent.NoteReady);
@@ -1018,20 +994,16 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Guidance.NoteReady();
                 if (!_regenerating)
                 {
-                    _metrics?.NoteReady(Rate(parameters));
+                    _metrics?.NoteReady(ready.TokensPerSecond);
                 }
 
                 break;
             // Too short or not a consultation: nothing to review, so the record
             // region says why and offers the override (unless it was too short);
             // a refusal while already reviewing shows in the note pane instead
-            case "note/refused" when State is SessionState.Finalising or SessionState.Review:
-                Note.RefusalReason = parameters.ValueKind == JsonValueKind.Object
-                    ? parameters.GetProperty("reason").GetString() ?? ""
-                    : "";
-                Note.WriteAnywayAvailable = parameters.ValueKind != JsonValueKind.Object
-                    || !parameters.TryGetProperty("overridable", out var overridable)
-                    || overridable.GetBoolean();
+            case NoteRefused refused when State is SessionState.Finalising or SessionState.Review:
+                Note.RefusalReason = refused.Reason;
+                Note.WriteAnywayAvailable = refused.Overridable;
                 Note.Apply(NotePipelineEvent.NoteRefused);
                 Guidance.NoteFailed();
                 State = State == SessionState.Finalising ? SessionState.Refused : SessionState.Review;
@@ -1043,39 +1015,35 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
                 break;
             // The transcript is still usable, so review proceeds without a note
-            case "note/failed" when State is SessionState.Finalising or SessionState.Review:
+            case NoteFailed failed when State is SessionState.Finalising or SessionState.Review:
                 Note.Apply(NotePipelineEvent.NoteFailed);
                 Guidance.NoteFailed();
                 State = SessionState.Review;
-                var noteFailure = parameters.ValueKind == JsonValueKind.Object
-                    ? parameters.GetProperty("detail").GetString() ?? "failed"
-                    : "failed";
                 Status.Append("Clinical note failed");
                 if (_metrics is not null && !_regenerating)
                 {
-                    _ = _metrics.SessionFinishedAsync(noteFailure, 0);
+                    _ = _metrics.SessionFinishedAsync(failed.Detail, 0);
                 }
 
                 _regenerating = false;
                 break;
-            case "patient/partial" when parameters.ValueKind == JsonValueKind.Object:
+            case PatientPartial chunk:
                 if (Note.PatientInfoText.Length == 0)
                 {
                     Status.Append("Writing patient note", busy: true);
                 }
 
-                Note.PatientInfoText = parameters.GetProperty("text").GetString() ?? "";
+                Note.PatientInfoText = chunk.Text;
                 if (!_regenerating)
                 {
-                    _metrics?.PatientPartial(Rate(parameters));
+                    _metrics?.PatientPartial(chunk.TokensPerSecond);
                 }
 
                 break;
-            case "patient/ready":
-                if (parameters.ValueKind == JsonValueKind.Object
-                    && parameters.TryGetProperty("text", out var patientText))
+            case PatientReady ready:
+                if (ready.Text is { } patientText)
                 {
-                    Note.PatientInfoText = patientText.GetString() ?? "";
+                    Note.PatientInfoText = patientText;
                 }
 
                 Note.Apply(NotePipelineEvent.PatientInfoReady);
@@ -1085,12 +1053,12 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 if (_metrics is not null && !_regenerating)
                 {
                     _ = _metrics.SessionFinishedAsync(null, Note.ClinicalNoteText.Length,
-                        patientTokensPerSecond: Rate(parameters));
+                        patientTokensPerSecond: ready.TokensPerSecond);
                 }
 
                 _regenerating = false;
                 break;
-            case "patient/failed":
+            case PatientFailed:
                 Note.Apply(NotePipelineEvent.PatientInfoFailed);
                 Status.Append("Patient note failed");
                 if (_metrics is not null && !_regenerating)
@@ -1100,42 +1068,38 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
                 _regenerating = false;
                 break;
-            case "translate/partial" when parameters.ValueKind == JsonValueKind.Object:
-                Note.TranslationText = parameters.GetProperty("text").GetString() ?? "";
+            case TranslationPartial chunk:
+                Note.TranslationText = chunk.Text;
                 break;
-            case "translate/ready" when parameters.ValueKind == JsonValueKind.Object:
-                Note.TranslationText = parameters.GetProperty("text").GetString() ?? "";
-                Note.TranslationLanguage = parameters.GetProperty("language").GetString() ?? "";
+            case TranslationReady ready:
+                Note.TranslationText = ready.Text;
+                Note.TranslationLanguage = ready.Language;
                 Note.TranslationRunning = false;
                 Status.Append($"Translated to {Note.TranslationLanguage}");
                 break;
-            case "translate/failed":
+            case TranslationFailed:
                 Note.TranslationRunning = false;
                 Status.Append("Translation failed");
                 break;
-            case "guidance/model":
+            case GuidanceModelChanged:
                 _ = LoadGuidanceReadinessAsync();
                 break;
-            case "guidance/ready" when parameters.ValueKind == JsonValueKind.Object:
-                ApplyGuidance(parameters, ready: true);
+            case GuidanceReady ready:
+                ApplyGuidance(ready.Record);
                 break;
-            case "guidance/failed" when parameters.ValueKind == JsonValueKind.Object:
-                ApplyGuidance(parameters, ready: false);
+            case GuidanceFailed failed:
+                ApplyGuidanceFailed(failed);
                 break;
-            case "guidance/documentsChanged":
+            case GuidanceDocumentsChanged:
                 Guidance.DocumentsChanged();
                 SearchAfterDocumentsSettle();
                 break;
-            case "audio.level" when parameters.ValueKind == JsonValueKind.Object:
-                Status.SetMicLevel(
-                    parameters.GetProperty("level").GetDouble(),
-                    parameters.GetProperty("clipped").GetBoolean());
+            case AudioLevel level:
+                Status.SetMicLevel(level.Level, level.Clipped);
                 // A playback's readings carry the position its clock has reached
                 if (State == SessionState.Recording)
                 {
-                    AudioSeconds = parameters.TryGetProperty("seconds", out var at)
-                        ? at.GetDouble()
-                        : AudioSeconds + 0.1;
+                    AudioSeconds = level.Seconds ?? AudioSeconds + 0.1;
                     // A playback stops itself at the end of its clock
                     if (ActivePlayback is { } playing && AudioSeconds >= playing.AudioSeconds - 0.05)
                     {
@@ -1144,7 +1108,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 }
 
                 break;
-            case "session/interrupted"
+            case SessionInterrupted interrupted
                 when State is SessionState.Recording or SessionState.Finalising:
                 State = SessionState.Idle;
                 Paused = false;
@@ -1155,8 +1119,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 PageView.Hide();
                 Status.SetMicVisible(false);
                 Status.SetDecodeActive(false);
-                Status.Append(parameters.ValueKind == JsonValueKind.Object
-                    ? $"Recording interrupted ({parameters.GetProperty("detail").GetString()}) - session kept"
+                Status.Append(interrupted.Detail is { } detail
+                    ? $"Recording interrupted ({detail}) - session kept"
                     : "Recording interrupted - session kept");
                 break;
             default:

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Ports;
@@ -16,7 +15,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
     private readonly IEngineApi _engine;
     private readonly StatusBarViewModel? _status;
-    private readonly Action<string, JsonElement> _onNotification;
+    private readonly Action<EngineNotification> _onNotification;
     private string _savedHappened = "";
     private string _savedLearned = "";
     private string _savedNext = "";
@@ -27,8 +26,7 @@ public sealed partial class ReflectionViewModel : ObservableObject
     {
         _engine = engine;
         _status = status;
-        _onNotification = (method, parameters) =>
-            dispatcher.Post(() => HandleNotification(method, parameters));
+        _onNotification = notification => dispatcher.Post(() => HandleNotification(notification));
         _engine.NotificationReceived += _onNotification;
     }
 
@@ -211,23 +209,18 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
     public void Detach() => _engine.NotificationReceived -= _onNotification;
 
-    private void HandleNotification(string method, JsonElement parameters)
+    private void HandleNotification(EngineNotification notification)
     {
-        if (parameters.ValueKind != JsonValueKind.Object || Text(parameters, "id") != SessionId)
+        switch (notification)
         {
-            return;
-        }
-
-        switch (method)
-        {
-            case "reflection/summary":
-                Summary = Text(parameters, "text");
+            case ReflectionSummaryReady ready when ready.Id == SessionId:
+                Summary = ready.Text;
                 SummaryPending = false;
                 SummaryProblem = "";
                 break;
-            case "reflection/summaryFailed":
+            case ReflectionSummaryFailed failed when failed.Id == SessionId:
                 SummaryPending = false;
-                SummaryProblem = $"No summary: {Text(parameters, "detail")}";
+                SummaryProblem = $"No summary: {failed.Detail}";
                 break;
             default:
                 break;
@@ -244,10 +237,4 @@ public sealed partial class ReflectionViewModel : ObservableObject
 
     private static string Answer(string text) => text.Trim().Length == 0 ? "" : text;
 
-    private static string Text(JsonElement element, string property) =>
-        element.ValueKind == JsonValueKind.Object
-            && element.TryGetProperty(property, out var value)
-            && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
 }

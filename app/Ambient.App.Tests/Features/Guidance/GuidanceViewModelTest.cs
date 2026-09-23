@@ -51,7 +51,10 @@ public class GuidanceViewModelTest
         };
 
     private static GuidanceRecommendation Found(object result) =>
-        GuidanceRecommendation.From(JsonSerializer.SerializeToElement(result), "NICE", true, true);
+        GuidanceRecommendation.From(Parse(result), "NICE", true, true);
+
+    private static GuidanceResult Parse(object result) =>
+        Protocol.Parse<GuidanceResult>(JsonSerializer.SerializeToElement(result))!;
 
     private static readonly object DocumentCorpus = new
     {
@@ -881,8 +884,7 @@ public class GuidanceViewModelTest
         var whole = Found(Result("fx100-1_1_1", trigger: ""));
         Assert.Equal("Matched: the note as a whole", whole.Matched);
 
-        var typed = GuidanceRecommendation.From(
-            JsonSerializer.SerializeToElement(Result("fx100-1_1_1", trigger: "")), "NICE", false);
+        var typed = GuidanceRecommendation.From(Parse(Result("fx100-1_1_1", trigger: "")), "NICE", false);
         Assert.False(typed.MatchedVisible);
     }
 

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Guidance;
@@ -67,17 +66,15 @@ public sealed partial class DocumentRow : ObservableObject
     }
 
     /// <summary>guidance/progress: what the ingest is doing to this document.</summary>
-    public void ApplyProgress(JsonElement progress)
+    public void ApplyProgress(GuidanceProgress progress)
     {
-        var done = Int(progress, "done");
-        var total = Int(progress, "total");
-        Phase = GuidanceCard.Field(progress, "phase");
-        Progress = total > 0 ? (double)done / total : 0;
+        Phase = progress.Phase;
+        Progress = progress.Total > 0 ? (double)progress.Done / progress.Total : 0;
         Detail = Phase switch
         {
             "paused" => "Waiting for the consultation to finish",
-            "reading" => total > 1 ? $"Reading page {done} of {total}" : "Reading",
-            "preparing" => $"Preparing {done} of {total} passages",
+            "reading" => progress.Total > 1 ? $"Reading page {progress.Done} of {progress.Total}" : "Reading",
+            "preparing" => $"Preparing {progress.Done} of {progress.Total} passages",
             _ => Detail,
         };
     }
@@ -121,7 +118,4 @@ public sealed partial class DocumentRow : ObservableObject
 
         return string.Join(" · ", parts);
     }
-
-    private static int Int(JsonElement element, string property) =>
-        (int)GuidanceRecommendation.Numeric(element, property);
 }

@@ -3,8 +3,10 @@ using System.Text.Json;
 namespace Ambient.Client;
 
 /// <summary>IEngineApi over a transport: the wire names and shapes live here.</summary>
-public sealed class EngineApi(IEngineTransport transport) : IEngineApi
+public sealed class EngineApi : IEngineApi
 {
+    private readonly IEngineTransport _transport;
+
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
     // Store and folder work: a model switch, a batch of documents, an erase
@@ -20,18 +22,20 @@ public sealed class EngineApi(IEngineTransport transport) : IEngineApi
     // A stop runs the whole finalise: transcript, speakers and note
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(180);
 
-    public bool Connected => transport.Connected;
+    public EngineApi(IEngineTransport transport)
+    {
+        _transport = transport;
+        transport.NotificationReceived += OnNotification;
+    }
+
+    public event Action<EngineNotification>? NotificationReceived;
+
+    public bool Connected => _transport.Connected;
 
     public event Action<bool>? ConnectedChanged
     {
-        add => transport.ConnectedChanged += value;
-        remove => transport.ConnectedChanged -= value;
-    }
-
-    public event Action<string, JsonElement>? NotificationReceived
-    {
-        add => transport.NotificationReceived += value;
-        remove => transport.NotificationReceived -= value;
+        add => _transport.ConnectedChanged += value;
+        remove => _transport.ConnectedChanged -= value;
     }
 
     public Task<EngineReadiness> ReadinessAsync() => ReplyAsync<EngineReadiness>("engine/readiness");
@@ -89,13 +93,11 @@ public sealed class EngineApi(IEngineTransport transport) : IEngineApi
     public Task<StoredPatient> StoredPatientAsync(string id) =>
         ReplyAsync<StoredPatient>("session/patient", new { id });
 
-    public async Task<JsonElement?> StoredGuidanceAsync(string id)
+    public async Task<GuidanceRecord?> StoredGuidanceAsync(string id)
     {
         var reply = await CallAsync("session/guidance", new { id }).ConfigureAwait(false);
-        return reply.ValueKind == JsonValueKind.Object
-            && reply.TryGetProperty("guidance", out var record)
-            && record.ValueKind == JsonValueKind.Object
-            ? record
+        return reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty("guidance", out var record)
+            ? Protocol.Parse<GuidanceRecord>(record)
             : null;
     }
 
@@ -194,7 +196,7 @@ public sealed class EngineApi(IEngineTransport transport) : IEngineApi
         Text(await CallAsync("session/start", parameters, timeout).ConfigureAwait(false), "sessionId");
 
     private Task<JsonElement> CallAsync(string method, object? parameters = null, TimeSpan? timeout = null) =>
-        transport.RequestAsync(method, parameters, timeout ?? Timeout);
+        _transport.RequestAsync(method, parameters, timeout ?? Timeout);
 
     private async Task<T> ReplyAsync<T>(string method, object? parameters = null, TimeSpan? timeout = null)
         where T : class =>
@@ -215,6 +217,15 @@ public sealed class EngineApi(IEngineTransport transport) : IEngineApi
     private static T Parse<T>(string method, JsonElement reply)
         where T : class =>
         Protocol.Parse<T>(reply) ?? throw new InvalidOperationException($"{method}: malformed reply");
+
+    // A notification the shell does not know, or cannot read, is dropped here
+    private void OnNotification(string method, JsonElement parameters)
+    {
+        if (EngineNotifications.Parse(method, parameters) is { } notification)
+        {
+            NotificationReceived?.Invoke(notification);
+        }
+    }
 
     private static string Text(JsonElement reply, string property) =>
         reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty(property, out var value)

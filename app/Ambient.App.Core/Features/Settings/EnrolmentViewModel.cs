@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Hosting;
@@ -185,48 +184,47 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         _outcome.TrySetResult(State == EnrolmentState.Succeeded);
     }
 
-    private void OnNotification(string method, JsonElement parameters)
+    private void OnNotification(EngineNotification notification)
     {
-        if (method is not ("anchor/progress" or "anchor/enrolled"))
+        if (notification is not (EnrolmentProgress or EnrolmentDone))
         {
             return;
         }
 
-        var snapshot = parameters.Clone();
         if (_dispatcher is null)
         {
-            Apply(method, snapshot);
+            Apply(notification);
         }
         else
         {
-            _dispatcher.Post(() => Apply(method, snapshot));
+            _dispatcher.Post(() => Apply(notification));
         }
     }
 
-    private void Apply(string method, JsonElement parameters)
+    private void Apply(EngineNotification notification)
     {
-        if (method == "anchor/progress")
+        if (notification is EnrolmentProgress progress)
         {
             if (State != EnrolmentState.Recording)
             {
                 return;
             }
 
-            Level = parameters.GetProperty("level").GetDouble();
-            Elapsed = parameters.GetProperty("elapsed").GetDouble();
-            Speech = parameters.GetProperty("speech").GetDouble();
+            Level = progress.Level;
+            Elapsed = progress.Elapsed;
+            Speech = progress.Speech;
             return;
         }
 
         Level = 0;
-        if (parameters.GetProperty("ok").GetBoolean())
+        if (notification is EnrolmentDone { Ok: true })
         {
             State = EnrolmentState.Succeeded;
             _outcome.TrySetResult(true);
         }
         else
         {
-            Fail(parameters.GetProperty("detail").GetString() ?? "");
+            Fail((notification as EnrolmentDone)?.Detail ?? "");
         }
     }
 

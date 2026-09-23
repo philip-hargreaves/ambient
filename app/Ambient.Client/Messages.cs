@@ -18,10 +18,24 @@ public static class Protocol
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
     };
 
-    /// <summary>An object payload as a record; null for anything else.</summary>
+    /// <summary>An object payload as a record; null for anything else or a field of the wrong kind.</summary>
     public static T? Parse<T>(JsonElement element)
-        where T : class =>
-        element.ValueKind == JsonValueKind.Object ? element.Deserialize<T>(JsonOptions) : null;
+        where T : class
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        try
+        {
+            return element.Deserialize<T>(JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }
 
 /// <summary>A JSON-RPC error response from the engine.</summary>
