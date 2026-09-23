@@ -42,6 +42,18 @@ TEST(NllbTranslator, TranslatesTheSheetAndStreams) {
     EXPECT_NE(polish, french);
 }
 
+TEST(NllbTranslator, ACurlyApostropheTranslatesAsAStraightOne) {
+    if (!std::filesystem::exists(kModels / "nllb-200-600m-int8")) {
+        GTEST_SKIP() << "translation model not staged";
+    }
+    models::ModelStore store(kModels);
+    models::OvRuntime runtime;
+    NllbTranslator translator(store, runtime);
+    EXPECT_EQ(
+        translator.Translate("It\xE2\x80\x99s your body\xE2\x80\x99s defence.", "Urdu", nullptr),
+        translator.Translate("It's your body's defence.", "Urdu", nullptr));
+}
+
 TEST(NllbTranslator, AnUnknownLanguageIsRefused) {
     if (!std::filesystem::exists(kModels / "nllb-200-600m-int8")) {
         GTEST_SKIP() << "translation model not staged";

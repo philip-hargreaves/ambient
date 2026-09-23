@@ -43,6 +43,7 @@ add_executable(engine_tests
     core/diarisation/slice_refinement_test.cpp
     core/note/summary_scrub_test.cpp
     core/common/version_test.cpp
+    core/translate/plain_punctuation_test.cpp
     adapters/diarisation/anchor_store_test.cpp
     adapters/demo/sample_year_test.cpp
     adapters/audio/capture_errors_test.cpp

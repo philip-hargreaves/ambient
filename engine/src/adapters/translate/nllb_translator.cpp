@@ -14,6 +14,7 @@
 
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
+#include "core/translate/plain_punctuation.hpp"
 
 namespace ambient::translate {
 
@@ -40,6 +41,7 @@ struct NllbTranslator::Impl {
     nlohmann::json languages;
     std::int64_t eos = 2;
     std::int64_t decoder_start = 2;
+    std::int64_t source_language = 0;
     std::mutex mutex;  // one translation at a time, guards the requests
     bool loaded = false;
     std::mutex prepare_mutex;  // guards the one warm thread
@@ -68,6 +70,20 @@ struct NllbTranslator::Impl {
         loaded = true;
     }
 
+    // NLLB reads the ids between the source language and end tokens
+    std::vector<std::int64_t> Tokenize(const std::string& sentence) {
+        ov::Tensor input(ov::element::string, ov::Shape{1});
+        input.data<std::string>()[0] = PlainPunctuation(sentence);
+        tokenizer.set_input_tensor(input);
+        tokenizer.infer();
+        const auto body = tokenizer.get_tensor("input_ids");
+        const auto* first = body.data<const std::int64_t>();
+        std::vector<std::int64_t> ids{source_language};
+        ids.insert(ids.end(), first, first + body.get_size());
+        ids.push_back(eos);
+        return ids;
+    }
+
     std::string Detokenize(const std::vector<std::int64_t>& ids) {
         ov::Tensor input(ov::element::i64, {1, ids.size()});
         std::copy(ids.begin(), ids.end(), input.data<std::int64_t>());
@@ -90,12 +106,11 @@ struct NllbTranslator::Impl {
     // structure and its quality
     std::string TranslateLine(const std::string& line, std::int64_t target,
                               const std::function<void(const std::string&)>& partial = {}) {
-        ov::Tensor input(ov::element::string, ov::Shape{1});
-        input.data<std::string>()[0] = line;
-        tokenizer.set_input_tensor(input);
-        tokenizer.infer();
-        const auto ids = tokenizer.get_tensor("input_ids");
-        const auto mask = tokenizer.get_tensor("attention_mask");
+        const auto source = Tokenize(line);
+        ov::Tensor ids(ov::element::i64, {1, source.size()});
+        std::copy(source.begin(), source.end(), ids.data<std::int64_t>());
+        ov::Tensor mask(ov::element::i64, {1, source.size()});
+        std::fill_n(mask.data<std::int64_t>(), source.size(), std::int64_t{1});
 
         encoder.set_tensor("input_ids", ids);
         encoder.set_tensor("attention_mask", mask);
@@ -179,8 +194,10 @@ NllbTranslator::NllbTranslator(const models::ModelStore& store, models::OvRuntim
     : impl_(new Impl(store, runtime)) {
     const models::ModelInfo& info = store.Resolve("translation", "default");
     impl_->languages = LoadLanguages(info.dir);
-    impl_->eos = impl_->languages.at("special").at("eos").get<std::int64_t>();
-    impl_->decoder_start = impl_->languages.at("special").at("decoderStart").get<std::int64_t>();
+    const auto& special = impl_->languages.at("special");
+    impl_->eos = special.at("eos").get<std::int64_t>();
+    impl_->decoder_start = special.at("decoderStart").get<std::int64_t>();
+    impl_->source_language = special.at("sourceLang").get<std::int64_t>();
 }
 
 NllbTranslator::~NllbTranslator() {
@@ -194,8 +211,8 @@ NllbTranslator::~NllbTranslator() {
     }
 }
 
-// The warm must INFER: the CPU plugin's first-inference specialisation
-// measured ~12 s. A failed warm is retried by the first Translate
+// Primes the CPU kernels for the first real sentence. A failed warm is
+// retried by the first Translate
 void NllbTranslator::Prepare() {
     std::lock_guard<std::mutex> lock(impl_->prepare_mutex);
     if (impl_->loaded || impl_->loader.joinable()) {
