@@ -27,6 +27,12 @@ public sealed record SessionRow(
     public bool MetaVisible => HasLabel || Edited;
 }
 
+/// <summary>One day's consultations, newest first.</summary>
+public sealed class SessionGroup(string day) : ObservableCollection<SessionRow>
+{
+    public string Day { get; } = day;
+}
+
 /// <summary>
 /// Past consultations. Selecting one opens it for review through the
 /// consultation view model, so the shared panes show it and regenerate,
@@ -38,10 +44,18 @@ public sealed partial class SessionsViewModel : ObservableObject
     private readonly StatusBarViewModel _status;
     private readonly ConsultationViewModel _consultation;
     private readonly IDialogService _dialogs;
-    private readonly INavigationService _navigation;
     private readonly AppPreferences? _preferences;
 
     public ObservableCollection<SessionRow> Sessions { get; } = [];
+
+    /// <summary>The rows the list shows: those matching the query, grouped by day.</summary>
+    public ObservableCollection<SessionGroup> Groups { get; } = [];
+
+    /// <summary>Narrows the list to titles containing the text.</summary>
+    [ObservableProperty]
+    public partial string Query { get; set; } = "";
+
+    partial void OnQueryChanged(string value) => Regroup();
 
     /// <summary>
     /// Keep consultations is off and nothing is stored: the page explains
@@ -49,7 +63,7 @@ public sealed partial class SessionsViewModel : ObservableObject
     /// shows, and only the clinician empties it.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
+    [NotifyPropertyChangedFor(nameof(SelectHintVisible), nameof(NoneOpen))]
     public partial bool EmptyBecauseOff { get; private set; }
 
     [ObservableProperty]
@@ -57,11 +71,19 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     /// <summary>True while the selected session is open in the panes.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectHintVisible))]
+    [NotifyPropertyChangedFor(nameof(SelectHintVisible), nameof(NoneOpen))]
     public partial bool DetailOpen { get; private set; }
 
-    /// <summary>"Select a consultation" when there is a list and nothing open.</summary>
+    /// <summary>The hint in the reading pane when nothing is open.</summary>
     public bool SelectHintVisible => !DetailOpen && !EmptyBecauseOff;
+
+    /// <summary>Consultations are kept, and there are none yet.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NoneOpen))]
+    public partial bool NothingStored { get; private set; }
+
+    /// <summary>There is a list, and nothing from it is open.</summary>
+    public bool NoneOpen => SelectHintVisible && !NothingStored;
 
     /// <summary>The wide layout folds the patient sheet under the note.</summary>
     [ObservableProperty]
@@ -86,14 +108,15 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     public SessionsViewModel(
         IEngineApi engine, StatusBarViewModel status, ConsultationViewModel consultation,
-        IDialogService dialogs, INavigationService navigation, AppPreferences? preferences = null)
+        IDialogService dialogs, AppPreferences? preferences = null)
     {
         _engine = engine;
         _status = status;
         _consultation = consultation;
         _dialogs = dialogs;
-        _navigation = navigation;
         _preferences = preferences;
+        // The list is on screen while a recording ends, so it follows the store
+        consultation.Recorder.Sealed += id => _ = RefreshAsync();
     }
 
     // True while a rename swaps the selected row for its retitled copy.
@@ -108,13 +131,27 @@ public sealed partial class SessionsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Entering the page: the list, with the most recent consultation open.</summary>
+    public async Task EnterAsync()
+    {
+        await RefreshAsync().ConfigureAwait(true);
+        if (Selected is null && Sessions.Count > 0)
+        {
+            Selected = Sessions[0];
+        }
+    }
+
+    /// <summary>Reloads the list, keeping the open session selected if it is still there.</summary>
     [RelayCommand]
     public async Task RefreshAsync()
     {
         try
         {
             var sessions = await _engine.ListSessionsAsync().ConfigureAwait(true);
+            var keep = DetailOpen ? Selected?.Id : null;
+            _retitling = true;
             Selected = null;
+            _retitling = false;
             Sessions.Clear();
             foreach (var session in sessions)
             {
@@ -136,11 +173,68 @@ public sealed partial class SessionsViewModel : ObservableObject
 
             EmptyBecauseOff = Sessions.Count == 0
                 && _preferences is { KeepConsultations: false };
+            NothingStored = Sessions.Count == 0 && !EmptyBecauseOff;
+            Regroup();
+
+            // The list's own selection cleared with it, so the open session is reselected
+            // without reopening
+            if (keep is not null && Sessions.FirstOrDefault(r => r.Id == keep) is { } again)
+            {
+                _retitling = true;
+                Selected = again;
+                _retitling = false;
+                DetailOpen = true;
+            }
+            else
+            {
+                DetailOpen = false;
+            }
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             _status.Append($"could not list sessions: {e.Message}");
         }
+    }
+
+    private void Regroup()
+    {
+        Groups.Clear();
+        SessionGroup? group = null;
+        foreach (var row in Sessions)
+        {
+            if (Query.Length > 0 && !row.Title.Contains(Query, StringComparison.CurrentCultureIgnoreCase))
+            {
+                continue;
+            }
+            var day = DayLabel(row.StartedAt);
+            if (group is null || group.Day != day)
+            {
+                group = new SessionGroup(day);
+                Groups.Add(group);
+            }
+            group.Add(row);
+        }
+    }
+
+    private static string DayLabel(string startedAt)
+    {
+        if (!DateTimeOffset.TryParse(startedAt, CultureInfo.InvariantCulture, out var started))
+        {
+            return "";
+        }
+        var date = started.ToLocalTime().Date;
+        var today = DateTime.Today;
+        if (date == today)
+        {
+            return "Today";
+        }
+        if (date == today.AddDays(-1))
+        {
+            return "Yesterday";
+        }
+        return date.Year == today.Year
+            ? date.ToString("d MMMM", CultureInfo.CurrentCulture)
+            : date.ToString("d MMMM yyyy", CultureInfo.CurrentCulture);
     }
 
     private async Task OpenAsync(SessionRow? row)
@@ -179,6 +273,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             try
             {
                 Sessions[index] = renamed;  // replacing the item deselects it
+                Regroup();
                 Selected = renamed;
             }
             finally
@@ -225,7 +320,7 @@ public sealed partial class SessionsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Leaving the page ends the review and saves any edits.</summary>
+    /// <summary>Ends the review and saves any edits.</summary>
     public Task LeaveAsync()
     {
         Selected = null;
@@ -233,12 +328,12 @@ public sealed partial class SessionsViewModel : ObservableObject
         return _consultation.CloseReviewAsync();
     }
 
-    [RelayCommand]
-    private async Task Leave()
-    {
-        await LeaveAsync().ConfigureAwait(true);
-        _navigation.GoBack();
-    }
+    /// <summary>
+    /// Going to record a new consultation ends a stored review. The review of the
+    /// consultation just recorded is not a stored one and stays.
+    /// </summary>
+    public Task CloseStoredReviewAsync() =>
+        _consultation.ReviewingStored ? LeaveAsync() : Task.CompletedTask;
 
     private string OptionsLabel()
     {

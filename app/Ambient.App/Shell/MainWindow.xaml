@@ -16,17 +16,18 @@
 
         <TitleBar x:Name="AppTitleBar" Title="Ambient" Subtitle="{x:Bind Status.DemoLabel, Mode=OneWay}" />
 
-        <!-- The pane stays on Mica, the content sits on the layer, one hairline between
-             them and square corners: a sidebar, not an inset frame -->
+        <!-- A rail that starts closed and pushes the content aside when opened, never an
+             overlay. Four destinations do not earn a labelled pane by default, and the record
+             screen stays calm. The pane stays on Mica, the content sits on the layer, one
+             hairline between them and square corners: a sidebar, not an inset frame -->
         <NavigationView
             x:Name="Nav"
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"
-            CompactModeThresholdWidth="0"
-            ExpandedModeThresholdWidth="1100"
+            IsPaneOpen="False"
             OpenPaneLength="172"
-            PaneDisplayMode="Auto"
+            PaneDisplayMode="Left"
             SelectionChanged="OnNavSelectionChanged">
             <NavigationView.Resources>
                 <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="LayerFillColorDefaultBrush" />

@@ -110,12 +110,11 @@ public sealed partial class AppraisalsViewModel : ObservableObject
     private readonly IClipboard _clipboard;
     private readonly IFilePicker _picker;
     private readonly IDialogService _dialogs;
-    private readonly INavigationService _navigation;
     private readonly List<ReflectionCard> _all = [];
 
     public AppraisalsViewModel(
         IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel status, IClipboard clipboard,
-        IFilePicker picker, IDialogService dialogs, INavigationService navigation)
+        IFilePicker picker, IDialogService dialogs)
     {
         _engine = engine;
         _dispatcher = dispatcher;
@@ -123,7 +122,6 @@ public sealed partial class AppraisalsViewModel : ObservableObject
         _clipboard = clipboard;
         _picker = picker;
         _dialogs = dialogs;
-        _navigation = navigation;
     }
 
     // A month with entries filters to it. An empty one says so
@@ -137,13 +135,6 @@ public sealed partial class AppraisalsViewModel : ObservableObject
         }
 
         _status.Append($"No reflections in {MonthName(month.Month)}");
-    }
-
-    [RelayCommand]
-    private async Task Leave()
-    {
-        await LeaveAsync().ConfigureAwait(true);
-        _navigation.GoBack();
     }
 
     public ObservableCollection<ReflectionCard> Cards { get; } = [];

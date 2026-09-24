@@ -2,6 +2,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
+using Ambient.App.Core.Features.Sessions;
 using Ambient.App.Core.Shell;
 using Ambient.App.Platform;
 
@@ -10,17 +11,24 @@ namespace Ambient.App.Shell;
 public sealed partial class MainWindow : Window
 {
     private readonly NavigationService _navigation;
+    private readonly SessionsViewModel _sessions;
 
     public StatusBarViewModel Status { get; }
 
-    public MainWindow(NavigationService navigation, StatusBarViewModel status, StatusBarView statusBar)
+    public MainWindow(
+        NavigationService navigation, StatusBarViewModel status, StatusBarView statusBar,
+        SessionsViewModel sessions)
     {
         _navigation = navigation;
+        _sessions = sessions;
         Status = status;
         InitializeComponent();
         StatusHost.Content = statusBar;
 
         navigation.Navigated += Select;
+        // The pane opens itself at a wide width once its template applies, so the closed start
+        // the markup asks for is restated after load
+        Nav.Loaded += (_, _) => Nav.IsPaneOpen = false;
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -40,15 +48,21 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    private async void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         var key = args.IsSettingsSelected
             ? "settings"
             : (args.SelectedItem as NavigationViewItem)?.Tag as string;
-        if (key is not null)
+        if (key is null)
         {
-            _navigation.NavigateTo(key);
+            return;
         }
+        // Consultation means record a new one: a stored review ends before the page shows
+        if (key == "consultation")
+        {
+            await _sessions.CloseStoredReviewAsync();
+        }
+        _navigation.NavigateTo(key);
     }
 
     private void Select(string key)

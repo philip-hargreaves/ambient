@@ -44,7 +44,7 @@ public sealed partial class SessionsView : UserControl
         };
         NarrowTabs.Loaded += (_, _) => FitNarrow();
         NarrowTabs.SizeChanged += (_, _) => FitNarrow();
-        Loaded += (_, _) => _ = ViewModel.RefreshAsync();
+        Loaded += (_, _) => _ = ViewModel.EnterAsync();
     }
 
     public SessionsViewModel ViewModel { get; }

@@ -185,6 +185,9 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public Task CloseReviewAsync() => Review.CloseReviewAsync();
 
+    /// <summary>A stored session is open for review, as opposed to the one just recorded.</summary>
+    public bool ReviewingStored => Review.StoredOpen;
+
     public Task SaveNoteAsync() => Review.SaveNoteAsync();
 
     public Task SavePatientAsync() => Review.SavePatientAsync();

@@ -21,7 +21,7 @@ public class SessionsViewModelTest
         var consultation = new ConsultationViewModel(
             new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
             new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
-        return (new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), new RecordingNavigationService()), consultation, engine, status);
+        return (new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService()), consultation, engine, status);
     }
 
     private static void ScriptOneSession(FakeEngineClient engine)
@@ -252,7 +252,7 @@ public class SessionsViewModelTest
         var consultation = new ConsultationViewModel(
             new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
             status, new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
-        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), new RecordingNavigationService(), preferences);
+        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), preferences);
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
 
         await vm.RefreshAsync();
@@ -262,5 +262,64 @@ public class SessionsViewModelTest
         await vm.RefreshAsync();
         Assert.False(vm.EmptyBecauseOff);
         Assert.Single(vm.Sessions);
+    }
+
+    [Fact]
+    public async Task EnteringOpensTheMostRecentConsultation()
+    {
+        var (vm, consultation, engine, _) = Create();
+        ScriptOneSession(engine);
+
+        await vm.EnterAsync();
+        await WaitUntilAsync(() => vm.DetailOpen);
+
+        Assert.Same(vm.Sessions[0], vm.Selected);
+        Assert.Contains(engine.Requests, c => c.Method == "session/open" && c.Params.Contains("abc"));
+        Assert.True(consultation.ReviewingStored);
+    }
+
+    [Fact]
+    public async Task GoingToRecordEndsAStoredReviewOnly()
+    {
+        var (vm, consultation, engine, _) = Create();
+        ScriptOneSession(engine);
+
+        await vm.CloseStoredReviewAsync();
+        Assert.DoesNotContain(engine.Requests, c => c.Method == "session/close");
+
+        await vm.EnterAsync();
+        await WaitUntilAsync(() => vm.DetailOpen);
+        await vm.CloseStoredReviewAsync();
+
+        Assert.Contains(engine.Requests, c => c.Method == "session/close");
+        Assert.Null(vm.Selected);
+        Assert.False(vm.DetailOpen);
+        Assert.False(consultation.ReviewingStored);
+        Assert.Equal(SessionState.Idle, consultation.State);
+    }
+
+    [Fact]
+    public async Task RowsGroupByDayAndTheQueryNarrowsThem()
+    {
+        var (vm, _, engine, _) = Create();
+        engine.Responses["session/list"] = new
+        {
+            sessions = new[]
+            {
+                new { id = "b", startedAt = "2026-08-18T09:00:00Z", endedAt = "2026-08-18T09:09:00Z", state = "finalised", sampleRate = 16000, label = "Knee pain", editedAt = "", audioSeconds = 540.0 },
+                new { id = "a", startedAt = "2026-08-17T10:15:00Z", endedAt = "2026-08-17T10:23:41Z", state = "finalised", sampleRate = 16000, label = "Elbow swelling", editedAt = "", audioSeconds = 542.0 },
+            },
+        };
+
+        await vm.RefreshAsync();
+
+        Assert.Equal(2, vm.Groups.Count);
+        Assert.Equal("Knee pain", vm.Groups[0][0].Title);
+        Assert.Equal("Elbow swelling", vm.Groups[1][0].Title);
+
+        vm.Query = "elbow";
+
+        Assert.Single(vm.Groups);
+        Assert.Equal("Elbow swelling", vm.Groups[0][0].Title);
     }
 }

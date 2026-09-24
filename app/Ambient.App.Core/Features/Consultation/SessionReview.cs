@@ -317,6 +317,9 @@ public sealed class SessionReview
     /// the same panes, and regenerate, translate and save act on it. Refused
     /// while recording. Unsaved edits to the previous review are saved first.
     /// </summary>
+    /// <summary>True while the review is a stored session rather than the one just recorded.</summary>
+    public bool StoredOpen { get; private set; }
+
     public async Task<bool> OpenStoredSessionAsync(string id, string startedLabel = "",
         string startedAt = "", bool hasReflection = false, bool demo = false)
     {
@@ -334,6 +337,7 @@ public sealed class SessionReview
         }
 
         _recorder.ShowDemo(demo);
+        StoredOpen = true;
         FinalisedSessionId = id;
         _finalisedStartedAt = startedAt;
         Regenerating = false;
@@ -407,6 +411,7 @@ public sealed class SessionReview
         _pageView.Hide();
         _transcript.Clear();
         Regenerating = false;
+        StoredOpen = false;
         FinalisedSessionId = null;
         _finalisedStartedAt = "";
         LoadedNote = "";
