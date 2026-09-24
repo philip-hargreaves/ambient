@@ -5,17 +5,17 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <StackPanel Spacing="8" Margin="0,0,0,4">
-        <!-- The month heads its group -->
+        <!-- The month heads its group. The year is in the stepper above -->
         <TextBlock
             Margin="2,10,0,2"
             Foreground="{ThemeResource FaintTextBrush}"
             Style="{ThemeResource BodyStrongTextBlockStyle}"
-            Text="{x:Bind Card.MonthLabel, Mode=OneWay}"
+            Text="{x:Bind Card.MonthHeading, Mode=OneWay}"
             Visibility="{x:Bind Card.StartsMonth, Mode=OneWay}" />
 
         <Border Style="{StaticResource InnerCardSurface}" Padding="0">
             <StackPanel>
-                <!-- Closed: the title and the case study -->
+                <!-- Closed: the title line with the day and the opener, then the case study -->
                 <Button
                     Padding="16,12"
                     HorizontalAlignment="Stretch"
@@ -24,28 +24,36 @@
                     BorderThickness="0"
                     Command="{x:Bind Card.ToggleCommand}"
                     Visibility="{x:Bind Collapsed, Mode=OneWay}">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="4">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
                             <TextBlock
                                 FontWeight="SemiBold"
                                 Text="{x:Bind Card.Title, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis" />
                             <TextBlock
-                                Foreground="{ThemeResource MutedTextBrush}"
-                                Text="{x:Bind Card.Line, Mode=OneWay}"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                        <FontIcon
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            FontSize="12"
-                            Foreground="{ThemeResource FaintTextBrush}"
-                            Glyph="&#xE70D;" />
-                    </Grid>
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CaptionText}"
+                                Text="{x:Bind Card.DayLabel, Mode=OneWay}" />
+                            <FontIcon
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="{StaticResource CaptionTextBlockFontSize}"
+                                Foreground="{ThemeResource FaintTextBrush}"
+                                Glyph="&#xE70D;" />
+                        </Grid>
+                        <TextBlock
+                            Foreground="{ThemeResource MutedTextBrush}"
+                            MaxLines="2"
+                            Text="{x:Bind Card.Line, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
                 </Button>
 
                 <!-- Open: the header is the editable title, then the editor in place -->
@@ -71,7 +79,10 @@
                             Command="{x:Bind Card.ToggleCommand}"
                             Style="{StaticResource TrayButton}"
                             ToolTipService.ToolTip="Close">
-                            <FontIcon FontSize="12" Foreground="{ThemeResource FaintTextBrush}" Glyph="&#xE70E;" />
+                            <FontIcon
+                                FontSize="{StaticResource CaptionTextBlockFontSize}"
+                                Foreground="{ThemeResource FaintTextBrush}"
+                                Glyph="&#xE70E;" />
                         </Button>
                     </Grid>
                     <ContentControl x:Name="EditorHost" HorizontalContentAlignment="Stretch" />

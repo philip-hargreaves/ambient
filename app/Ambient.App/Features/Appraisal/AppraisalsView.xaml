@@ -6,8 +6,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Ambient.App.Controls"
     xmlns:local="using:Ambient.App.Features.Appraisal"
-    xmlns:sessions="using:Ambient.App.Features.Sessions"
     xmlns:vm="using:Ambient.App.Core.Features.Appraisal">
+
+    <UserControl.Resources>
+        <!-- A stepper end that cannot go further fades; it does not fill -->
+        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
+        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
+    </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -15,36 +20,27 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <controls:PageHeader Title="Appraisal">
-            <controls:PageHeader.Commands>
-                <TextBox
-                    Width="240"
-                    AutomationProperties.Name="Search reflections"
-                    PlaceholderText="Search reflections"
-                    Text="{x:Bind ViewModel.Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </controls:PageHeader.Commands>
-        </controls:PageHeader>
+        <controls:PageHeader Title="Appraisal" />
 
-        <!-- One reading column -->
+        <!-- One reading column, centred -->
         <ScrollViewer Grid.Row="1">
             <Grid
                 MaxWidth="880"
                 Margin="24,0,24,24"
-                HorizontalAlignment="Left"
+                HorizontalAlignment="Center"
                 RowSpacing="18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- The year: a line, then the twelve months beneath it -->
-                <Grid Grid.Row="2" ColumnSpacing="16">
+                <!-- The year and its count on the left, the search on the right -->
+                <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Button
@@ -80,31 +76,22 @@
                         VerticalAlignment="Center"
                         Foreground="{ThemeResource FaintTextBrush}"
                         Text="{x:Bind ViewModel.CountLabel, Mode=OneWay}" />
+                    <TextBox
+                        Grid.Column="2"
+                        Width="240"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Search reflections"
+                        PlaceholderText="Search reflections"
+                        Text="{x:Bind ViewModel.Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
 
-                <!-- Twelve equal cells across the width -->
-                <Border
-                    Grid.Row="3"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource ControlCornerRadius}">
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Months, Mode=OneWay}">
-                        <ItemsRepeater.Layout>
-                            <UniformGridLayout
-                                ItemsStretch="Fill"
-                                MaximumRowsOrColumns="12"
-                                MinColumnSpacing="0"
-                                MinItemWidth="40" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="vm:MonthMarker">
-                                <sessions:MonthMarkerView Marker="{x:Bind}" Command="{Binding ElementName=AppraisalsPage, Path=ViewModel.PressMonthCommand}" />
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </Border>
+                <!-- The twelve months as one segmented control. Items are built in code -->
+                <SelectorBar
+                    x:Name="MonthBar"
+                    Grid.Row="1"
+                    SelectionChanged="OnMonthChanged" />
 
-                <Grid Grid.Row="4">
+                <Grid Grid.Row="2">
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Cards}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:ReflectionCard">

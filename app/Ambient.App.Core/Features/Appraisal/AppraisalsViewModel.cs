@@ -51,6 +51,12 @@ public sealed partial class ReflectionCard : ObservableObject
 
     public string MonthLabel => Started.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
+    /// <summary>"September": the group heading, under a year stepper.</summary>
+    public string MonthHeading => Started.ToString("MMMM", CultureInfo.CurrentCulture);
+
+    /// <summary>"14 Sep": the day on the closed card.</summary>
+    public string DayLabel => Started.ToString("d MMM", CultureInfo.CurrentCulture);
+
     /// <summary>Used only for search.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Line))]

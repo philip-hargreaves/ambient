@@ -36,6 +36,7 @@ public class AppraisalsViewModelTest
         Assert.Equal("A patient in their sixties with back pain.", page.Cards[2].Line);
         Assert.Equal([false, false, true], page.Cards.Select(c => c.Demo));
         Assert.Equal("September 2026", page.Cards[0].MonthLabel);
+        Assert.Equal("September", page.Cards[0].MonthHeading);
         Assert.Equal(12, page.Months.Count);
         Assert.Equal(2, page.Months[8].Count);  // September
         Assert.True(page.Months[5].Filled);     // June
