@@ -14,24 +14,58 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar" Title="Ambient" />
+        <TitleBar x:Name="AppTitleBar" Title="Ambient" Subtitle="{x:Bind Status.DemoLabel, Mode=OneWay}" />
 
-        <!-- Beside the name: demo mode is on, or a demo record is on screen. Laid over the
-             bar, since its content slot centres and makes the bar tall. Drags pass through -->
-        <TextBlock
-            Margin="64,0,0,0"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Center"
-            Foreground="{ThemeResource CautionBrush}"
-            IsHitTestVisible="False"
-            Style="{StaticResource CaptionText}"
-            Text="· Demo"
-            Visibility="{x:Bind Status.Demo, Mode=OneWay}" />
-
-        <ContentControl
-            x:Name="NavHost"
+        <!-- The pane stays on Mica, the content sits on the layer, one hairline between
+             them and square corners: a sidebar, not an inset frame -->
+        <NavigationView
+            x:Name="Nav"
             Grid.Row="1"
-            HorizontalContentAlignment="Stretch"
-            VerticalContentAlignment="Stretch" />
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="True"
+            CompactModeThresholdWidth="0"
+            ExpandedModeThresholdWidth="1100"
+            OpenPaneLength="172"
+            PaneDisplayMode="Auto"
+            SelectionChanged="OnNavSelectionChanged">
+            <NavigationView.Resources>
+                <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="LayerFillColorDefaultBrush" />
+                <StaticResource x:Key="NavigationViewContentGridBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                <Thickness x:Key="NavigationViewContentGridBorderThickness">1,1,0,0</Thickness>
+                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
+            </NavigationView.Resources>
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Consultation" Tag="consultation">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE720;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Sessions" Tag="sessions">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE81C;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Appraisal" Tag="appraisals">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE70B;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <!-- The status bar belongs to the content column, so the pane runs full height -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ContentControl
+                    x:Name="NavHost"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch" />
+                <ContentControl
+                    x:Name="StatusHost"
+                    Grid.Row="1"
+                    HorizontalContentAlignment="Stretch" />
+            </Grid>
+        </NavigationView>
     </Grid>
 </Window>

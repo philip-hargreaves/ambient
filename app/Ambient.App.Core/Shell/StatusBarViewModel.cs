@@ -339,7 +339,10 @@ public sealed partial class StatusBarViewModel : ObservableObject
 
     /// <summary>Demo mode is on, or a demo record is on screen. Shown beside the app name.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DemoLabel))]
     public partial bool Demo { get; set; }
+
+    public string DemoLabel => Demo ? "Demo" : "";
 
     public ObservableCollection<string> LogEntries { get; } = [];
 

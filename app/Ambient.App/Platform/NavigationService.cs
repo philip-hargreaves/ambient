@@ -13,8 +13,11 @@ namespace Ambient.App.Platform;
 public sealed class NavigationService(IReadOnlyDictionary<string, Func<UIElement>> pages)
     : INavigationService
 {
-    private readonly NavigationHistory<UIElement> _stack = new();
+    private readonly NavigationHistory<string> _stack = new();
     private ContentControl? _host;
+
+    /// <summary>The page now on screen, by key, however it got there.</summary>
+    public event Action<string>? Navigated;
 
     public bool CanGoBack => _stack.CanGoBack;
 
@@ -22,16 +25,26 @@ public sealed class NavigationService(IReadOnlyDictionary<string, Func<UIElement
 
     public void NavigateTo(string pageKey)
     {
-        _stack.Show(pages[pageKey]());
-        Host().Content = _stack.Current;
+        if (_stack.Current == pageKey)
+        {
+            return;
+        }
+        _stack.Show(pageKey);
+        Show(pageKey);
     }
 
     public void GoBack()
     {
         if (_stack.Back() is { } previous)
         {
-            Host().Content = previous;
+            Show(previous);
         }
+    }
+
+    private void Show(string pageKey)
+    {
+        Host().Content = pages[pageKey]();
+        Navigated?.Invoke(pageKey);
     }
 
     private ContentControl Host() =>

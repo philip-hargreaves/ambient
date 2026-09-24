@@ -3,22 +3,19 @@ using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Features.Settings;
-using Ambient.App.Core.Shell;
 using Ambient.App.Features.Demo;
 using Ambient.App.Features.Documents;
 using Ambient.App.Features.Guidance;
-using Ambient.App.Shell;
 
 namespace Ambient.App.Features.Consultation;
 
 public sealed partial class ConsultationView : UserControl
 {
     public ConsultationView(
-        ShellViewModel shell, SessionControlsView controls, TranscriptPaneView transcript,
-        NotePaneView note, StatusBarView status, DemoTrayView demoTray, SettingsViewModel settings,
+        SessionControlsView controls, TranscriptPaneView transcript,
+        NotePaneView note, DemoTrayView demoTray, SettingsViewModel settings,
         MicViewModel mic, ConsultationViewModel consultation, PageView page)
     {
-        Shell = shell;
         Controls = controls.ViewModel;
         Mic = mic;
         InitializeComponent();
@@ -33,7 +30,6 @@ public sealed partial class ConsultationView : UserControl
         TranscriptHost.Content = transcript;
         NoteHost.Content = note;
         PageHost.Content = page;
-        StatusHost.Content = status;
         DemoTrayHost.Content = demoTray;
 
         void PlacePage()
@@ -67,7 +63,6 @@ public sealed partial class ConsultationView : UserControl
         };
     }
 
-    public ShellViewModel Shell { get; }
 
     public SessionControlsViewModel Controls { get; }
 
