@@ -41,7 +41,7 @@
                     Command="{x:Bind ViewModel.PreviousPageCommand}"
                     Style="{StaticResource TrayButton}"
                     ToolTipService.ToolTip="Previous page (Page Up)">
-                    <FontIcon FontSize="12" Glyph="&#xE70E;" />
+                    <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE70E;" />
                 </Button>
                 <Button
                     Grid.Column="2"
@@ -49,7 +49,7 @@
                     Command="{x:Bind ViewModel.NextPageCommand}"
                     Style="{StaticResource TrayButton}"
                     ToolTipService.ToolTip="Next page (Page Down)">
-                    <FontIcon FontSize="12" Glyph="&#xE70D;" />
+                    <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE70D;" />
                 </Button>
                 <Button
                     x:Name="CloseButton"
@@ -58,7 +58,7 @@
                     Command="{x:Bind ViewModel.CloseCommand}"
                     Style="{StaticResource TrayButton}"
                     ToolTipService.ToolTip="Close">
-                    <FontIcon FontSize="12" Glyph="&#xE711;" />
+                    <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE711;" />
                 </Button>
             </Grid>
 
@@ -66,7 +66,7 @@
                 Grid.Row="1"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                CornerRadius="4">
+                CornerRadius="{StaticResource ControlCornerRadius}">
                 <Grid>
                     <ScrollViewer
                         x:Name="Scroller"
@@ -163,7 +163,7 @@
                             HorizontalAlignment="Center"
                             Command="{x:Bind ViewModel.TryAgainCommand}"
                             Content="Try again"
-                            FontSize="12"
+                            Style="{StaticResource CaptionLink}"
                             Visibility="{x:Bind ViewModel.Failed, Mode=OneWay}" />
                     </StackPanel>
                 </Grid>
@@ -171,32 +171,29 @@
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12">
                 <HyperlinkButton
-                    Padding="2,0"
                     Command="{x:Bind ViewModel.BackToPassageCommand}"
-                    FontSize="12"
+                    Style="{StaticResource CaptionLink}"
                     Visibility="{x:Bind ViewModel.OffPassage, Mode=OneWay}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon FontSize="12" Glyph="&#xE72B;" />
-                        <TextBlock FontSize="12" Text="Back to the passage" />
+                        <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE72B;" />
+                        <TextBlock Text="Back to the passage" />
                     </StackPanel>
                 </HyperlinkButton>
                 <HyperlinkButton
-                    Padding="2,0"
                     Command="{x:Bind ViewModel.OpenDocumentCommand}"
-                    FontSize="12"
+                    Style="{StaticResource CaptionLink}"
                     ToolTipService.ToolTip="Opens a copy in your PDF viewer. The copy is removed when Ambient closes.">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon FontSize="12" Glyph="&#xE8A7;" />
-                        <TextBlock FontSize="12" Text="Open the document" />
+                        <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE8A7;" />
+                        <TextBlock Text="Open the document" />
                     </StackPanel>
                 </HyperlinkButton>
                 <HyperlinkButton
-                    Padding="2,0"
                     Command="{x:Bind ViewModel.CopyCitationCommand}"
-                    FontSize="12">
+                    Style="{StaticResource CaptionLink}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon FontSize="12" Glyph="&#xE8C8;" />
-                        <TextBlock FontSize="12" Text="Copy citation" />
+                        <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE8C8;" />
+                        <TextBlock Text="Copy citation" />
                     </StackPanel>
                 </HyperlinkButton>
             </StackPanel>

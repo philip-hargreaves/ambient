@@ -50,6 +50,7 @@
                 VerticalAlignment="Center"
                 IsChecked="{x:Bind ViewModel.MonitorAudio, Mode=TwoWay}"
                 Style="{StaticResource TrayToggleButton}"
+                AutomationProperties.Name="Play the recording aloud"
                 ToolTipService.ToolTip="Play the recording aloud">
                 <FontIcon
                     FontSize="14"
@@ -79,15 +80,17 @@
             <Button
                 Command="{x:Bind ViewModel.TogglePauseCommand}"
                 Style="{StaticResource TrayButton}"
+                AutomationProperties.Name="Pause or resume"
                 ToolTipService.ToolTip="Pause or resume">
-                <FontIcon FontSize="13" Glyph="{x:Bind ViewModel.PauseGlyph, Mode=OneWay}" />
+                <FontIcon FontSize="{StaticResource BodyTextBlockFontSize}" Glyph="{x:Bind ViewModel.PauseGlyph, Mode=OneWay}" />
             </Button>
             <Button
                 Command="{x:Bind ViewModel.StopCommand}"
                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                 Style="{StaticResource TrayButton}"
+                AutomationProperties.Name="Stop and finalise"
                 ToolTipService.ToolTip="Stop and finalise">
-                <FontIcon FontSize="13" Glyph="&#xE71A;" />
+                <FontIcon FontSize="{StaticResource BodyTextBlockFontSize}" Glyph="&#xE71A;" />
             </Button>
         </StackPanel>
     </Grid>

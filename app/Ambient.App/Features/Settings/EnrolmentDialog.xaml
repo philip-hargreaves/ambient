@@ -20,8 +20,7 @@
         <!-- The passage, set larger than body text so it reads from a normal sitting distance -->
         <Border Style="{StaticResource SettingsCard}" Padding="20,16">
             <TextBlock
-                FontSize="17"
-                LineHeight="26"
+                Style="{ThemeResource BodyLargeTextBlockStyle}"
                 TextWrapping="Wrap"
                 Text="{x:Bind ViewModel.PassageText}" />
         </Border>
@@ -32,9 +31,9 @@
             <Border
                 Width="64"
                 Height="64"
-                Background="{ThemeResource ColorAccentBrush}"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
                 CornerRadius="32">
-                <FontIcon FontSize="26" Foreground="{ThemeResource WhiteBrush}" Glyph="&#xE720;" />
+                <FontIcon FontSize="24" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" Glyph="&#xE720;" />
             </Border>
         </Grid>
 

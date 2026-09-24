@@ -21,17 +21,14 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Button
-                Margin="-9,0,0,-2"
-                Padding="9,4"
-                HorizontalAlignment="Left"
                 Command="{x:Bind ViewModel.ToggleFoldCommand}"
-                Style="{StaticResource TrayButton}"
+                Style="{StaticResource FoldButton}"
                 ToolTipService.ToolTip="Nearest recommendations to the note from the installed guidance. It may have no guideline for this condition, so check each title.">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Style="{StaticResource DocumentHeadingText}" Text="Guidelines" />
                     <FontIcon
                         VerticalAlignment="Center"
-                        FontSize="11"
+                        FontSize="{StaticResource CaptionTextBlockFontSize}"
                         Foreground="{ThemeResource FaintTextBrush}"
                         Glyph="{x:Bind ViewModel.FoldGlyph, Mode=OneWay}" />
                 </StackPanel>
@@ -116,11 +113,9 @@
                         Visibility="{x:Bind ViewModel.QueryCaptionVisible, Mode=OneWay}" />
                     <HyperlinkButton
                         Grid.Column="3"
-                        Padding="2,0"
-                        VerticalAlignment="Center"
                         Command="{x:Bind ViewModel.ClearQueryCommand}"
                         Content="Clear"
-                        FontSize="12" />
+                        Style="{StaticResource CaptionLink}" />
                 </Grid>
                 <StackPanel
                     Orientation="Horizontal"
@@ -135,25 +130,19 @@
                         Style="{StaticResource MicroText}"
                         Text="{x:Bind ViewModel.StateCaption, Mode=OneWay}" />
                     <HyperlinkButton
-                        Padding="2,0"
-                        VerticalAlignment="Center"
                         Command="{x:Bind ViewModel.SearchNoteCommand}"
                         Content="Search again"
-                        FontSize="12"
+                        Style="{StaticResource CaptionLink}"
                         Visibility="{x:Bind ViewModel.Failed, Mode=OneWay}" />
                     <HyperlinkButton
-                        Padding="2,0"
-                        VerticalAlignment="Center"
                         Command="{x:Bind ViewModel.SearchNoteCommand}"
                         Content="Search"
-                        FontSize="12"
+                        Style="{StaticResource CaptionLink}"
                         Visibility="{x:Bind ViewModel.NotSearched, Mode=OneWay}" />
                     <HyperlinkButton
-                        Padding="2,0"
-                        VerticalAlignment="Center"
                         Command="{x:Bind Shell.ShowSettingsCommand}"
                         Content="Open Settings"
-                        FontSize="12"
+                        Style="{StaticResource CaptionLink}"
                         Visibility="{x:Bind ViewModel.SettingsLinkVisible, Mode=OneWay}" />
                 </StackPanel>
                 <!-- The stale row the patient sheet uses -->
@@ -162,7 +151,7 @@
                     Spacing="8"
                     Visibility="{x:Bind ViewModel.SearchAgainVisible, Mode=OneWay}">
                     <FontIcon
-                        FontSize="12"
+                        FontSize="{StaticResource CaptionTextBlockFontSize}"
                         Foreground="{ThemeResource CautionBrush}"
                         Glyph="&#xE7BA;" />
                     <TextBlock
@@ -170,13 +159,11 @@
                         Style="{StaticResource MicroText}"
                         Text="{x:Bind ViewModel.StaleCaption, Mode=OneWay}" />
                     <HyperlinkButton
-                        Padding="2,0"
-                        VerticalAlignment="Center"
                         Command="{x:Bind ViewModel.SearchNoteCommand}"
-                        FontSize="12">
+                        Style="{StaticResource CaptionLink}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon FontSize="12" Glyph="&#xE72C;" />
-                            <TextBlock FontSize="12" Text="Search again" />
+                            <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE72C;" />
+                            <TextBlock Text="Search again" />
                         </StackPanel>
                     </HyperlinkButton>
                 </StackPanel>
@@ -308,38 +295,35 @@
                                                                 Visibility="{x:Bind MatchedVisible}" />
                                                             <StackPanel Orientation="Horizontal" Spacing="12">
                                                                 <HyperlinkButton
-                                                                    Padding="2,0"
                                                                     AutomationProperties.Name="{x:Bind ShowName}"
                                                                     Click="OnShowInDocument"
-                                                                    FontSize="12"
+                                                                    Style="{StaticResource CaptionLink}"
                                                                     Visibility="{x:Bind ShowVisible}">
                                                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                        <FontIcon FontSize="12" Glyph="&#xE7C3;" />
-                                                                        <TextBlock FontSize="12" Text="Show in document" />
+                                                                        <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE7C3;" />
+                                                                        <TextBlock Text="Show in document" />
                                                                     </StackPanel>
                                                                 </HyperlinkButton>
                                                                 <HyperlinkButton
-                                                                    Padding="2,0"
                                                                     AutomationProperties.Name="{x:Bind OpenName}"
                                                                     Command="{Binding ElementName=Section, Path=ViewModel.OpenCommand}"
                                                                     CommandParameter="{x:Bind}"
-                                                                    FontSize="12"
+                                                                    Style="{StaticResource CaptionLink}"
                                                                     ToolTipService.ToolTip="{x:Bind views:GuidanceSectionView.Tip(OpenTip)}"
                                                                     Visibility="{x:Bind CanOpen}">
                                                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                        <FontIcon FontSize="12" Glyph="&#xE8A7;" />
-                                                                        <TextBlock FontSize="12" Text="Open" />
+                                                                        <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE8A7;" />
+                                                                        <TextBlock Text="Open" />
                                                                     </StackPanel>
                                                                 </HyperlinkButton>
                                                                 <HyperlinkButton
-                                                                    Padding="2,0"
                                                                     AutomationProperties.Name="{x:Bind CopyName}"
                                                                     Command="{Binding ElementName=Section, Path=ViewModel.CopyCitationCommand}"
                                                                     CommandParameter="{x:Bind}"
-                                                                    FontSize="12">
+                                                                    Style="{StaticResource CaptionLink}">
                                                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                        <FontIcon FontSize="12" Glyph="&#xE8C8;" />
-                                                                        <TextBlock FontSize="12" Text="Copy citation" />
+                                                                        <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE8C8;" />
+                                                                        <TextBlock Text="Copy citation" />
                                                                     </StackPanel>
                                                                 </HyperlinkButton>
                                                             </StackPanel>

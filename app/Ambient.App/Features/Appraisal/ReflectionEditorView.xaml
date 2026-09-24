@@ -10,12 +10,8 @@
         <StackPanel Spacing="2" Visibility="{x:Bind ShowHeading}">
             <TextBox
                 AutomationProperties.Name="Reflection title"
-                BorderThickness="0"
-                Background="Transparent"
-                FontSize="18"
-                FontWeight="SemiBold"
                 LostFocus="OnTitleCommitted"
-                Padding="0,4"
+                Style="{StaticResource TitleTextBox}"
                 PlaceholderText="{x:Bind ViewModel.Month, Mode=OneWay}"
                 Text="{x:Bind ViewModel.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             <TextBlock Style="{StaticResource CaptionText}" Text="{x:Bind ViewModel.Month, Mode=OneWay}" />

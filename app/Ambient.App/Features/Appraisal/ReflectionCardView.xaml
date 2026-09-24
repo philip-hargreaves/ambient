@@ -61,16 +61,13 @@
                         <TextBox
                             x:Name="TitleBox"
                             AutomationProperties.Name="Reflection title"
-                            BorderThickness="0"
-                            Background="Transparent"
-                            FontSize="18"
-                            FontWeight="SemiBold"
                             LostFocus="OnTitleCommitted"
-                            Padding="0,4"
+                            Style="{StaticResource TitleTextBox}"
                             PlaceholderText="{x:Bind Card.MonthLabel, Mode=OneWay}" />
                         <Button
                             Grid.Column="1"
                             VerticalAlignment="Center"
+                            AutomationProperties.Name="Close"
                             Command="{x:Bind Card.ToggleCommand}"
                             Style="{StaticResource TrayButton}"
                             ToolTipService.ToolTip="Close">

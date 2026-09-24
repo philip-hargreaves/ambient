@@ -48,10 +48,11 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Button
+                            AutomationProperties.Name="Earlier"
                             Command="{x:Bind ViewModel.PreviousYearCommand}"
                             Style="{StaticResource TrayButton}"
                             ToolTipService.ToolTip="Earlier">
-                            <FontIcon FontSize="11" Glyph="&#xE76B;" />
+                            <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE76B;" />
                         </Button>
                         <!-- Pressing the year shows the whole year -->
                         <Button
@@ -67,10 +68,11 @@
                                 Text="{x:Bind ViewModel.YearLabel, Mode=OneWay}" />
                         </Button>
                         <Button
+                            AutomationProperties.Name="Later"
                             Command="{x:Bind ViewModel.NextYearCommand}"
                             Style="{StaticResource TrayButton}"
                             ToolTipService.ToolTip="Later">
-                            <FontIcon FontSize="11" Glyph="&#xE76C;" />
+                            <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE76C;" />
                         </Button>
                     </StackPanel>
                     <TextBlock
@@ -83,10 +85,9 @@
                 <!-- Twelve equal cells across the width -->
                 <Border
                     Grid.Row="3"
-                    Margin="0,-6,0,0"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="6">
+                    CornerRadius="{StaticResource ControlCornerRadius}">
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.Months, Mode=OneWay}">
                         <ItemsRepeater.Layout>
                             <UniformGridLayout

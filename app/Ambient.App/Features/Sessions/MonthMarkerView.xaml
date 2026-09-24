@@ -21,8 +21,9 @@
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="{x:Bind Divider, Mode=OneWay}"
             Height="30">
-            <Grid Padding="9,0,7,0">
+            <Grid>
                 <TextBlock
+                    Margin="9,0,7,0"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     FontWeight="{x:Bind Weight, Mode=OneWay}"
@@ -31,7 +32,6 @@
                     Text="{x:Bind Marker.Name, Mode=OneWay}" />
                 <Border
                     Height="2"
-                    Margin="-9,0,-7,0"
                     VerticalAlignment="Bottom"
                     Background="{ThemeResource AccentFillColorDefaultBrush}"
                     Visibility="{x:Bind Selected, Mode=OneWay}" />

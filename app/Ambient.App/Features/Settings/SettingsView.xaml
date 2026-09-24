@@ -231,13 +231,13 @@
                                 <FontIcon
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    FontSize="10"
+                                    FontSize="{StaticResource CaptionTextBlockFontSize}"
                                     Glyph="&#xE70D;"
                                     Visibility="{x:Bind ViewModel.Guidance.DocumentsCollapsed, Mode=OneWay}" />
                                 <FontIcon
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    FontSize="10"
+                                    FontSize="{StaticResource CaptionTextBlockFontSize}"
                                     Glyph="&#xE70E;"
                                     Visibility="{x:Bind ViewModel.Guidance.DocumentsExpanded, Mode=OneWay}" />
                             </Grid>
@@ -307,12 +307,12 @@
                         <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Developer tools" />
                         <FontIcon
                             VerticalAlignment="Center"
-                            FontSize="10"
+                            FontSize="{StaticResource CaptionTextBlockFontSize}"
                             Glyph="&#xE70D;"
                             Visibility="{x:Bind ViewModel.Appearance.DeveloperToolsCollapsed, Mode=OneWay}" />
                         <FontIcon
                             VerticalAlignment="Center"
-                            FontSize="10"
+                            FontSize="{StaticResource CaptionTextBlockFontSize}"
                             Glyph="&#xE70E;"
                             Visibility="{x:Bind ViewModel.Appearance.DeveloperToolsExpanded, Mode=OneWay}" />
                     </StackPanel>

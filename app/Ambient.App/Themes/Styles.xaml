@@ -17,7 +17,6 @@
     <!-- Document heading in the stacked review -->
     <Style x:Key="DocumentHeadingText" TargetType="TextBlock"
            BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-        <Setter Property="FontSize" Value="16" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
     </Style>
 
@@ -88,16 +87,38 @@
     <Style x:Key="TrayButton" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="9,5" />
     </Style>
 
     <Style x:Key="TrayToggleButton" TargetType="ToggleButton">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Padding" Value="9,5" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- A fold or section toggle drawn as text: no chrome until hovered, flush with the text beside it -->
+    <Style x:Key="FoldButton" TargetType="Button" BasedOn="{StaticResource TrayButton}">
+        <Setter Property="Padding" Value="0,4" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <!-- Inline links at caption size, the row of actions under a card -->
+    <Style x:Key="CaptionLink" TargetType="HyperlinkButton" BasedOn="{StaticResource DefaultHyperlinkButtonStyle}">
+        <Setter Property="Padding" Value="2,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
+    </Style>
+
+    <!-- An editable title: reads as a heading, edits in place -->
+    <Style x:Key="TitleTextBox" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0,4" />
+        <Setter Property="FontSize" Value="{StaticResource SubtitleTextBlockFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
     <!-- A document that accepts a caret: card chrome, no box chrome. The
@@ -108,7 +129,7 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
         <Setter Property="Padding" Value="16,14" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="{StaticResource BodyTextBlockFontSize}" />
         <Setter Property="AcceptsReturn" Value="True" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="IsSpellCheckEnabled" Value="False" />
@@ -120,7 +141,7 @@
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
     </Style>
 
     <!-- A row drawn by hand when the left side is more than a title and a

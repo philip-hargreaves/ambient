@@ -59,28 +59,21 @@
                                     Foreground="{ThemeResource FaintTextBrush}"
                                     Text="{x:Bind Meta}"
                                     Visibility="{x:Bind HasLabel}" />
-                                <Border
-                                    Padding="6,1"
-                                    VerticalAlignment="Center"
-                                    Background="{ThemeResource CautionSoftBrush}"
-                                    BorderBrush="{ThemeResource CautionBrush}"
-                                    Style="{StaticResource ChipBorder}"
-                                    Visibility="{x:Bind Edited}">
-                                    <TextBlock
-                                        Style="{StaticResource CaptionText}"
-                                        Foreground="{ThemeResource CautionBrush}"
-                                        Text="{x:Bind EditedLabel}" />
-                                </Border>
+                                <TextBlock
+                                    Style="{StaticResource MicroText}"
+                                    Text="{x:Bind EditedLabel}"
+                                    Visibility="{x:Bind Edited}" />
                             </StackPanel>
                         </StackPanel>
                         <Button
                             Grid.Column="1"
                             VerticalAlignment="Center"
+                            AutomationProperties.Name="Delete this consultation"
                             Command="{Binding ElementName=SessionsPage, Path=ViewModel.DeleteCommand}"
                             CommandParameter="{x:Bind}"
                             Style="{StaticResource TrayButton}"
                             ToolTipService.ToolTip="Delete this consultation">
-                            <FontIcon FontSize="13" Foreground="{ThemeResource FaintTextBrush}" Glyph="&#xE74D;" />
+                            <FontIcon FontSize="{StaticResource BodyTextBlockFontSize}" Foreground="{ThemeResource FaintTextBrush}" Glyph="&#xE74D;" />
                         </Button>
                     </Grid>
                 </DataTemplate>
@@ -108,12 +101,8 @@
                 <StackPanel Spacing="0">
                     <TextBox
                         AutomationProperties.Name="Consultation label"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        FontSize="20"
-                        FontWeight="SemiBold"
                         LostFocus="OnTitleCommitted"
-                        Padding="0,2,0,0"
+                        Style="{StaticResource TitleTextBox}"
                         PlaceholderText="Name this consultation"
                         Text="{x:Bind ViewModel.DetailTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <StackPanel Orientation="Horizontal" Spacing="10">
@@ -121,17 +110,10 @@
                             VerticalAlignment="Center"
                             Style="{StaticResource CaptionText}"
                             Text="{x:Bind ViewModel.DetailMeta, Mode=OneWay}" />
-                        <Border
-                            VerticalAlignment="Center"
-                            Background="{ThemeResource CautionSoftBrush}"
-                            BorderBrush="{ThemeResource CautionBrush}"
-                            Style="{StaticResource ChipBorder}"
-                            Visibility="{x:Bind ViewModel.Note.Edited, Mode=OneWay}">
-                            <TextBlock
-                                Style="{StaticResource CaptionText}"
-                                Foreground="{ThemeResource CautionBrush}"
-                                Text="{x:Bind ViewModel.Note.EditedStamp, Mode=OneWay}" />
-                        </Border>
+                        <TextBlock
+                            Style="{StaticResource MicroText}"
+                            Text="{x:Bind ViewModel.Note.EditedStamp, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.Note.Edited, Mode=OneWay}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -157,17 +139,15 @@
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch" />
                         <Button
-                            Margin="-9,18,0,-2"
-                            Padding="9,4"
-                            HorizontalAlignment="Left"
+                            Margin="0,16,0,0"
                             Command="{x:Bind ViewModel.TogglePatientFoldCommand}"
-                            Style="{StaticResource TrayButton}"
+                            Style="{StaticResource FoldButton}"
                             ToolTipService.ToolTip="Show or hide the patient information">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Style="{StaticResource DocumentHeadingText}" Text="Patient information" />
                                 <FontIcon
                                     VerticalAlignment="Center"
-                                    FontSize="11"
+                                    FontSize="{StaticResource CaptionTextBlockFontSize}"
                                     Foreground="{ThemeResource FaintTextBrush}"
                                     Glyph="{x:Bind ViewModel.PatientFoldGlyph, Mode=OneWay}" />
                             </StackPanel>
@@ -275,7 +255,7 @@
             Visibility="{x:Bind ViewModel.EmptyBecauseOff, Mode=OneWay}">
             <FontIcon
                 HorizontalAlignment="Center"
-                FontSize="26"
+                FontSize="24"
                 Foreground="{ThemeResource FaintTextBrush}"
                 Glyph="&#xE72E;" />
             <TextBlock
