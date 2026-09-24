@@ -35,7 +35,11 @@ public sealed partial class NoteViewModel : ObservableObject
     /// <summary>Example cases, offered on a demo record in place of the note.</summary>
     public IReadOnlyList<DemoCase> ExampleCases { get; set; } = [];
 
-    public IReadOnlyList<string> ExampleCaseTitles => ExampleCases.Select(c => c.Title).ToList();
+    /// <summary>The picker's entries: the stored note first, then the cases.</summary>
+    public IReadOnlyList<string> ExampleCaseTitles =>
+        [OriginalNoteTitle, .. ExampleCases.Select(c => c.Title)];
+
+    public const string OriginalNoteTitle = "Original note";
 
     [ObservableProperty]
     public partial bool ExampleCasesVisible { get; set; }
@@ -46,14 +50,20 @@ public sealed partial class NoteViewModel : ObservableObject
 
     partial void OnExampleCaseIndexChanged(int value)
     {
-        if (value >= 0 && value < ExampleCases.Count)
+        if (value == 0)
         {
-            ExampleCaseRequested?.Invoke(ExampleCases[value]);
+            OriginalNoteRequested?.Invoke();
+        }
+        else if (value > 0 && value <= ExampleCases.Count)
+        {
+            ExampleCaseRequested?.Invoke(ExampleCases[value - 1]);
         }
     }
 
     /// <summary>Set by the consultation view model, which owns the engine.</summary>
     public Action<DemoCase>? ExampleCaseRequested { get; set; }
+
+    public Action? OriginalNoteRequested { get; set; }
 
     /// <summary>Note options as the engine names them: "prose" or "soap".</summary>
     [ObservableProperty]

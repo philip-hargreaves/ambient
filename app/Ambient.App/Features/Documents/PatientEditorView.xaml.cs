@@ -37,7 +37,7 @@ public sealed partial class PatientEditorView : UserControl
 
     // Inside a tab the sheet keeps at most three fifths of the content area,
     // leaving room for the actions and a translation
-    public void FitTabContent(TabView tabs) => _fit.Fit(tabs);
+    public void FitTabContent(FrameworkElement area) => _fit.Fit(area);
 
     public void FollowContent() => _fit.Follow();
 }

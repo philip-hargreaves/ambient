@@ -47,7 +47,21 @@ public sealed class SessionReview
         _recorder = recorder;
         _preferences = preferences;
         recorder.Sealed += Sealed;
+        // Editing an example makes it the clinician's text: the overlay ends, the save path applies
+        note.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(NoteViewModel.NoteEditing) && note.NoteEditing)
+            {
+                _originalNote = null;
+            }
+        };
     }
+
+    // The stored note while an example case stands in for it, so it can come back
+    private string? _originalNote;
+
+    /// <summary>An example case is showing in place of the stored note.</summary>
+    public bool ExampleShown => _originalNote is not null;
 
     /// <summary>The session the documents belong to, null before a stop or an open.</summary>
     public string? FinalisedSessionId { get; private set; }
@@ -75,6 +89,11 @@ public sealed class SessionReview
 
     // An example case stands in as the note of a demo record: the guidance
     // search runs on it and the patient sheet can be rewritten from it
+    /// <summary>
+    /// A written case stands in for the note of a demo record and is searched as the
+    /// note is. The stored note is kept aside and written back by
+    /// <see cref="RestoreOriginalNoteAsync"/> or on leaving.
+    /// </summary>
     public async Task ApplyExampleCaseAsync(DemoCase example)
     {
         if (_recorder.State != SessionState.Review || !_recorder.DemoRecord)
@@ -82,9 +101,34 @@ public sealed class SessionReview
             return;
         }
 
+        _originalNote ??= LoadedNote;
         _note.ClinicalNoteText = example.Text;
         _status.Append($"Example case: {example.Title}");
         await SearchGuidanceAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>The stored note back in place of an example, saved and searched again.</summary>
+    public async Task RestoreOriginalNoteAsync()
+    {
+        if (_originalNote is not { } original || _recorder.State != SessionState.Review)
+        {
+            return;
+        }
+
+        _originalNote = null;
+        _note.ClinicalNoteText = original;
+        _status.Append("Original note");
+        await SearchGuidanceAsync().ConfigureAwait(true);
+    }
+
+    // Leaving with an example showing puts the stored note back before the autosave
+    private void DropExample()
+    {
+        if (_originalNote is { } original)
+        {
+            _originalNote = null;
+            _note.ClinicalNoteText = original;
+        }
     }
 
     // A batch of documents finishing one after another searches once, when the last has
@@ -247,6 +291,7 @@ public sealed class SessionReview
             () => _engine.RegenerateNoteAsync(_note.Style, _note.Detail)).ConfigureAwait(true);
         if (accepted)
         {
+            _originalNote = null;  // the rewrite replaces whatever showed
             Regenerating = true;
             _note.BeginRegenerate();
             _guidance.NoteStarted();
@@ -429,6 +474,7 @@ public sealed class SessionReview
             return;
         }
 
+        DropExample();
         if (_note.ClinicalNoteText != LoadedNote)
         {
             await SaveNoteAsync().ConfigureAwait(true);

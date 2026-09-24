@@ -57,23 +57,19 @@
                     PlaceholderText="Example case"
                     SelectedIndex="{x:Bind ViewModel.ExampleCaseIndex, Mode=TwoWay}"
                     Visibility="{x:Bind ViewModel.ExampleCasesVisible, Mode=OneWay}" />
-                <ComboBox
-                    MinWidth="104"
+                <!-- Style and detail in one menu, applied on the next Regenerate. Items built in code -->
+                <DropDownButton
                     AutomationProperties.Name="Note style"
-                    DisplayMemberPath="Name"
-                    IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
-                    ItemsSource="{x:Bind ViewModel.StyleOptions}"
-                    SelectedIndex="{x:Bind ViewModel.StyleIndex, Mode=TwoWay}" />
-                <ComboBox
-                    MinWidth="118"
-                    AutomationProperties.Name="Note detail"
-                    DisplayMemberPath="Name"
-                    IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
-                    ItemsSource="{x:Bind ViewModel.DetailOptions}"
-                    SelectedIndex="{x:Bind ViewModel.DetailIndex, Mode=TwoWay}" />
-                <Button x:Name="RegenerateButton"
-                        Command="{x:Bind ViewModel.RegenerateCommand}"
-                        ToolTipService.ToolTip="Rewrite the note with the chosen style and detail">
+                    Content="Note style"
+                    IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="OptionsMenu" Placement="BottomEdgeAlignedRight" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button
+                    x:Name="RegenerateButton"
+                    Command="{x:Bind ViewModel.RegenerateCommand}"
+                    ToolTipService.ToolTip="Rewrite the note with the chosen style and detail">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="14" Glyph="&#xE72C;" />
                         <TextBlock Text="Regenerate" />

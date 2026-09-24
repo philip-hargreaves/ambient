@@ -208,44 +208,7 @@
                 Grid.Row="1"
                 MaxWidth="760"
                 HorizontalAlignment="Center">
-                <TabView
-                    x:Name="NarrowTabs"
-                    VerticalAlignment="Stretch"
-                    CanDragTabs="False"
-                    CanReorderTabs="False"
-                    IsAddTabButtonVisible="False"
-                    TabWidthMode="SizeToContent">
-                    <TabView.TabItems>
-                        <TabViewItem Header="Clinical note" IsClosable="False">
-                            <ContentControl
-                                x:Name="NoteHost"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch" />
-                        </TabViewItem>
-                        <TabViewItem Header="Patient information" IsClosable="False">
-                            <ContentControl
-                                x:Name="PatientHost"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch" />
-                        </TabViewItem>
-                        <TabViewItem Header="Transcript" IsClosable="False">
-                            <ContentControl
-                                x:Name="TranscriptHost"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch" />
-                        </TabViewItem>
-                        <TabViewItem
-                            x:Name="PageTab"
-                            Header="Document page"
-                            IsClosable="False"
-                            Visibility="Collapsed">
-                            <ContentControl
-                                x:Name="PageHost"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch" />
-                        </TabViewItem>
-                    </TabView.TabItems>
-                </TabView>
+                <controls:DocumentTabs x:Name="NarrowTabs" VerticalAlignment="Stretch" />
             </Grid>
         </Grid>
 

@@ -62,6 +62,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Note.SavePatientRequested = Review.SavePatientAsync;
         Note.ExampleCases = demo?.Cases ?? [];
         Note.ExampleCaseRequested = example => _ = Review.ApplyExampleCaseAsync(example);
+        Note.OriginalNoteRequested = () => _ = Review.RestoreOriginalNoteAsync();
         Guidance.SearchNoteRequested = Review.SearchGuidanceAsync;
         Guidance.SearchQueryRequested = Review.SearchGuidanceAsync;
         Guidance.ShowInDocumentRequested = PageView.ShowAsync;

@@ -19,6 +19,10 @@ public sealed partial class SessionsView : UserControl
     private readonly PatientEditorView _patient;
     private readonly PageView _page;
     private readonly PageViewModel _pageView;
+    private readonly ContentControl _noteHost = Slot();
+    private readonly ContentControl _patientHost = Slot();
+    private readonly ContentControl _transcriptHost = Slot();
+    private readonly ContentControl _pageHost = Slot();
     private bool? _wide;
 
     public SessionsView(
@@ -34,6 +38,11 @@ public sealed partial class SessionsView : UserControl
         _page = page;
         _pageView = consultation.PageView;
         InitializeComponent();
+        NarrowTabs.Add("Clinical note", _noteHost);
+        NarrowTabs.Add("Patient information", _patientHost);
+        NarrowTabs.Add("Transcript", _transcriptHost);
+        NarrowTabs.Add("Document page", _pageHost);
+        NarrowTabs.SetVisible(PageTab, false);
         Place(wide: false);
         _pageView.PropertyChanged += (_, e) =>
         {
@@ -47,7 +56,16 @@ public sealed partial class SessionsView : UserControl
         Loaded += (_, _) => _ = ViewModel.EnterAsync();
     }
 
+    // The narrow layout's views, in the order they were added
+    private const int PageTab = 3;
+
     public SessionsViewModel ViewModel { get; }
+
+    private static ContentControl Slot() => new()
+    {
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        VerticalContentAlignment = VerticalAlignment.Stretch,
+    };
 
     public ShellViewModel Shell { get; }
 
@@ -63,10 +81,10 @@ public sealed partial class SessionsView : UserControl
         }
 
         _wide = wide;
-        NoteHost.Content = null;
-        PatientHost.Content = null;
-        TranscriptHost.Content = null;
-        PageHost.Content = null;
+        _noteHost.Content = null;
+        _patientHost.Content = null;
+        _transcriptHost.Content = null;
+        _pageHost.Content = null;
         NoteHostWide.Content = null;
         PatientHostWide.Content = null;
         TranscriptHostWide.Content = null;
@@ -80,10 +98,10 @@ public sealed partial class SessionsView : UserControl
         }
         else
         {
-            NoteHost.Content = _note;
-            PatientHost.Content = _patient;
-            TranscriptHost.Content = _transcript;
-            PageHost.Content = _page;
+            _noteHost.Content = _note;
+            _patientHost.Content = _patient;
+            _transcriptHost.Content = _transcript;
+            _pageHost.Content = _page;
         }
 
         WideLayout.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
@@ -108,14 +126,10 @@ public sealed partial class SessionsView : UserControl
         var open = _pageView.Visible;
         TranscriptCard.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
         PageHostWide.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        PageTab.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        NarrowTabs.SetVisible(PageTab, open);
         if (open && _wide == false)
         {
-            NarrowTabs.SelectedItem = PageTab;
-        }
-        else if (!open && ReferenceEquals(NarrowTabs.SelectedItem, PageTab))
-        {
-            NarrowTabs.SelectedIndex = 0;
+            NarrowTabs.SelectedIndex = PageTab;
         }
     }
 
@@ -123,8 +137,8 @@ public sealed partial class SessionsView : UserControl
     {
         if (_wide == false)
         {
-            _note.FitTabContent(NarrowTabs);
-            _patient.FitTabContent(NarrowTabs);
+            _note.FitTabContent(NarrowTabs.ContentArea);
+            _patient.FitTabContent(NarrowTabs.ContentArea);
         }
     }
 
