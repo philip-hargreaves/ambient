@@ -6,6 +6,7 @@ using Ambient.App.Features.Consultation;
 using Ambient.App.Features.Demo;
 using Ambient.App.Features.Documents;
 using Ambient.App.Features.Guidance;
+using Ambient.App.Features.Help;
 using Ambient.App.Features.Sessions;
 using Ambient.App.Features.Settings;
 using Ambient.App.Platform;
@@ -35,6 +36,7 @@ internal static class ViewServices
         services.AddSingleton<SessionsView>();
         services.AddSingleton<AppraisalsView>();
         services.AddSingleton<SettingsView>();
+        services.AddSingleton<HelpView>();
         services.AddSingleton<MainWindow>();
         // The one place a page is looked up by name
         services.AddSingleton(sp => new NavigationService(new Dictionary<string, Func<UIElement>>
@@ -42,6 +44,7 @@ internal static class ViewServices
             ["consultation"] = sp.GetRequiredService<ConsultationView>,
             ["sessions"] = sp.GetRequiredService<SessionsView>,
             ["appraisals"] = sp.GetRequiredService<AppraisalsView>,
+            ["help"] = sp.GetRequiredService<HelpView>,
             ["settings"] = sp.GetRequiredService<SettingsView>,
         }));
         services.AddSingleton<INavigationService>(sp => sp.GetRequiredService<NavigationService>());

@@ -52,7 +52,6 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         NpuTranscription = preferences?.NpuTranscription ?? false;
         CollectPerformanceData = preferences?.CollectPerformanceData ?? false;
         ShowPerformanceMetrics = preferences?.ShowPerformanceMetrics ?? false;
-        DeveloperToolsExpanded = preferences?.DeveloperToolsExpanded ?? false;
         Theme = preferences?.Theme ?? "system";
         _initialising = false;
     }
@@ -125,24 +124,9 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
 
     // ---- developer tools
 
-    /// <summary>The Developer tools group is closed unless it was left open.</summary>
+    /// <summary>The Developer tools group, closed on every launch.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DeveloperToolsCollapsed))]
     public partial bool DeveloperToolsExpanded { get; set; }
-
-    public bool DeveloperToolsCollapsed => !DeveloperToolsExpanded;
-
-    [RelayCommand]
-    private void ToggleDeveloperTools() => DeveloperToolsExpanded = !DeveloperToolsExpanded;
-
-    partial void OnDeveloperToolsExpandedChanged(bool value)
-    {
-        if (!_initialising && _preferences is not null)
-        {
-            _preferences.DeveloperToolsExpanded = value;
-            _preferences.Save();
-        }
-    }
 
     /// <summary>Shows the replay tray. A developer control.</summary>
     [ObservableProperty]

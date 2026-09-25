@@ -24,7 +24,6 @@ public sealed partial class GuidanceLibrary : ObservableObject
     private readonly ILauncher? _launcher;
     private readonly bool _initialising;
     private bool _documentsNeededAttention;
-    private bool _openingForAttention;
 
     public GuidanceLibrary(
         AppPreferences? preferences, IEngineApi? client, StatusBarViewModel? status,
@@ -38,7 +37,6 @@ public sealed partial class GuidanceLibrary : ObservableObject
         _launcher = launcher;
         // Restoring saved values is not the clinician changing them
         _initialising = true;
-        DocumentsExpanded = preferences?.DocumentsExpanded ?? false;
         IncludeResearchGuidance = preferences?.IncludeResearchGuidance ?? false;
         _initialising = false;
     }
@@ -188,24 +186,9 @@ public sealed partial class GuidanceLibrary : ObservableObject
         }
     }
 
-    /// <summary>The list is closed unless it was left open. Work or a failure opens it.</summary>
+    /// <summary>The list is closed on every launch. A failure opens it once.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DocumentsCollapsed))]
     public partial bool DocumentsExpanded { get; set; }
-
-    public bool DocumentsCollapsed => !DocumentsExpanded;
-
-    [RelayCommand]
-    private void ToggleDocuments() => DocumentsExpanded = !DocumentsExpanded;
-
-    partial void OnDocumentsExpandedChanged(bool value)
-    {
-        if (!_initialising && !_openingForAttention && _preferences is not null)
-        {
-            _preferences.DocumentsExpanded = value;
-            _preferences.Save();
-        }
-    }
 
     public bool DocumentsPresent => Documents.Count > 0;
 
@@ -375,17 +358,15 @@ public sealed partial class GuidanceLibrary : ObservableObject
         folder.Length > 0
         && roots.Any(root => folder.StartsWith(root, StringComparison.OrdinalIgnoreCase));
 
-    // The summary follows every change. The first sign of work or a failure opens
-    // the list once, without making that the remembered choice
+    // The summary follows every change. The first failure opens the list once;
+    // work does not, since documents are checked again at every launch
     private void RefreshBatch()
     {
         OnPropertyChanged(nameof(DocumentsSummary));
-        var attention = Documents.Any(r => r.Working || r.Failed);
+        var attention = Documents.Any(r => r.Failed);
         if (attention && !_documentsNeededAttention && !DocumentsExpanded)
         {
-            _openingForAttention = true;
             DocumentsExpanded = true;
-            _openingForAttention = false;
         }
 
         _documentsNeededAttention = attention;

@@ -32,10 +32,6 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
 
         public bool ShowPerformanceMetrics { get; init; }
 
-        public bool DeveloperToolsExpanded { get; init; }
-
-        public bool DocumentsExpanded { get; init; }
-
         public bool IncludeResearchGuidance { get; init; }
 
         public string? MicId { get; init; }
@@ -89,12 +85,6 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
 
     /// <summary>Off by default: the status-bar chips are for testing.</summary>
     public bool ShowPerformanceMetrics { get; set; }
-
-    /// <summary>Whether the Developer tools group in Settings is open.</summary>
-    public bool DeveloperToolsExpanded { get; set; }
-
-    /// <summary>Whether the guideline documents list in Settings is open.</summary>
-    public bool DocumentsExpanded { get; set; }
 
     /// <summary>
     /// Dev builds only: search corpora marked research (the local NICE demo). Passed to
@@ -156,8 +146,6 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
         preferences.CollectPerformanceData = stored.CollectPerformanceData;
         preferences.KeepConsultations = stored.KeepConsultations;
         preferences.ShowPerformanceMetrics = stored.ShowPerformanceMetrics;
-        preferences.DeveloperToolsExpanded = stored.DeveloperToolsExpanded;
-        preferences.DocumentsExpanded = stored.DocumentsExpanded;
         preferences.IncludeResearchGuidance = stored.IncludeResearchGuidance;
         preferences.MicId = stored.MicId ?? "";
         preferences.Theme = Known(stored.Theme, Themes, Themes[0]);
@@ -181,8 +169,6 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
                 CollectPerformanceData = CollectPerformanceData,
                 KeepConsultations = KeepConsultations,
                 ShowPerformanceMetrics = ShowPerformanceMetrics,
-                DeveloperToolsExpanded = DeveloperToolsExpanded,
-                DocumentsExpanded = DocumentsExpanded,
                 IncludeResearchGuidance = IncludeResearchGuidance,
                 MicId = MicId,
                 Theme = Theme,

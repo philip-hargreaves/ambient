@@ -46,45 +46,37 @@
   </ItemGroup>
 
   <!-- Dev runs see the repo model store via a junction. Packaging replaces this -->
-  <Target Name="LinkModelStore" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\models') And !Exists('$(TargetDir)models')">
-    <Exec Command='mklink /J "$(TargetDir)models" "$(MSBuildProjectDirectory)\..\..\models"' />
+  <Target Name="LinkModelStore" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\models') And !Exists('$(TargetDir)models')">
+    <Exec Command="mklink /J &quot;$(TargetDir)models&quot; &quot;$(MSBuildProjectDirectory)\..\..\models&quot;" />
   </Target>
 
   <!-- Packaged F5 runs the engine from AppX, which needs the same link -->
-  <Target Name="LinkModelStoreAppX" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\models') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\models')">
-    <Exec Command='mklink /J "$(TargetDir)AppX\models" "$(MSBuildProjectDirectory)\..\..\models"' />
+  <Target Name="LinkModelStoreAppX" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\models') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\models')">
+    <Exec Command="mklink /J &quot;$(TargetDir)AppX\models&quot; &quot;$(MSBuildProjectDirectory)\..\..\models&quot;" />
   </Target>
 
   <!-- Prompts ride the same junction, so a repo edit applies to the next note -->
-  <Target Name="LinkPrompts" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\prompts') And !Exists('$(TargetDir)prompts')">
-    <Exec Command='mklink /J "$(TargetDir)prompts" "$(MSBuildProjectDirectory)\..\..\prompts"' />
+  <Target Name="LinkPrompts" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\prompts') And !Exists('$(TargetDir)prompts')">
+    <Exec Command="mklink /J &quot;$(TargetDir)prompts&quot; &quot;$(MSBuildProjectDirectory)\..\..\prompts&quot;" />
   </Target>
-  <Target Name="LinkPromptsAppX" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\prompts') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\prompts')">
-    <Exec Command='mklink /J "$(TargetDir)AppX\prompts" "$(MSBuildProjectDirectory)\..\..\prompts"' />
+  <Target Name="LinkPromptsAppX" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\prompts') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\prompts')">
+    <Exec Command="mklink /J &quot;$(TargetDir)AppX\prompts&quot; &quot;$(MSBuildProjectDirectory)\..\..\prompts&quot;" />
   </Target>
 
   <!-- Demo tracks too, so every layout has demo\ beside the exe -->
-  <Target Name="LinkDemo" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\demo') And !Exists('$(TargetDir)demo')">
-    <Exec Command='mklink /J "$(TargetDir)demo" "$(MSBuildProjectDirectory)\..\..\demo"' />
+  <Target Name="LinkDemo" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\demo') And !Exists('$(TargetDir)demo')">
+    <Exec Command="mklink /J &quot;$(TargetDir)demo&quot; &quot;$(MSBuildProjectDirectory)\..\..\demo&quot;" />
   </Target>
-  <Target Name="LinkDemoAppX" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\demo') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\demo')">
-    <Exec Command='mklink /J "$(TargetDir)AppX\demo" "$(MSBuildProjectDirectory)\..\..\demo"' />
+  <Target Name="LinkDemoAppX" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\demo') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\demo')">
+    <Exec Command="mklink /J &quot;$(TargetDir)AppX\demo&quot; &quot;$(MSBuildProjectDirectory)\..\..\demo&quot;" />
   </Target>
 
   <!-- Built corpora, corpora\ beside the exe -->
-  <Target Name="LinkCorpora" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\rag\corpora') And !Exists('$(TargetDir)corpora')">
-    <Exec Command='mklink /J "$(TargetDir)corpora" "$(MSBuildProjectDirectory)\..\..\rag\corpora"' />
+  <Target Name="LinkCorpora" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\rag\corpora') And !Exists('$(TargetDir)corpora')">
+    <Exec Command="mklink /J &quot;$(TargetDir)corpora&quot; &quot;$(MSBuildProjectDirectory)\..\..\rag\corpora&quot;" />
   </Target>
-  <Target Name="LinkCorporaAppX" AfterTargets="Build"
-          Condition="Exists('$(MSBuildProjectDirectory)\..\..\rag\corpora') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\corpora')">
-    <Exec Command='mklink /J "$(TargetDir)AppX\corpora" "$(MSBuildProjectDirectory)\..\..\rag\corpora"' />
+  <Target Name="LinkCorporaAppX" AfterTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)\..\..\rag\corpora') And Exists('$(TargetDir)AppX') And !Exists('$(TargetDir)AppX\corpora')">
+    <Exec Command="mklink /J &quot;$(TargetDir)AppX\corpora&quot; &quot;$(MSBuildProjectDirectory)\..\..\rag\corpora&quot;" />
   </Target>
 
   <ItemGroup>
@@ -124,6 +116,7 @@
     <PropertyGroup> above to opt out.
   -->
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />

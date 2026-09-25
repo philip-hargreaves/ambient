@@ -20,8 +20,6 @@ public class AppPreferencesTest
             CollectPerformanceData = true,
             KeepConsultations = true,
             ShowPerformanceMetrics = true,
-            DeveloperToolsExpanded = true,
-            DocumentsExpanded = true,
             IncludeResearchGuidance = true,
             MicId = "{mic-7}",
             Theme = "dark",
@@ -41,8 +39,6 @@ public class AppPreferencesTest
         Assert.True(loaded.CollectPerformanceData);
         Assert.True(loaded.KeepConsultations);
         Assert.True(loaded.ShowPerformanceMetrics);
-        Assert.True(loaded.DeveloperToolsExpanded);
-        Assert.True(loaded.DocumentsExpanded);
         Assert.True(loaded.IncludeResearchGuidance);
         Assert.Equal("{mic-7}", loaded.MicId);
         Assert.Equal("dark", loaded.Theme);

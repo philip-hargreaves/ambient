@@ -72,7 +72,7 @@ public sealed partial class MainWindow : Window
             Nav.SelectedItem = Nav.SettingsItem;
             return;
         }
-        foreach (var item in Nav.MenuItems)
+        foreach (var item in Nav.MenuItems.Concat(Nav.FooterMenuItems))
         {
             if (item is NavigationViewItem entry && entry.Tag as string == key)
             {

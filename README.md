@@ -8,7 +8,7 @@ Everything runs locally: audio, transcripts and notes never leave the machine.
 ## Run the release package
 
 Requirements: Windows 11 x64, an Intel Core Ultra Series 2 processor or above with a Intel Arc iGPU,
-32 GB RAM and 20 GB free disk. 
+16 GB RAM and 20 GB free disk. 
 
 1. Extract `ambient.zip` anywhere, for example a folder on the Desktop.
 2. Open the `ambient` folder and double-click `Ambient.App.exe`.

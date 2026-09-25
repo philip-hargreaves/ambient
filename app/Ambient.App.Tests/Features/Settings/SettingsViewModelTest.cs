@@ -222,28 +222,21 @@ public class SettingsViewModelTest
     }
 
     [Fact]
-    public void TheDocumentsListIsClosedUnlessLeftOpenAndAFailureOpensItOnce()
+    public void TheDocumentsListIsClosedAndAFailureOpensItOnce()
     {
         var engine = new FakeEngineClient();
         engine.GuidanceDocuments.Add(Document(1, "Gout", "ready", 41));
-        var preferences = TempPreferences();
-        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine));
+        var settings = new SettingsViewModel(TempPreferences(), client: new EngineApi(engine));
 
         Assert.Equal("1 document · all ready", settings.Guidance.DocumentsSummary);
         Assert.False(settings.Guidance.DocumentsExpanded);
 
         engine.RaiseNotification("guidance/document", Json(Document(2, "Letter", "failed", error: "password")));
         Assert.True(settings.Guidance.DocumentsExpanded);
-        Assert.False(preferences.DocumentsExpanded, "opening for attention is not the remembered choice");
 
-        settings.Guidance.ToggleDocumentsCommand.Execute(null);
-        Assert.False(settings.Guidance.DocumentsExpanded);
+        settings.Guidance.DocumentsExpanded = false;
         engine.RaiseNotification("guidance/document", Json(Document(3, "PMR", "ready", 10)));
         Assert.False(settings.Guidance.DocumentsExpanded, "the same failure does not reopen it");
-
-        settings.Guidance.ToggleDocumentsCommand.Execute(null);
-        Assert.True(preferences.DocumentsExpanded);
-        Assert.True(new SettingsViewModel(preferences).Guidance.DocumentsExpanded);
     }
 
     [Fact]
@@ -368,7 +361,8 @@ public class SettingsViewModelTest
     {
         var preferences = TempPreferences();
         var engine = TieredEngine();
-        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: new FakeSession());
+        var status = new StatusBarViewModel();
+        var settings = new SettingsViewModel(preferences, client: new EngineApi(engine), session: new FakeSession(), status: status);
 
         settings.NoteModel.NoteModelIndex = 2;
 
@@ -377,6 +371,8 @@ public class SettingsViewModelTest
         Assert.Contains("accuracy", request.Params);
         Assert.False(settings.NoteModel.NoteModelEnabled, "greyed while the lane loads");
         Assert.Equal("Loading", settings.NoteModel.NoteModelStatus);
+        Assert.Equal("Loading Qwen3.6 35B", status.LatestActivity);
+        Assert.True(status.Busy);
 
         engine.RaiseNotification("note/model", NoteModel("loading", "accuracy", "Qwen3.6 35B"));
         Assert.False(settings.NoteModel.NoteModelEnabled);
@@ -386,6 +382,9 @@ public class SettingsViewModelTest
         Assert.Equal("", settings.NoteModel.NoteModelStatus);
         Assert.StartsWith("Larger models", settings.NoteModel.NoteModelCaption);
         Assert.Equal(2, settings.NoteModel.NoteModelIndex);
+        // The status bar's busy line ends with the load
+        Assert.Equal("Ready", status.LatestActivity);
+        Assert.False(status.Busy);
     }
 
     [Fact]
@@ -721,7 +720,7 @@ public class SettingsViewModelTest
         Assert.True(settings.Guidance.Documents[1].Failed);
         Assert.Equal("12 passages · added 15 Sep 2026", settings.Guidance.Documents[2].Detail);
         Assert.Equal("4 documents · reading 1, 1 could not be read", settings.Guidance.DocumentsSummary);
-        Assert.True(settings.Guidance.DocumentsExpanded, "work or a failure opens the list");
+        Assert.True(settings.Guidance.DocumentsExpanded, "a failure opens the list");
         Assert.True(settings.Guidance.DocumentsPresent);
         Assert.True(settings.Guidance.AddDocumentsCommand.CanExecute(null));
     }
@@ -806,19 +805,15 @@ public class SettingsViewModelTest
     }
 
     [Fact]
-    public void DeveloperToolsStayClosedUntilOpenedAndThenStayOpen()
+    public void DeveloperToolsAreClosedOnEveryLaunch()
     {
         var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         var settings = new SettingsViewModel(new AppPreferences(path));
         Assert.False(settings.Appearance.DeveloperToolsExpanded);
 
-        settings.Appearance.ToggleDeveloperToolsCommand.Execute(null);
-        Assert.True(settings.Appearance.DeveloperToolsExpanded);
-        Assert.False(settings.Appearance.DeveloperToolsCollapsed);
+        settings.Appearance.DeveloperToolsExpanded = true;
 
-        var saved = AppPreferences.Load(path);
-        Assert.True(saved.DeveloperToolsExpanded);
-        Assert.True(new SettingsViewModel(saved).Appearance.DeveloperToolsExpanded);
+        Assert.False(new SettingsViewModel(AppPreferences.Load(path)).Appearance.DeveloperToolsExpanded);
     }
 
     [Fact]
