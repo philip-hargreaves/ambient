@@ -61,6 +61,20 @@ public class PageViewModelTest
     }
 
     [Fact]
+    public async Task EveryShowIsAnnouncedEvenWhileAPageIsAlreadyOpen()
+    {
+        var (view, _) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));
+        var shown = 0;
+        view.Shown += () => shown++;
+
+        await view.ShowAsync(Found());
+        await view.ShowAsync(Found());
+
+        Assert.True(view.Visible);
+        Assert.Equal(2, shown);
+    }
+
+    [Fact]
     public async Task ShowingAPassageAsksForItsPageAndScalesTheBoxes()
     {
         var (view, engine) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));

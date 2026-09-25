@@ -6,13 +6,13 @@
     xmlns:views="using:Ambient.App.Features.Documents"
     xmlns:vm="using:Ambient.App.Core.Features.Documents">
 
-    <Grid Padding="16,12,16,8" RowSpacing="8">
+    <Grid x:Name="Root" Padding="16,12,16,8" RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBlock Style="{StaticResource PaneHeaderText}" Text="Transcript" />
+        <TextBlock x:Name="Heading" Style="{StaticResource PaneHeaderText}" Text="Transcript" />
 
         <!-- Each turn is a card, and the card is the item container, so the
              platform's hover and theme behaviour stay underneath. The

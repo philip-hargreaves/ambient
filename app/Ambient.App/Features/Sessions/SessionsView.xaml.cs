@@ -11,18 +11,28 @@ namespace Ambient.App.Features.Sessions;
 
 public sealed partial class SessionsView : UserControl
 {
-    // Below this width the documents go into tabs
+    // Below this width everything goes into one selector
     private const double WideThreshold = 1100;
+
+    // The narrow selector's views, in the order they were added
+    private const int NarrowGuidelines = 2;
+    private const int NarrowTranscript = 3;
+    private const int NarrowPage = 4;
+
+    // The reference selector's views
+    private const int Guidelines = 0;
+    private const int Transcript = 1;
+    private const int Page = 2;
 
     private readonly TranscriptPaneView _transcript;
     private readonly NoteEditorView _note;
     private readonly PatientEditorView _patient;
+    private readonly GuidanceSectionView _guidance;
     private readonly PageView _page;
     private readonly PageViewModel _pageView;
-    private readonly ContentControl _noteHost = Slot();
-    private readonly ContentControl _patientHost = Slot();
-    private readonly ContentControl _transcriptHost = Slot();
-    private readonly ContentControl _pageHost = Slot();
+    private readonly ContentControl[] _narrow = [Slot(), Slot(), Slot(), Slot(), Slot()];
+    private readonly ContentControl[] _documents = [Slot(), Slot()];
+    private readonly ContentControl[] _references = [Slot(), Slot(), Slot()];
     private bool? _wide;
 
     public SessionsView(
@@ -35,15 +45,29 @@ public sealed partial class SessionsView : UserControl
         _transcript = transcript;
         _note = note;
         _patient = patient;
+        _guidance = note.Guidance;
         _page = page;
         _pageView = consultation.PageView;
         InitializeComponent();
-        NarrowTabs.Add("Clinical note", _noteHost);
-        NarrowTabs.Add("Patient information", _patientHost);
-        NarrowTabs.Add("Transcript", _transcriptHost);
-        NarrowTabs.Add("Document page", _pageHost);
-        NarrowTabs.SetVisible(PageTab, false);
+        // The selectors name the sections, so the views drop their own headings
+        _note.PlaceGuidance(below: false);
+        _guidance.ShowHeading(false);
+        _transcript.ShowHeading(false);
+
+        NarrowTabs.Add("Clinical note", _narrow[0]);
+        NarrowTabs.Add("Patient information", _narrow[1]);
+        NarrowTabs.Add("Guidelines", _narrow[2]);
+        NarrowTabs.Add("Transcript", _narrow[3]);
+        NarrowTabs.Add("Document page", _narrow[4]);
+        DocumentTabs.Add("Clinical note", _documents[0]);
+        DocumentTabs.Add("Patient information", _documents[1]);
+        ReferenceTabs.Add("Guidelines", _references[0]);
+        ReferenceTabs.Add("Transcript", _references[1]);
+        ReferenceTabs.Add("Document page", _references[2]);
         Place(wide: false);
+        PlaceGuidelines();
+        PlacePage();
+
         _pageView.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(PageViewModel.Visible))
@@ -51,13 +75,32 @@ public sealed partial class SessionsView : UserControl
                 PlacePage();
             }
         };
-        NarrowTabs.Loaded += (_, _) => FitNarrow();
-        NarrowTabs.SizeChanged += (_, _) => FitNarrow();
+        // A page shown while another is open comes to the front too
+        _pageView.Shown += PlacePage;
+        _guidance.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GuidanceViewModel.Visible))
+            {
+                PlaceGuidelines();
+            }
+        };
+        // A consultation opens on its note, with the guidance beside it when there is any
+        ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SessionsViewModel.DetailOpen) && ViewModel.DetailOpen)
+            {
+                NarrowTabs.SelectedIndex = 0;
+                DocumentTabs.SelectedIndex = 0;
+                ReferenceTabs.SelectedIndex = _guidance.ViewModel.Visible ? Guidelines : Transcript;
+            }
+        };
+        foreach (var tabs in new[] { NarrowTabs, DocumentTabs })
+        {
+            tabs.Loaded += (_, _) => Fit();
+            tabs.SizeChanged += (_, _) => Fit();
+        }
         Loaded += (_, _) => _ = ViewModel.EnterAsync();
     }
-
-    // The narrow layout's views, in the order they were added
-    private const int PageTab = 3;
 
     public SessionsViewModel ViewModel { get; }
 
@@ -72,7 +115,7 @@ public sealed partial class SessionsView : UserControl
     private void OnDetailSizeChanged(object sender, SizeChangedEventArgs e) =>
         Place(e.NewSize.Width >= WideThreshold);
 
-    // The document views are shared with the live screen, so they move between the two screens
+    // One set of views, moved between the layouts' slots
     private void Place(bool wide)
     {
         if (_wide == wide)
@@ -81,65 +124,58 @@ public sealed partial class SessionsView : UserControl
         }
 
         _wide = wide;
-        _noteHost.Content = null;
-        _patientHost.Content = null;
-        _transcriptHost.Content = null;
-        _pageHost.Content = null;
-        NoteHostWide.Content = null;
-        PatientHostWide.Content = null;
-        TranscriptHostWide.Content = null;
-        PageHostWide.Content = null;
+        foreach (var slot in _narrow.Concat(_documents).Concat(_references))
+        {
+            slot.Content = null;
+        }
         if (wide)
         {
-            NoteHostWide.Content = _note;
-            PatientHostWide.Content = _patient;
-            TranscriptHostWide.Content = _transcript;
-            PageHostWide.Content = _page;
+            _documents[0].Content = _note;
+            _documents[1].Content = _patient;
+            _references[Guidelines].Content = _guidance;
+            _references[Transcript].Content = _transcript;
+            _references[Page].Content = _page;
         }
         else
         {
-            _noteHost.Content = _note;
-            _patientHost.Content = _patient;
-            _transcriptHost.Content = _transcript;
-            _pageHost.Content = _page;
+            _narrow[0].Content = _note;
+            _narrow[1].Content = _patient;
+            _narrow[NarrowGuidelines].Content = _guidance;
+            _narrow[NarrowTranscript].Content = _transcript;
+            _narrow[NarrowPage].Content = _page;
         }
 
         WideLayout.Visibility = wide ? Visibility.Visible : Visibility.Collapsed;
         NarrowLayout.Visibility = wide ? Visibility.Collapsed : Visibility.Visible;
-        PlacePage();
-        // The wide column scrolls as a page. The tabs bound the editors
-        if (wide)
-        {
-            _note.FollowContent();
-            _patient.FollowContent();
-        }
-        else
-        {
-            FitNarrow();
-        }
+        Fit();
     }
 
-    // Wide, the page view takes the transcript's card. Narrow, it is a tab that
-    // exists only while it is open
+    // The Guidelines tab exists while the section has something to say
+    private void PlaceGuidelines()
+    {
+        var shown = _guidance.ViewModel.Visible;
+        NarrowTabs.SetVisible(NarrowGuidelines, shown);
+        ReferenceTabs.SetVisible(Guidelines, shown);
+    }
+
+    // An opened page is a tab that exists while it is open, and comes to the front
     private void PlacePage()
     {
         var open = _pageView.Visible;
-        TranscriptCard.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        PageHostWide.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        NarrowTabs.SetVisible(PageTab, open);
-        if (open && _wide == false)
+        NarrowTabs.SetVisible(NarrowPage, open);
+        ReferenceTabs.SetVisible(Page, open);
+        if (open)
         {
-            NarrowTabs.SelectedIndex = PageTab;
+            NarrowTabs.SelectedIndex = NarrowPage;
+            ReferenceTabs.SelectedIndex = Page;
         }
     }
 
-    private void FitNarrow()
+    private void Fit()
     {
-        if (_wide == false)
-        {
-            _note.FitTabContent(NarrowTabs.ContentArea);
-            _patient.FitTabContent(NarrowTabs.ContentArea);
-        }
+        var area = _wide == true ? DocumentTabs.ContentArea : NarrowTabs.ContentArea;
+        _note.FitTabContent(area);
+        _patient.FitTabContent(area);
     }
 
     // The box binds as the text changes, so the view model is current when focus leaves

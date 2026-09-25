@@ -21,6 +21,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Button
+                x:Name="FoldButton"
                 Command="{x:Bind ViewModel.ToggleFoldCommand}"
                 Style="{StaticResource FoldButton}"
                 ToolTipService.ToolTip="Nearest recommendations to the note from the installed guidance. It may have no guideline for this condition, so check each title.">

@@ -85,18 +85,6 @@ public sealed partial class SessionsViewModel : ObservableObject
     /// <summary>There is a list, and nothing from it is open.</summary>
     public bool NoneOpen => SelectHintVisible && !NothingStored;
 
-    /// <summary>The wide layout folds the patient sheet under the note.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PatientVisible), nameof(PatientFoldGlyph))]
-    public partial bool PatientFolded { get; set; }
-
-    public bool PatientVisible => !PatientFolded;
-
-    public string PatientFoldGlyph => PatientFolded ? "\uE70D" : "\uE70E";
-
-    [RelayCommand]
-    private void TogglePatientFold() => PatientFolded = !PatientFolded;
-
     /// <summary>The open session's label. Editing it renames the session.</summary>
     [ObservableProperty]
     public partial string DetailTitle { get; set; } = "";

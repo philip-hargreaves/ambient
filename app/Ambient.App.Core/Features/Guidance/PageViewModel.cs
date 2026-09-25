@@ -83,6 +83,9 @@ public sealed partial class PageViewModel(
 
     public bool CanGoForward => _page < _pages - 1;
 
+    /// <summary>Raised on every show, since a page already open reports no change.</summary>
+    public event Action? Shown;
+
     /// <summary>Opens on the passage's page and asks the engine to draw it.</summary>
     public async Task ShowAsync(GuidanceRecommendation found)
     {
@@ -91,6 +94,7 @@ public sealed partial class PageViewModel(
         _pages = found.Pages;
         DocumentName = found.Title;
         Visible = true;
+        Shown?.Invoke();
         await LoadAsync().ConfigureAwait(true);
     }
 

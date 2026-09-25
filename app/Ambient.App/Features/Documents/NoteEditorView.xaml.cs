@@ -10,12 +10,15 @@ namespace Ambient.App.Features.Documents;
 public sealed partial class NoteEditorView : UserControl
 {
     private readonly TabFit _fit;
+    private readonly GuidanceSectionView _guidance;
+    private bool _guidanceBelow = true;
 
     public NoteEditorView(
         NoteViewModel viewModel, DocumentExportViewModel export, GuidanceSectionView guidance)
     {
         ViewModel = viewModel;
         Export = export;
+        _guidance = guidance;
         InitializeComponent();
         GuidanceHost.Content = guidance;
         _fit = new TabFit(NoteBox, 0.5);
@@ -81,11 +84,29 @@ public sealed partial class NoteEditorView : UserControl
 
     public DocumentExportViewModel Export { get; }
 
-    // Inside a tab the note keeps at most half of the content area and the
-    // guidance row gets the rest
-    public void FitTabContent(FrameworkElement area) => _fit.Fit(area);
+    /// <summary>The Guidelines section, for a host that shows it beside the note.</summary>
+    public GuidanceSectionView Guidance => _guidance;
 
-    public void FollowContent() => _fit.Follow();
+    public void PlaceGuidance(bool below)
+    {
+        _guidanceBelow = below;
+        GuidanceHost.Content = below ? _guidance : null;
+    }
+
+    // Guidance below: the note keeps at most half of the area and guidance gets the
+    // rest. Elsewhere: the note may take all of the area but the rows around it
+    public void FitTabContent(FrameworkElement area)
+    {
+        if (_guidanceBelow)
+        {
+            _fit.Fit(area);
+            return;
+        }
+
+        var chrome = StateRow.ActualHeight + ActionRow.ActualHeight
+            + 2 * Editor.RowSpacing + Editor.Padding.Top + Editor.Padding.Bottom;
+        _fit.FitWithin(area, chrome);
+    }
 
     // The hovered card's sentence, lit in the read-only note. An editor in
     // use keeps its own selection

@@ -41,6 +41,16 @@ public sealed partial class GuidanceSectionView : UserControl
 
     public ShellViewModel Shell { get; }
 
+    /// <summary>Without the fold heading, for a host whose tab already names the section.</summary>
+    public void ShowHeading(bool shown)
+    {
+        FoldButton.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+        if (!shown)
+        {
+            ViewModel.Folded = false;
+        }
+    }
+
     private void OnQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs e)
     {
         if (ViewModel.SearchQueryCommand.CanExecute(null))

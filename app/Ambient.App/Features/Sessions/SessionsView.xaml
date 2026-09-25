@@ -141,66 +141,24 @@
                 </Button>
             </Grid>
 
-            <!-- Wide: note and patient sheet beside the transcript. Narrow: tabs. Views move in code -->
+            <!-- Wide: the documents on the left, the references on the right, each behind a
+                 selector. Narrow: one selector. Views move in code -->
             <Grid
                 x:Name="WideLayout"
                 Grid.Row="1"
                 MaxWidth="1480"
                 Margin="0,0,0,16"
                 HorizontalAlignment="Center"
-                ColumnSpacing="20">
+                ColumnSpacing="24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MaxWidth="760" />
                     <ColumnDefinition Width="*" MaxWidth="700" />
                 </Grid.ColumnDefinitions>
-                <!-- The patient sheet folds. The note does not -->
-                <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,0" Spacing="6">
-                        <TextBlock Style="{StaticResource DocumentHeadingText}" Text="Clinical note" />
-                        <ContentControl
-                            x:Name="NoteHostWide"
-                            HorizontalContentAlignment="Stretch"
-                            VerticalContentAlignment="Stretch" />
-                        <Button
-                            Margin="0,16,0,0"
-                            Command="{x:Bind ViewModel.TogglePatientFoldCommand}"
-                            Style="{StaticResource FoldButton}"
-                            ToolTipService.ToolTip="Show or hide the patient information">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Style="{StaticResource DocumentHeadingText}" Text="Patient information" />
-                                <FontIcon
-                                    VerticalAlignment="Center"
-                                    FontSize="{StaticResource CaptionTextBlockFontSize}"
-                                    Foreground="{ThemeResource FaintTextBrush}"
-                                    Glyph="{x:Bind ViewModel.PatientFoldGlyph, Mode=OneWay}" />
-                            </StackPanel>
-                        </Button>
-                        <ContentControl
-                            x:Name="PatientHostWide"
-                            HorizontalContentAlignment="Stretch"
-                            VerticalContentAlignment="Stretch"
-                            Visibility="{x:Bind ViewModel.PatientVisible, Mode=OneWay}" />
-                    </StackPanel>
-                </ScrollViewer>
-                <!-- Page-height card with the transcript scrolling inside. The page
-                     view of an added document takes its place while it is open -->
-                <Border
-                    x:Name="TranscriptCard"
+                <controls:DocumentTabs x:Name="DocumentTabs" VerticalAlignment="Stretch" />
+                <controls:DocumentTabs
+                    x:Name="ReferenceTabs"
                     Grid.Column="1"
-                    Padding="12,8,12,12"
-                    VerticalAlignment="Stretch"
-                    Style="{StaticResource InnerCardSurface}">
-                    <ContentControl
-                        x:Name="TranscriptHostWide"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch" />
-                </Border>
-                <ContentControl
-                    x:Name="PageHostWide"
-                    Grid.Column="1"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch"
-                    Visibility="Collapsed" />
+                    VerticalAlignment="Stretch" />
             </Grid>
 
             <Grid

@@ -15,5 +15,12 @@ internal sealed class TabFit(TextBox box, double share)
         }
     }
 
-    public void Follow() => box.MaxHeight = double.PositiveInfinity;
+    /// <summary>At most the area less what else the editor stacks around the box.</summary>
+    public void FitWithin(FrameworkElement area, double chrome)
+    {
+        if (area.ActualHeight > 0)
+        {
+            box.MaxHeight = Math.Max(box.MinHeight, area.ActualHeight - chrome);
+        }
+    }
 }

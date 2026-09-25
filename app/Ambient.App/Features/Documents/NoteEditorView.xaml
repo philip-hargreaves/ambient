@@ -4,14 +4,14 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid Padding="0,10,0,8" RowSpacing="10">
-        <!-- The note sizes to its text (capped in code where a host bounds
-             the editor) and guidance takes what is left, scrolling inside.
-             A page that scrolls leaves both to their content -->
+    <Grid x:Name="Editor" Padding="0,10,0,8" RowSpacing="10">
+        <!-- The note sizes to its text, capped in code where a host bounds the
+             editor, and guidance takes what is left, scrolling inside. A host
+             that shows guidance elsewhere leaves the last row empty -->
         <Grid.RowDefinitions>
+            <RowDefinition x:Name="StateRow" Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="ActionRow" Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 

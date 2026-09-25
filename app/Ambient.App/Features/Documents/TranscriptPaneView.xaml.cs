@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Documents;
 
@@ -32,6 +33,13 @@ public sealed partial class TranscriptPaneView : UserControl
     }
 
     public TranscriptViewModel ViewModel { get; }
+
+    /// <summary>Without the heading and its padding, for a host whose tab names the pane.</summary>
+    public void ShowHeading(bool shown)
+    {
+        Heading.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+        Root.Padding = shown ? new Thickness(16, 12, 16, 8) : new Thickness(0);
+    }
 
     private void OnTurnsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
