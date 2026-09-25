@@ -22,11 +22,17 @@
         <controls:PageHeader Title="Appraisal" />
 
         <!-- One reading column, centred -->
+        <!-- The reading column: one width, centred by the two gutters -->
         <ScrollViewer Grid.Row="1">
+            <Grid Margin="24,0,24,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <!-- Takes the width until the cap, then the gutters share what is left -->
+                    <ColumnDefinition Width="1000*" MaxWidth="{StaticResource ReadingColumnWidth}" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
             <Grid
-                MaxWidth="880"
-                Margin="24,0,24,24"
-                HorizontalAlignment="Center"
+                Grid.Column="1"
                 RowSpacing="18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -116,6 +122,7 @@
                             Text="After a consultation, press Create reflection on the clinical note to write what stood out, what you learned and whether you would do anything differently. Your reflections gather here by month, ready for your appraisal." />
                     </StackPanel>
                 </Grid>
+            </Grid>
             </Grid>
         </ScrollViewer>
     </Grid>

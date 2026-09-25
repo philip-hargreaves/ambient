@@ -48,11 +48,10 @@
                                 Foreground="{ThemeResource FaintTextBrush}"
                                 Glyph="&#xE70D;" />
                         </Grid>
+                        <!-- The whole case study: a card is as tall as its case -->
                         <TextBlock
                             Foreground="{ThemeResource MutedTextBrush}"
-                            MaxLines="2"
                             Text="{x:Bind Card.Line, Mode=OneWay}"
-                            TextTrimming="CharacterEllipsis"
                             TextWrapping="Wrap" />
                     </StackPanel>
                 </Button>

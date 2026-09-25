@@ -20,11 +20,17 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <controls:PageHeader Title="Help" />
+        <!-- The reading column: one width, centred by the two gutters -->
         <ScrollViewer Grid.Row="1">
+            <Grid Margin="24,0,24,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <!-- Takes the width until the cap, then the gutters share what is left -->
+                    <ColumnDefinition Width="1000*" MaxWidth="{StaticResource ReadingColumnWidth}" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
             <StackPanel
-                MaxWidth="760"
-                Margin="24,0,24,24"
-                HorizontalAlignment="Center"
+                Grid.Column="1"
                 Spacing="4">
 
                 <TextBlock
@@ -164,6 +170,7 @@
                     </toolkit:SettingsExpander.Items>
                 </toolkit:SettingsExpander>
             </StackPanel>
+            </Grid>
         </ScrollViewer>
     </Grid>
 </UserControl>

@@ -14,6 +14,9 @@
             </ResourceDictionary.MergedDictionaries>
 
             <!-- The stock selection pill (4 x 3, stretched) is too small to read as a tab -->
+            <!-- The reading pages (Appraisal, Settings, Help) share one centred column -->
+            <x:Double x:Key="ReadingColumnWidth">880</x:Double>
+
             <x:Double x:Key="SelectorBarItemPillWidth">12</x:Double>
             <x:Double x:Key="SelectorBarItemPillHeight">4</x:Double>
 
