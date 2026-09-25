@@ -100,6 +100,27 @@ public class StatusBarMetricsTest
     }
 
     [Fact]
+    public async Task ATierSwitchRenamesTheNoteChipEvenWhenTheStoreCallFails()
+    {
+        var (status, engine) = Create();
+        await WaitUntilAsync(() => status.NoteChip.Length > 0);
+        Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
+
+        // The engine is busy right after a load and the store call times out
+        engine.Failing.Add("engine/models");
+        engine.RaiseNotification("note/model", Params(new
+        {
+            state = "ready",
+            tier = "accuracy",
+            id = "qwen3.6-35b-a3b-int4",
+            name = "Qwen3.6 35B",
+            seconds = 62.0,
+        }));
+
+        Assert.Equal("Qwen3.6 35B · GPU", status.NoteChip);
+    }
+
+    [Fact]
     public async Task ChipsNameTheModelsAndCarryTheirLiveFigures()
     {
         var (status, engine) = Create();

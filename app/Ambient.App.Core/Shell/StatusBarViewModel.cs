@@ -204,8 +204,15 @@ public sealed partial class StatusBarViewModel : ObservableObject
                     _meter.End(Now());
                     PublishThroughput(null);
                     break;
-                // A tier switch changes which model the chip names
-                case NoteModelState { State: "ready" }:
+                // A tier switch changes which model the chip names. The notification
+                // carries the name, so the chip is right even when the store call
+                // behind it times out on a busy engine
+                case NoteModelState { State: "ready" } resident:
+                    if (!string.IsNullOrWhiteSpace(resident.Name))
+                    {
+                        _noteName = resident.Name;
+                        RecomputeChips();
+                    }
                     _ = LoadModelsAsync();
                     break;
                 default:

@@ -235,6 +235,12 @@ public sealed partial class NoteModelSettings : ObservableObject
                     : "Loading";
                 break;
             case "ready":
+                // A switch in flight put a busy line on the status bar; the ready state ends it
+                if (_revertTier is not null)
+                {
+                    _status?.Append("Ready");
+                }
+
                 _revertTier = null;
                 NoteModelEnabled = _tiers.Count > 1;
                 NoteModelStatus = "";
