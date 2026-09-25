@@ -6,6 +6,8 @@ namespace Ambient.App.Platform;
 /// <summary>Memory figures through System.Diagnostics, where a process that has exited reads as null.</summary>
 public sealed class ProcessMetrics : IProcessMetrics
 {
+    private const long Mebibyte = 1024 * 1024;
+
     public long? PeakWorkingSetMb(int pid) => Of(pid, p => p.PeakWorkingSet64);
 
     public long? PeakCommitMb(int pid) => Of(pid, p => p.PeakPagedMemorySize64);
@@ -17,9 +19,7 @@ public sealed class ProcessMetrics : IProcessMetrics
             var processes = Process.GetProcessesByName(processName);
             try
             {
-                return processes.Length == 0
-                    ? null
-                    : processes.Max(p => p.PeakWorkingSet64) / (1024 * 1024);
+                return processes.Length == 0 ? null : processes.Max(p => p.PeakWorkingSet64) / Mebibyte;
             }
             finally
             {
@@ -51,7 +51,7 @@ public sealed class ProcessMetrics : IProcessMetrics
                 }
             }
 
-            return bytes / (1024.0 * 1024 * 1024);
+            return bytes / (1024.0 * Mebibyte);
         }
         catch (Exception)
         {
@@ -64,7 +64,7 @@ public sealed class ProcessMetrics : IProcessMetrics
         try
         {
             using var process = Process.GetProcessById(pid);
-            return metric(process) / (1024 * 1024);
+            return metric(process) / Mebibyte;
         }
         catch (Exception)
         {

@@ -1,6 +1,8 @@
 using System.Text.Json;
+using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Appraisal;
 using Ambient.App.Core.Shell;
+using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
 
@@ -15,7 +17,7 @@ public class ReflectionViewModelTest
     }
 
     [Fact]
-    public async Task OpeningANewEntryAsksForTheSummaryAndStartsEmpty()
+    public async Task ANewEntryAsksForTheSummaryStartsEmptyWarnsOfAnIdentifierAndAStoredEntryLoadsWithoutAsking()
     {
         var (reflection, engine) = Create();
 
@@ -28,29 +30,42 @@ public class ReflectionViewModelTest
         Assert.False(reflection.SummaryPending);
         Assert.Equal("", reflection.Happened);
         Assert.False(reflection.Dirty);
-    }
+        Assert.False(reflection.HasReferences);
+        Assert.DoesNotContain("Guidance referred to", reflection.ExportText);
 
-    [Fact]
-    public async Task AStoredEntryLoadsWithoutAskingForAnotherSummary()
-    {
-        var (reflection, engine) = Create();
+        reflection.Learned = "check the temperature";
+        Assert.StartsWith("Elbow swelling\nSeptember 2026\n\nCase study\n", reflection.ExportText);
+        Assert.Contains("What did I learn?\ncheck the temperature", reflection.ExportText);
+
+        Assert.False(reflection.HasWarning);
+        reflection.Happened = "Mrs Patel was upset";
+        Assert.Contains("Mrs Patel", reflection.Warning);
+
+        // Stored answers and summary come back as they were
         engine.ReflectionSummary = "A patient in their thirties with a cough.";
         engine.ReflectionAnswers = ("h", "l", "n");
-
         await reflection.LoadAsync("abc");
 
-        Assert.DoesNotContain(engine.Requests, r => r.Method == "reflection/summary");
+        Assert.Equal(1, engine.Requests.Count(r => r.Method == "reflection/summary"));
         Assert.Equal("A patient in their thirties with a cough.", reflection.Summary);
         Assert.Equal(("h", "l", "n"), (reflection.Happened, reflection.Learned, reflection.Next));
     }
 
     [Fact]
-    public async Task SaveSendsOnlyWhenSomethingChanged()
+    public async Task SaveSendsOnlyWhenSomethingChangedAndAStrayLineBreakIsNotAnAnswer()
     {
         var (reflection, engine) = Create();
+        engine.ReflectionAnswers = ("\r\n", "", " ");
         await reflection.LoadAsync("abc");
+        Assert.Equal("", reflection.Happened);
+        Assert.Equal("", reflection.Next);
 
         await reflection.SaveAsync();
+        Assert.DoesNotContain(engine.Requests, r => r.Method == "reflection/update");
+
+        reflection.Happened = "\n";
+        await reflection.SaveAsync();
+        Assert.Equal("", reflection.Happened);
         Assert.DoesNotContain(engine.Requests, r => r.Method == "reflection/update");
 
         reflection.Learned = "check the temperature";
@@ -65,30 +80,138 @@ public class ReflectionViewModelTest
 
         await reflection.SaveAsync();
         Assert.Single(engine.Requests, r => r.Method == "reflection/update");
-    }
-
-    [Fact]
-    public async Task AStrayLineBreakIsNotAnAnswer()
-    {
-        var (reflection, engine) = Create();
-        engine.ReflectionAnswers = ("\r\n", "l", " ");
-        await reflection.LoadAsync("abc");
-        Assert.Equal("", reflection.Happened);
-        Assert.Equal("", reflection.Next);
-
-        reflection.Happened = "\n";
-        await reflection.SaveAsync();
-        Assert.Equal("", reflection.Happened);
-        Assert.DoesNotContain(engine.Requests, r => r.Method == "reflection/update");
 
         reflection.Happened = "  a real answer ";
         await reflection.SaveAsync();
-        var update = Assert.Single(engine.Requests, r => r.Method == "reflection/update");
-        Assert.Contains("a real answer", update.Params);
+        Assert.Equal(2, engine.Requests.Count(r => r.Method == "reflection/update"));
+        Assert.Contains("a real answer", engine.Requests.Last(r => r.Method == "reflection/update").Params);
     }
 
     [Fact]
-    public async Task AFailedSummarySaysSoAndRewriteTriesAgain()
+    public async Task TheConsultationsGuidelinesListOnePerDocumentWithTheStoredTicks()
+    {
+        var (reflection, engine) = Create();
+        engine.StoredGuidance = Guidance("ng100-1_1_1", "ng100-1_2_3", "cg79-1_1_1");
+        engine.ReflectionReferences.Add(new ReflectionReference("nice:cg79", "CG79", "Fictional guideline", "https://example.test/cg79", "NICE"));
+        engine.ReflectionReferences.Add(new ReflectionReference("upload:gone", "", "Old leaflet", "", "Added document, page 2"));
+
+        await reflection.LoadAsync("abc");
+
+        Assert.True(reflection.HasReferences);
+        Assert.Equal(["nice:ng100", "nice:cg79", "upload:gone"], reflection.References.Select(r => r.Key));
+        Assert.Equal([false, true, true], reflection.References.Select(r => r.Ticked));
+        Assert.Equal("NG100", reflection.References[0].Reference);
+        Assert.Equal("Fictional guideline", reflection.References[0].Title);
+        Assert.Equal("Old leaflet", reflection.References[2].Title);
+        Assert.False(reflection.Dirty);
+        Assert.Contains("Guidance referred to\nCG79 Fictional guideline (NICE)", reflection.ExportText);
+    }
+
+    [Fact]
+    public async Task AnAddedDocumentIsOneRowNamingItsPages()
+    {
+        var (reflection, engine) = Create();
+        engine.StoredGuidance = Guidance("doc7-p19", "doc7-p21", "doc7-p19b");
+        await reflection.LoadAsync("abc");
+
+        var row = Assert.Single(reflection.References);
+        Assert.Equal("", row.Reference);
+        Assert.Equal("Fictional guideline", row.Title);
+        Assert.Equal("Added document, pages 19 and 21", row.Source);
+    }
+
+    [Fact]
+    public async Task ATickSavesTheReferenceWithItsOwnWords()
+    {
+        var (reflection, engine) = Create();
+        engine.StoredGuidance = Guidance("ng100-1_1_1");
+        await reflection.LoadAsync("abc");
+        Assert.False(reflection.Dirty);
+
+        // The tick itself saves: nothing has to call SaveAsync
+        reflection.References[0].Ticked = true;
+        Assert.False(reflection.Dirty);
+
+        var update = Assert.Single(engine.Requests, r => r.Method == "reflection/update");
+        var sent = JsonDocument.Parse(update.Params).RootElement.GetProperty("references");
+        var reference = Assert.Single(sent.EnumerateArray());
+        Assert.Equal("nice:ng100", reference.GetProperty("key").GetString());
+        Assert.Equal("NG100", reference.GetProperty("reference").GetString());
+        Assert.Equal("Fictional guideline", reference.GetProperty("title").GetString());
+        Assert.Equal("https://example.test/ng100", reference.GetProperty("link").GetString());
+        Assert.Equal("NICE", reference.GetProperty("source").GetString());
+        Assert.False(reflection.Dirty);
+
+        reflection.References[0].Ticked = false;
+        var cleared = engine.Requests.Last(r => r.Method == "reflection/update");
+        Assert.Equal(0, JsonDocument.Parse(cleared.Params).RootElement.GetProperty("references").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task AddedGuidanceIsAListOfItsOwnEntriesEachSavedAndRemovable()
+    {
+        var (reflection, engine) = Create();
+        engine.StoredGuidance = Guidance("ng100-1_1_1");
+        engine.ReflectionReferences.Add(new ReflectionReference("typed:1", "", "BNF, methotrexate monitoring"));
+        await reflection.LoadAsync("abc");
+
+        var stored = Assert.Single(reflection.Added);
+        Assert.Equal("BNF, methotrexate monitoring", stored.Title);
+        Assert.Single(reflection.References);
+        Assert.False(reflection.Dirty);
+        Assert.Contains("Guidance referred to\nBNF, methotrexate monitoring\n", reflection.ExportText);
+
+        // Enter on a typed line adds it and saves; a blank line is nothing
+        reflection.Draft = " SIGN 156 ";
+        await reflection.AddDraftCommand.ExecuteAsync(null);
+        Assert.Equal("", reflection.Draft);
+        Assert.Equal(["BNF, methotrexate monitoring", "SIGN 156"], reflection.Added.Select(r => r.Title));
+        var sent = JsonDocument.Parse(engine.Requests.Last(r => r.Method == "reflection/update").Params)
+            .RootElement.GetProperty("references");
+        Assert.Equal(2, sent.GetArrayLength());
+        Assert.StartsWith(ReflectionViewModel.TypedKey, sent[1].GetProperty("key").GetString());
+        Assert.Equal("SIGN 156", sent[1].GetProperty("title").GetString());
+        Assert.False(reflection.Dirty);
+        reflection.Draft = "   ";
+        await reflection.AddDraftCommand.ExecuteAsync(null);
+        Assert.Equal(2, reflection.Added.Count);
+
+        // A tick and the added lines export together, ticks first
+        reflection.References[0].Ticked = true;
+        await reflection.SaveAsync();
+        Assert.EndsWith("Fictional guideline (NICE)\nhttps://example.test/ng100\nBNF, methotrexate monitoring\nSIGN 156\n\n" + ReflectionExport.Declaration + "\n", reflection.ExportText);
+
+        // Remove saves at once
+        await ((IAsyncRelayCommand)stored.RemoveCommand).ExecuteAsync(null);
+        Assert.Equal(["SIGN 156"], reflection.Added.Select(r => r.Title));
+        sent = JsonDocument.Parse(engine.Requests.Last(r => r.Method == "reflection/update").Params)
+            .RootElement.GetProperty("references");
+        Assert.Equal(2, sent.GetArrayLength());
+        Assert.Equal("SIGN 156", sent[1].GetProperty("title").GetString());
+        Assert.False(reflection.Dirty);
+    }
+
+    // "ng100-1_1_1" is a guideline passage; "doc7-p19" a page of an added document
+    private static JsonElement Guidance(params string[] chunkIds) =>
+        GuidanceRecords.Record(chunkIds.Select(Shown).ToArray(), searched:
+        [
+            GuidanceRecords.Corpus("NICE", "nice", "NICE guidelines"),
+            GuidanceRecords.Corpus("", "uploads", "Your documents"),
+        ]);
+
+    private static object Shown(string chunkId)
+    {
+        var (code, rest) = (chunkId.Split('-')[0], chunkId.Split('-')[1]);
+        return chunkId.StartsWith("doc", StringComparison.Ordinal)
+            ? GuidanceRecords.Result(chunkId, trigger: "", url: "", source: "upload", number: "",
+                corpus: "uploads", citation: "NICE NG100", document: 7, pages: 40,
+                page: int.Parse(rest.TrimStart('p').TrimEnd('b'), System.Globalization.CultureInfo.InvariantCulture) - 1)
+            : GuidanceRecords.Result(chunkId, trigger: "", url: "https://example.test/" + code, source: "nice",
+                number: rest.Replace('_', '.'), corpus: "nice", citation: "NICE NG100");
+    }
+
+    [Fact]
+    public async Task AFailedSummarySaysSoRewriteTriesAgainAndAnotherSessionsSummaryIsIgnored()
     {
         var (reflection, engine) = Create();
         engine.SummaryFails = true;
@@ -103,30 +226,12 @@ public class ReflectionViewModelTest
         await reflection.RewriteSummaryCommand.ExecuteAsync(null);
         Assert.True(reflection.HasSummary);
         Assert.Equal("", reflection.SummaryProblem);
-    }
-
-    [Fact]
-    public async Task ASummaryForAnotherSessionIsIgnored()
-    {
-        var (reflection, engine) = Create();
-        engine.ReflectionSummary = "mine";
-        await reflection.LoadAsync("abc");
+        var mine = reflection.Summary;
 
         engine.RaiseNotification("reflection/summary",
             JsonSerializer.SerializeToElement(new { id = "other", text = "theirs" }));
 
-        Assert.Equal("mine", reflection.Summary);
-    }
-
-    [Fact]
-    public async Task TheWarningNamesAnIdentifierInAnyBox()
-    {
-        var (reflection, _) = Create();
-        await reflection.LoadAsync("abc");
-
-        Assert.False(reflection.HasWarning);
-        reflection.Happened = "Mrs Patel was upset";
-        Assert.Contains("Mrs Patel", reflection.Warning);
+        Assert.Equal(mine, reflection.Summary);
     }
 
     [Fact]
@@ -149,16 +254,5 @@ public class ReflectionViewModelTest
         Assert.Contains("missed infection", rename.Params);
         await reflection.SaveTitleAsync();
         Assert.Single(engine.Requests, r => r.Method == "session/label");
-    }
-
-    [Fact]
-    public async Task ExportTextIsThePlainEntry()
-    {
-        var (reflection, _) = Create();
-        await reflection.LoadAsync("abc", "2026-09-04T09:12:00Z");
-        reflection.Learned = "check the temperature";
-
-        Assert.StartsWith("Elbow swelling\nSeptember 2026\n\nCase study\n", reflection.ExportText);
-        Assert.Contains("What did I learn?\ncheck the temperature", reflection.ExportText);
     }
 }

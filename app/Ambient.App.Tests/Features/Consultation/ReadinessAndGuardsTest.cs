@@ -1,34 +1,29 @@
 using Ambient.App.Core.Features.Consultation;
-using Ambient.App.Core.Features.Documents;
-using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
-using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 public class ReadinessAndGuardsTest
 {
-    private static (ConsultationViewModel Session, StatusBarViewModel Status, NoteViewModel Note) Create(
-        FakeEngineClient engine)
-    {
-        var status = new StatusBarViewModel();
-        var note = new NoteViewModel();
-        var session = new ConsultationViewModel(
-            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
-            new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
-        return (session, status, note);
-    }
-
     [Fact]
-    public void AStrayNoteHostIsReportedAtStart()
+    public void AStrayNoteHostAndAFailedLanguageListAreBothReportedAtStart()
     {
-        var engine = new FakeEngineClient(autoNotify: false) { StrayNoteHost = true };
+        var engine = new FakeEngineClient(autoNotify: false)
+        {
+            StrayNoteHost = true,
+            FailNext = method => method == "translate/languages"
+                ? new InvalidOperationException("no translator installed")
+                : null,
+        };
 
-        var (_, status, _) = Create(engine);
+        var log = new ListLogger();
+        var (session, _, note) = TestSession.Create(engine: engine, log: log);
 
-        Assert.Contains("stuck in the graphics driver", status.LatestActivity);
-        Assert.Contains(status.LogEntries, line => line.Contains("stray note host"));
+        Assert.Contains("stuck in the graphics driver", session.Status.LatestActivity);
+        Assert.Contains(log.Lines, line => line.Contains("stray note host"));
+        Assert.Empty(note.Languages);
+        Assert.Contains(log.Lines, line => line.Contains("translate/languages failed"));
     }
 
     [Fact]
@@ -51,31 +46,16 @@ public class ReadinessAndGuardsTest
     }
 
     [Fact]
-    public void AFailedLanguageListLeavesTranslationOffAndLogs()
-    {
-        var engine = new FakeEngineClient(autoNotify: false)
-        {
-            FailNext = method => method == "translate/languages"
-                ? new InvalidOperationException("no translator installed")
-                : null,
-        };
-
-        var (_, status, note) = Create(engine);
-
-        Assert.Empty(note.Languages);
-        Assert.Contains(status.LogEntries, line => line.Contains("translate/languages failed"));
-    }
-
-    [Fact]
     public void LosingTheConnectionEndsARunningTranslation()
     {
-        var (session, engine, note) = TestSession.Create();
+        var log = new ListLogger();
+        var (session, engine, note) = TestSession.Create(log: log);
         note.TranslationRunning = true;
 
         engine.SetConnected(false);
 
         Assert.False(note.TranslationRunning);
         Assert.False(session.EngineReady);
-        Assert.Contains(session.Status.LogEntries, line => line.Contains("connection lost"));
+        Assert.Contains(log.Lines, line => line.Contains("connection lost"));
     }
 }

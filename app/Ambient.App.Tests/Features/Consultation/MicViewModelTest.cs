@@ -19,20 +19,31 @@ public class MicViewModelTest
         new("{bb}", "Headset (Jabra Evolve2 65)", "Headset", false, true);
 
     [Fact]
-    public async Task TheLabelNamesOneDeviceAsShortAsThatAllows()
+    public async Task TheLabelSaysWhenThereIsNoMicrophoneAndNamesOneDeviceAsShortAsThatAllows()
     {
         var engine = new FakeEngineClient();
         var mic = new MicViewModel(new EngineApi(engine));
+
+        await mic.RefreshAsync();
+        Assert.False(mic.HasDevices);
+        Assert.Empty(mic.Rows);
+        Assert.Equal("No microphone found", mic.Label);
+        Assert.Equal("No microphone found - connect one to record", mic.NoDevicesText);
+        Assert.Equal("", mic.MicId);
 
         // A single-microphone laptop, the common clinical case, reads cleanly
         engine.AudioInputs = [Array()];
         await mic.RefreshAsync();
         Assert.Equal("Microphone Array", mic.Label);
 
-        // Two devices, distinct endpoints: still just the endpoints
+        // Two devices, distinct endpoints: still just the endpoints. The rows name the
+        // default, check the current choice and caption the Bluetooth one
         engine.AudioInputs = [Array(), Jabra()];
-        await mic.RefreshAsync();
+        await mic.RefreshCommand.ExecuteAsync(null);
         Assert.Equal("Microphone Array", mic.Label);
+        Assert.Equal(
+            [("Microphone Array (Cirrus Logic)  (default)", "", true), ("Headset (Jabra Evolve2 65)", "    Bluetooth call mode - reduced recording quality", false)],
+            mic.Rows.Select(r => (r.Label, r.Note, r.IsChecked)));
 
         // Three devices all called "Microphone": the full name disambiguates
         engine.AudioInputs =
@@ -46,7 +57,7 @@ public class MicViewModelTest
     }
 
     [Fact]
-    public async Task TheChoicePersistsAndAGoneChoiceFallsToTheDefault()
+    public async Task TheChoicePersistsAGoneChoiceFallsToTheDefaultAndStartSendsTheSavedOne()
     {
         var preferences = TempPreferences();
         var engine = new FakeEngineClient();
@@ -54,9 +65,10 @@ public class MicViewModelTest
         engine.AudioInputs = [Array(), Jabra()];
         await mic.RefreshAsync();
 
-        mic.Select("{bb}");
+        mic.SelectCommand.Execute("{bb}");
         Assert.Equal("{bb}", mic.MicId);
         Assert.Equal("{bb}", preferences.MicId);
+        Assert.Equal([false, true], mic.Rows.Select(r => r.IsChecked));
 
         // The headset is unplugged: the default speaks for it, but the
         // saved choice survives for when it comes back
@@ -68,30 +80,10 @@ public class MicViewModelTest
         engine.AudioInputs = [Array(), Jabra()];
         await mic.RefreshAsync();
         Assert.Equal("{bb}", mic.MicId);
-    }
 
-    [Fact]
-    public async Task NoMicrophoneSaysSoAndSendsNothing()
-    {
-        var engine = new FakeEngineClient();
-        var mic = new MicViewModel(new EngineApi(engine));
-        await mic.RefreshAsync();
-
-        Assert.False(mic.HasDevices);
-        Assert.Equal("No microphone found", mic.Label);
-        Assert.Equal("", mic.MicId);
-    }
-
-    [Fact]
-    public async Task StartSendsTheSavedMicrophone()
-    {
-        var preferences = TempPreferences();
-        preferences.MicId = "{bb}";
-        var (session, engine, _) = TestSession.Create(preferences);
-
+        var (session, sessionEngine, _) = TestSession.Create(preferences);
         await session.StartRecordingAsync();
-
-        var start = engine.Requests.Single(r => r.Method == "session/start");
+        var start = sessionEngine.Requests.Single(r => r.Method == "session/start");
         Assert.Contains("{bb}", start.Params);
     }
 }

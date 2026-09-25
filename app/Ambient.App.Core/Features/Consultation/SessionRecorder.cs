@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Guidance;
@@ -99,7 +100,7 @@ public sealed partial class SessionRecorder : ObservableObject
         }
     }
 
-    // ---- transitions the review and the router move the machine through
+    // Transitions the review and the router move the machine through
 
     /// <summary>The note arrived, or a stored session opened: the panes show and review begins.</summary>
     public void EnterReview(bool panesOpen = false)
@@ -146,24 +147,36 @@ public sealed partial class SessionRecorder : ObservableObject
     /// <summary>The session ended without a stop. The recording is kept.</summary>
     public void Interrupt(string? detail)
     {
-        State = SessionState.Idle;
-        Paused = false;
-        ActiveReplay = null;
-        ActivePlayback = null;
-        _note.Reset();
-        _guidance.Reset();
-        _pageView.Hide();
-        _status.SetMicVisible(false);
+        DropSession();
+        ClearPanes();
         _status.SetDecodeActive(false);
         _status.Append(detail is not null
             ? $"Recording interrupted ({detail}) - session kept"
             : "Recording interrupted - session kept");
     }
 
+    /// <summary>The note, the guidance and the page view back to empty.</summary>
+    public void ClearPanes()
+    {
+        _note.Reset();
+        _guidance.Reset();
+        _pageView.Hide();
+    }
+
+    // Back to idle with nothing of the live session left
+    private void DropSession()
+    {
+        State = SessionState.Idle;
+        Paused = false;
+        ActiveReplay = null;
+        ActivePlayback = null;
+        _status.SetMicVisible(false);
+    }
+
     /// <summary>A level reading. A playback's reading carries the position its clock has reached.</summary>
     public void OnAudioLevel(AudioLevel level)
     {
-        _status.SetMicLevel(level.Level, level.Clipped);
+        _status.SetMicLevel(level.Level);
         if (State != SessionState.Recording)
         {
             return;
@@ -178,7 +191,7 @@ public sealed partial class SessionRecorder : ObservableObject
         }
     }
 
-    // ---- the live session
+    // The live session
 
     public async Task StartRecordingAsync(ReplayRequest? replay = null)
     {
@@ -235,7 +248,7 @@ public sealed partial class SessionRecorder : ObservableObject
     private async Task<bool> BeginAsync(
         Func<Task<string>> start, ReplayRequest? replay, DemoMaster? playback)
     {
-        var started = await EngineStep.TryAsync(_status, "session/start", start).ConfigureAwait(true);
+        var started = await EngineCall.TryAsync(_status, "session/start", start).ConfigureAwait(true);
         if (started is null)
         {
             return false;
@@ -305,7 +318,7 @@ public sealed partial class SessionRecorder : ObservableObject
             return;
         }
 
-        if (await EngineStep.TryAsync(_status, "session/pause", () => _engine.PauseSessionAsync(paused))
+        if (await EngineCall.TryAsync(_status, "session/pause", () => _engine.PauseSessionAsync(paused))
             .ConfigureAwait(true))
         {
             Paused = paused;
@@ -316,7 +329,7 @@ public sealed partial class SessionRecorder : ObservableObject
     {
         if (State == SessionState.Recording)
         {
-            await EngineStep.TryAsync(_status, "session/monitor", () => _engine.MonitorSessionAsync(on))
+            await EngineCall.TryAsync(_status, "session/monitor", () => _engine.MonitorSessionAsync(on))
                 .ConfigureAwait(true);
         }
     }
@@ -344,16 +357,14 @@ public sealed partial class SessionRecorder : ObservableObject
         _note.Apply(NotePipelineEvent.NoteWritingStarted);
         _guidance.NoteStarted();
         _status.Append("Finalising", busy: true);
-        var stopped = await EngineStep.TryAsync(_status, "session/stop", () => _engine.StopSessionAsync())
+        var stopped = await EngineCall.TryAsync(_status, "session/stop", () => _engine.StopSessionAsync())
             .ConfigureAwait(true);
         if (stopped is null)
         {
             // A failed stop must not wedge the UI. The recording is safe in
             // the store either way
             State = SessionState.Idle;
-            _note.Reset();
-            _guidance.Reset();
-            _pageView.Hide();
+            ClearPanes();
             _status.SetDecodeActive(false);
             _status.Append("Stop failed - session kept");
             return;
@@ -380,7 +391,7 @@ public sealed partial class SessionRecorder : ObservableObject
         try
         {
             var turns = await _engine.TranscriptAsync(id).ConfigureAwait(true);
-            _transcript.Turns.Clear();
+            _transcript.Clear();
             foreach (var turn in turns)
             {
                 _transcript.Add(turn.Speaker, turn.FirstFrame, turn.Text);
@@ -408,17 +419,13 @@ public sealed partial class SessionRecorder : ObservableObject
             return;
         }
 
-        if (!await EngineStep.TryAsync(_status, "session/cancel", () => _engine.CancelSessionAsync())
+        if (!await EngineCall.TryAsync(_status, "session/cancel", () => _engine.CancelSessionAsync())
             .ConfigureAwait(true))
         {
             return;
         }
 
-        State = SessionState.Idle;
-        Paused = false;
-        ActiveReplay = null;
-        ActivePlayback = null;
-        _status.SetMicVisible(false);
+        DropSession();
         _status.Append("Cancelled");
     }
 }

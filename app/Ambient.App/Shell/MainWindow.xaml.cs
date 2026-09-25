@@ -2,7 +2,6 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
-using Ambient.App.Core.Features.Sessions;
 using Ambient.App.Core.Shell;
 using Ambient.App.Platform;
 
@@ -10,17 +9,11 @@ namespace Ambient.App.Shell;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly NavigationService _navigation;
-    private readonly SessionsViewModel _sessions;
-
-    public StatusBarViewModel Status { get; }
-
     public MainWindow(
-        NavigationService navigation, StatusBarViewModel status, StatusBarView statusBar,
-        SessionsViewModel sessions)
+        NavigationService navigation, ShellViewModel shell, StatusBarViewModel status,
+        StatusBarView statusBar)
     {
-        _navigation = navigation;
-        _sessions = sessions;
+        Shell = shell;
         Status = status;
         InitializeComponent();
         StatusHost.Content = statusBar;
@@ -38,7 +31,7 @@ public sealed partial class MainWindow : Window
             System.AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         navigation.Attach(NavHost);
-        navigation.NavigateTo("consultation");
+        shell.NavigateCommand.Execute(Routes.Consultation);
 
         AppWindow.Resize(new SizeInt32(1280, 820));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
@@ -48,26 +41,24 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    public ShellViewModel Shell { get; }
+
+    public StatusBarViewModel Status { get; }
+
+    private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         var key = args.IsSettingsSelected
-            ? "settings"
+            ? Routes.Settings
             : (args.SelectedItem as NavigationViewItem)?.Tag as string;
-        if (key is null)
+        if (key is not null)
         {
-            return;
+            Shell.NavigateCommand.Execute(key);
         }
-        // Consultation means record a new one: a stored review ends before the page shows
-        if (key == "consultation")
-        {
-            await _sessions.CloseStoredReviewAsync();
-        }
-        _navigation.NavigateTo(key);
     }
 
     private void Select(string key)
     {
-        if (key == "settings")
+        if (key == Routes.Settings)
         {
             Nav.SelectedItem = Nav.SettingsItem;
             return;

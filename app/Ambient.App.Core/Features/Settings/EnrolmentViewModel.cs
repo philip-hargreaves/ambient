@@ -1,18 +1,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Ports;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Settings;
-
-public enum EnrolmentState
-{
-    Ready,
-    Recording,
-    Succeeded,
-    Failed,
-}
 
 /// <summary>
 /// One reading of the passage: Start, read at your own pace, Finish, then the
@@ -57,16 +49,13 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusLine), nameof(PrimaryText), nameof(CloseText),
-        nameof(Recording), nameof(Succeeded))]
+        nameof(Recording), nameof(Succeeded), nameof(KeepsOpen))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand), nameof(CancelCommand), nameof(FinishCommand))]
     public partial EnrolmentState State { get; private set; } = EnrolmentState.Ready;
 
     /// <summary>Microphone level, 0 to 1, for the ring.</summary>
     [ObservableProperty]
     public partial double Level { get; private set; }
-
-    [ObservableProperty]
-    public partial double Elapsed { get; private set; }
 
     /// <summary>Clear speech captured so far, in seconds.</summary>
     [ObservableProperty]
@@ -115,6 +104,9 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         _ => "Cancel",
     };
 
+    /// <summary>Start, Finish and Try again keep the dialog open; only Done closes it.</summary>
+    public bool KeepsOpen => State != EnrolmentState.Succeeded;
+
     /// <summary>True once a print was made. False on cancel, failure or dismissal.</summary>
     public Task<bool> Outcome => _outcome.Task;
 
@@ -122,7 +114,6 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
     private async Task Start()
     {
         State = EnrolmentState.Recording;
-        Elapsed = 0;
         Speech = 0;
         Detail = "";
         try
@@ -167,6 +158,15 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>The primary button: Start, then Finish, then Try again. Done does nothing but close.</summary>
+    [RelayCommand]
+    private Task Primary() => State switch
+    {
+        EnrolmentState.Recording => Finish(),
+        EnrolmentState.Succeeded => Task.CompletedTask,
+        _ => Start(),
+    };
+
     /// <summary>The dialog was dismissed. A reading in flight is cancelled.</summary>
     public void Dismiss()
     {
@@ -186,45 +186,39 @@ public sealed partial class EnrolmentViewModel : ObservableObject, IDisposable
 
     private void OnNotification(EngineNotification notification)
     {
-        if (notification is not (EnrolmentProgress or EnrolmentDone))
+        switch (notification)
         {
-            return;
-        }
-
-        if (_dispatcher is null)
-        {
-            Apply(notification);
-        }
-        else
-        {
-            _dispatcher.Post(() => Apply(notification));
+            case EnrolmentProgress progress:
+                _dispatcher.PostOrRun(() => Apply(progress));
+                break;
+            case EnrolmentDone done:
+                _dispatcher.PostOrRun(() => Apply(done));
+                break;
+            default:
+                break;
         }
     }
 
-    private void Apply(EngineNotification notification)
+    private void Apply(EnrolmentProgress progress)
     {
-        if (notification is EnrolmentProgress progress)
+        if (State == EnrolmentState.Recording)
         {
-            if (State != EnrolmentState.Recording)
-            {
-                return;
-            }
-
             Level = progress.Level;
-            Elapsed = progress.Elapsed;
             Speech = progress.Speech;
-            return;
         }
+    }
 
+    private void Apply(EnrolmentDone done)
+    {
         Level = 0;
-        if (notification is EnrolmentDone { Ok: true })
+        if (done.Ok)
         {
             State = EnrolmentState.Succeeded;
             _outcome.TrySetResult(true);
         }
         else
         {
-            Fail((notification as EnrolmentDone)?.Detail ?? "");
+            Fail(done.Detail ?? "");
         }
     }
 

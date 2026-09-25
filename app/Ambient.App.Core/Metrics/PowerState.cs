@@ -1,9 +1,8 @@
 namespace Ambient.App.Core.Metrics;
 
 /// <summary>
-/// The machine's power situation at a moment: the Windows power-mode slider
-/// and mains vs battery. Measured attended finalise on the 2-minute consult:
-/// 4.0 s on Best power efficiency, 2.8 s on Best performance.
+/// The machine's power situation at a moment: the Windows power-mode slider and mains
+/// vs battery. Recorded with each session because the mode moves the finalise time.
 /// </summary>
 public sealed record PowerState(string Mode, bool OnMains)
 {
@@ -18,6 +17,4 @@ public sealed record PowerState(string Mode, bool OnMains)
         "00000000-0000-0000-0000-000000000000" or "" => "balanced",
         _ => "unknown",
     };
-
-    public bool SavingPower => Mode == "efficiency" || !OnMains;
 }

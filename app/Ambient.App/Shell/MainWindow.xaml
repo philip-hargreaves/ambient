@@ -3,6 +3,7 @@
     x:Class="Ambient.App.Shell.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shell="using:Ambient.App.Core.Shell"
     Title="Ambient">
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -17,9 +18,8 @@
         <TitleBar x:Name="AppTitleBar" Title="Ambient" Subtitle="{x:Bind Status.DemoLabel, Mode=OneWay}" />
 
         <!-- A rail that starts closed and pushes the content aside when opened, never an
-             overlay. Four destinations do not earn a labelled pane by default, and the record
-             screen stays calm. The pane stays on Mica, the content sits on the layer, one
-             hairline between them and square corners: a sidebar, not an inset frame -->
+             overlay. The pane stays on Mica, the content sits on the layer, one hairline
+             between them and square corners: a sidebar, not an inset frame -->
         <NavigationView
             x:Name="Nav"
             Grid.Row="1"
@@ -30,30 +30,46 @@
             PaneDisplayMode="Left"
             SelectionChanged="OnNavSelectionChanged">
             <NavigationView.Resources>
-                <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="LayerFillColorDefaultBrush" />
-                <StaticResource x:Key="NavigationViewContentGridBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
-                <Thickness x:Key="NavigationViewContentGridBorderThickness">1,1,0,0</Thickness>
-                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
+                <ResourceDictionary>
+                    <!-- Per theme, so a theme change while running re-resolves them: a plain
+                         alias here keeps the brush of the theme the window opened in -->
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Default">
+                            <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="LayerFillColorDefaultBrush" />
+                            <StaticResource x:Key="NavigationViewContentGridBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Light">
+                            <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="LayerFillColorDefaultBrush" />
+                            <StaticResource x:Key="NavigationViewContentGridBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="HighContrast">
+                            <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="LayerFillColorDefaultBrush" />
+                            <StaticResource x:Key="NavigationViewContentGridBorderBrush" ResourceKey="CardStrokeColorDefaultBrush" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                    <Thickness x:Key="NavigationViewContentGridBorderThickness">1,1,0,0</Thickness>
+                    <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
+                </ResourceDictionary>
             </NavigationView.Resources>
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Consultation" Tag="consultation">
+                <NavigationViewItem Content="Consultation" Tag="{x:Bind shell:Routes.Consultation}">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE720;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Sessions" Tag="sessions">
+                <NavigationViewItem Content="Sessions" Tag="{x:Bind shell:Routes.Sessions}">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Appraisal" Tag="appraisals">
+                <NavigationViewItem Content="Appraisal" Tag="{x:Bind shell:Routes.Appraisals}">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE70B;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
-                <NavigationViewItem Content="Help" Tag="help">
+                <NavigationViewItem Content="Help" Tag="{x:Bind shell:Routes.Help}">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE897;" />
                     </NavigationViewItem.Icon>

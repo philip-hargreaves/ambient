@@ -43,9 +43,10 @@ public class ReportBuilderTest
         });
 
     [Fact]
-    public void RendersMachineStepsTotalsAndEmbeddedJson()
+    public void RendersMachineStepsTotalsAndEmbeddedJsonAndSkipsAGarbledLine()
     {
-        var html = ReportBuilder.Build(Machine, [Session("GPU.0", 1.0)], DateTimeOffset.UtcNow);
+        var html = ReportBuilder.Build(Machine,
+            ["not json at all", Session("GPU.0", 1.0)], DateTimeOffset.UtcNow);
 
         Assert.Contains("Intel(R) Core(TM) Ultra 7 258V", html);
         Assert.Contains("Elbow swelling", html);
@@ -65,36 +66,25 @@ public class ReportBuilderTest
     }
 
     [Fact]
-    public void SummaryGroupsByNoteModelWithMedianAndSlowest()
+    public void SummaryGroupsByNoteModelAndLeavesOutFastReplaysAndShortRecordings()
     {
         var html = ReportBuilder.Build(Machine,
         [
             Session("GPU.0", null, model: "Qwen3.5 9B", start: "2026-08-19T21:12:44Z"),
             Session("GPU.0", null, model: "Qwen3.5 9B", start: "2026-08-19T22:12:44Z"),
             Session("GPU.0", null, model: "Qwen3.6 35B", start: "2026-08-19T23:12:44Z"),
-        ], DateTimeOffset.UtcNow);
-
-        var summary = html.Split("<h2>Summary</h2>")[1].Split("<h2>Consultations</h2>")[0];
-        Assert.Contains("Qwen3.5 9B · GPU", summary);
-        Assert.Contains("2 consultations", summary);
-        Assert.Contains("Qwen3.6 35B · GPU", summary);
-        Assert.Contains("21.9<span class=\"w\"> · 21.9</span>", summary);
-        Assert.Contains("Peak memory of the note model, GB", summary);
-        Assert.Contains("7.6", summary);
-    }
-
-    [Fact]
-    public void FastReplaysAndShortRecordingsStayOutOfTheSummary()
-    {
-        var html = ReportBuilder.Build(Machine,
-        [
-            Session("GPU.0", 1.0),
             Session("NPU", 16.0),
             Session("GPU.0", null, audioSeconds: 4),
         ], DateTimeOffset.UtcNow);
 
-        Assert.Contains("1 consultation, 1 test replay, 1 short recording", html);
+        Assert.Contains("3 consultations, 1 test replay, 1 short recording", html);
         var summary = html.Split("<h2>Summary</h2>")[1].Split("<h2>Consultations</h2>")[0];
+        Assert.Contains("Qwen3.5 9B · GPU", summary);
+        Assert.Contains("2 consultations", summary);
+        Assert.Contains("Qwen3.6 35B · GPU", summary);
+        Assert.Contains("21.9<span class=\"w\"> · 21.9</span>", summary);  // median · slowest
+        Assert.Contains("Peak memory of the note model, GB", summary);
+        Assert.Contains("7.6", summary);
         Assert.DoesNotContain("NPU", summary);
         Assert.Contains("Test replays faster than real time (1)", html);
         Assert.Contains("16&#215;", html);  // × html-encoded
@@ -129,6 +119,12 @@ public class ReportBuilderTest
     [Fact]
     public void RendersPowerModeAndEngineThrottling()
     {
+        Assert.Equal("efficiency", PowerState.ModeName("961CC777-2547-4F9D-8174-7D86181B8A7A"));
+        Assert.Equal("performance", PowerState.ModeName("ded574b5-45a0-4f42-8737-46345c09c238"));
+        Assert.Equal("balanced", PowerState.ModeName(""));
+        Assert.Equal("balanced", PowerState.ModeName("00000000-0000-0000-0000-000000000000"));
+        Assert.Equal("unknown", PowerState.ModeName("not-a-guid"));
+
         var session = JsonSerializer.Serialize(new
         {
             start = "2026-08-29T13:40:17Z",
@@ -148,26 +144,5 @@ public class ReportBuilderTest
         Assert.Contains("performance mode", machine);
         Assert.Contains("mains", machine);
         Assert.Contains("engine throttling off", machine);
-    }
-
-    [Fact]
-    public void PowerModeNamesTheSliderOverlays()
-    {
-        Assert.Equal("efficiency", PowerState.ModeName("961CC777-2547-4F9D-8174-7D86181B8A7A"));
-        Assert.Equal("performance", PowerState.ModeName("ded574b5-45a0-4f42-8737-46345c09c238"));
-        Assert.Equal("balanced", PowerState.ModeName(""));
-        Assert.Equal("balanced", PowerState.ModeName("00000000-0000-0000-0000-000000000000"));
-        Assert.Equal("unknown", PowerState.ModeName("not-a-guid"));
-        Assert.True(new PowerState("efficiency", true).SavingPower);
-        Assert.True(new PowerState("performance", false).SavingPower);
-        Assert.False(new PowerState("performance", true).SavingPower);
-    }
-
-    [Fact]
-    public void AGarbledLineIsSkippedNotFatal()
-    {
-        var html = ReportBuilder.Build(Machine,
-            ["not json at all", Session("GPU.0", null)], DateTimeOffset.UtcNow);
-        Assert.Contains("1 consultation,", html);
     }
 }

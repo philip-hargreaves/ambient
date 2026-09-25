@@ -1,6 +1,9 @@
-using System.Globalization;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Common;
+using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
@@ -8,10 +11,13 @@ using Ambient.Client;
 namespace Ambient.App.Core.Features.Appraisal;
 
 /// <summary>
-/// One appraisal reflection: the case summary the engine writes and the three answers the clinician writes. Saved only when changed.
+/// One appraisal reflection: the case summary the engine writes, the three answers the clinician
+/// writes and the guidance they tick as referred to. Saved only when changed.
 /// </summary>
 public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
 {
+    /// <summary>Keys of the references the clinician typed start with this.</summary>
+    public const string TypedKey = "typed";
 
     private readonly IEngineApi _engine;
     private readonly IClipboard _clipboard;
@@ -24,6 +30,8 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
     private string _savedNext = "";
     private string _savedTitle = "";
     private string _savedSummary = "";
+    private List<string> _savedReferences = [];
+    private List<string> _savedAdded = [];
 
     public ReflectionViewModel(
         IEngineApi engine, IUiDispatcher dispatcher, IClipboard clipboard, IFilePicker picker,
@@ -38,8 +46,6 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
         _engine.NotificationReceived += _onNotification;
     }
 
-    public string SessionId { get; private set; } = "";
-
     /// <summary>The consultation's label. Typing here renames the consultation.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
@@ -50,16 +56,11 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     public partial string Month { get; private set; } = "";
 
-    /// <summary>The title as shown and exported: the label, or the month until there is one.</summary>
-    public string DisplayTitle => Title.Trim().Length > 0 ? Title.Trim() : Month;
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSummary))]
     [NotifyPropertyChangedFor(nameof(Warning))]
     [NotifyPropertyChangedFor(nameof(HasWarning))]
     public partial string Summary { get; set; } = "";
-
-    public bool HasSummary => Summary.Length > 0;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RewriteSummaryCommand))]
@@ -69,8 +70,6 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSummaryProblem))]
     public partial string SummaryProblem { get; private set; } = "";
-
-    public bool HasSummaryProblem => SummaryProblem.Length > 0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Warning))]
@@ -87,24 +86,47 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(HasWarning))]
     public partial string Next { get; set; } = "";
 
+    /// <summary>The line being typed; Enter turns it into an entry.</summary>
+    [ObservableProperty]
+    public partial string Draft { get; set; } = "";
+
+    public string SessionId { get; private set; } = "";
+
+    /// <summary>The title as shown and exported: the label, or the month until there is one.</summary>
+    public string DisplayTitle => Title.Trim().Length > 0 ? Title.Trim() : Month;
+
+    public bool HasSummary => Summary.Length > 0;
+
+    public bool HasSummaryProblem => SummaryProblem.Length > 0;
+
     /// <summary>What in the text may identify the patient, empty when nothing was found.</summary>
     public string Warning => IdentifierCheck.Describe(Summary + "\n" + Happened + "\n" + Learned + "\n" + Next);
 
     public bool HasWarning => Warning.Length > 0;
 
+    /// <summary>The guidelines and documents the consultation's guidance drew on, plus anything ticked that it no longer shows. A tick saves.</summary>
+    public ObservableCollection<ReflectionReferenceRow> References { get; } = [];
+
+    public bool HasReferences => References.Count > 0;
+
+    /// <summary>Guidance the clinician added themselves, one line each, always included.</summary>
+    public ObservableCollection<AddedGuidanceRow> Added { get; } = [];
+
+    public bool HasAdded => Added.Count > 0;
+
     public bool Dirty =>
-        Happened != _savedHappened || Learned != _savedLearned || Next != _savedNext;
+        Happened != _savedHappened || Learned != _savedLearned || Next != _savedNext
+        || !TickedIds().SequenceEqual(_savedReferences) || !AddedTitles().SequenceEqual(_savedAdded);
 
-    public ReflectionEntry Entry => new(DisplayTitle, Month, Summary, Happened, Learned, Next);
-
-    public string ExportText => ReflectionExport.Format(Entry);
+    public string ExportText => ReflectionExport.Format(
+        new ReflectionEntry(DisplayTitle, Month, Summary, Happened, Learned, Next) { References = Ticked() });
 
     /// <summary>Loads the stored entry and asks for a summary when none exists yet.</summary>
     public async Task LoadAsync(string sessionId, string startedAt = "")
     {
         SessionId = sessionId;
-        Month = MonthLabel(startedAt);
-        try
+        Month = Words.Month(Words.LocalTime(startedAt) ?? DateTimeOffset.Now);
+        var opened = await EngineCall.ReportAsync(_status, "could not open the reflection", async () =>
         {
             var got = await _engine.GetReflectionAsync(sessionId).ConfigureAwait(true);
             Title = _savedTitle = got.Label ?? "";
@@ -119,16 +141,172 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
             {
                 Happened = Learned = Next = _savedHappened = _savedLearned = _savedNext = "";
             }
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
+
+            await LoadReferencesAsync(got.Answers?.References ?? []).ConfigureAwait(true);
+        }).ConfigureAwait(true);
+
+        if (opened && !HasSummary)
         {
-            _status.Append($"could not open the reflection: {e.Message}");
+            await RequestSummaryAsync().ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Writes the answers and ticks only when they changed.</summary>
+    public async Task SaveAsync()
+    {
+        // Whitespace-only answers are empty: a stray line break would hide the hint and count as writing
+        Happened = Answer(Happened);
+        Learned = Answer(Learned);
+        Next = Answer(Next);
+        if (!Dirty || SessionId.Length == 0)
+        {
             return;
         }
 
-        if (!HasSummary)
+        if (await EngineCall.ReportAsync(_status, "could not save the reflection",
+                () => _engine.UpdateReflectionAsync(SessionId, Happened, Learned, Next, Ticked()))
+            .ConfigureAwait(true))
         {
-            await RequestSummaryAsync().ConfigureAwait(true);
+            _savedHappened = Happened;
+            _savedLearned = Learned;
+            _savedNext = Next;
+            _savedReferences = TickedIds();
+            _savedAdded = AddedTitles();
+        }
+    }
+
+    /// <summary>A retitle renames the consultation itself. A blank title keeps the old name.</summary>
+    public async Task SaveTitleAsync() =>
+        _savedTitle = await SessionLabel.SaveAsync(_engine, _status, SessionId, Title, _savedTitle)
+            .ConfigureAwait(true);
+
+    /// <summary>The clinician corrected the summary, kept as their wording.</summary>
+    public async Task SaveSummaryAsync()
+    {
+        if (SessionId.Length == 0 || Summary == _savedSummary)
+        {
+            return;
+        }
+
+        if (await EngineCall.ReportAsync(_status, "could not save the summary",
+                () => _engine.UpdateReflectionSummaryAsync(SessionId, Summary)).ConfigureAwait(true))
+        {
+            _savedSummary = Summary;
+        }
+    }
+
+    /// <summary>The sheet is closing: everything changed is saved, then the engine is let go.</summary>
+    public async Task CloseAsync()
+    {
+        try
+        {
+            await SaveAsync().ConfigureAwait(true);
+            await SaveTitleAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            Dispose();
+        }
+    }
+
+    public void Dispose() => _engine.NotificationReceived -= _onNotification;
+
+    // One row per review card in its order; a ticked guideline the review no longer shows
+    // keeps its row from the stored words. No guidance at all leaves no section
+    private async Task LoadReferencesAsync(IReadOnlyList<ReflectionReference> ticked)
+    {
+        var guidance = await EngineCall.ReportAsync(_status, "could not read the consultation's guidance",
+            () => _engine.StoredGuidanceAsync(SessionId)).ConfigureAwait(true);
+        Added.Clear();
+        foreach (var typed in ticked.Where(r => IsTyped(r.Key)))
+        {
+            Added.Add(Row(typed));
+        }
+
+        _savedAdded = AddedTitles();
+        OnPropertyChanged(nameof(HasAdded));
+        ticked = ticked.Where(r => !IsTyped(r.Key)).ToList();
+        var tickedKeys = ticked.Select(r => r.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var row in References)
+        {
+            row.PropertyChanged -= OnReferenceChanged;
+        }
+
+        References.Clear();
+        if (guidance is not null)
+        {
+            foreach (var card in GuidanceCard.Group(GuidanceRecommendation.ReadAll(guidance, true)))
+            {
+                var row = ReflectionReferenceRow.From(card, false);
+                row.Ticked = tickedKeys.Contains(row.Key);
+                References.Add(row);
+            }
+        }
+
+        var listed = References.Select(r => r.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var reference in ticked.Where(r => !listed.Contains(r.Key)))
+        {
+            References.Add(new ReflectionReferenceRow(reference, true));
+        }
+
+        _savedReferences = TickedIds();
+        foreach (var row in References)
+        {
+            row.PropertyChanged += OnReferenceChanged;
+        }
+
+        OnPropertyChanged(nameof(HasReferences));
+    }
+
+    // A tick saves at once, so no view has to
+    private void OnReferenceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ReflectionReferenceRow.Ticked))
+        {
+            _ = SaveAsync();
+        }
+    }
+
+    private AddedGuidanceRow Row(ReflectionReference stored)
+    {
+        AddedGuidanceRow? row = null;
+        row = new AddedGuidanceRow(stored, new AsyncRelayCommand(() => RemoveAddedAsync(row!)));
+        return row;
+    }
+
+    private static bool IsTyped(string key) => key.StartsWith(TypedKey, StringComparison.Ordinal);
+
+    private List<string> TickedIds() =>
+        References.Where(r => r.Ticked).Select(r => r.Key).ToList();
+
+    private List<string> AddedTitles() => Added.Select(r => r.Title).ToList();
+
+    // The ticked rows, then what the clinician added, each a reference of its own
+    private List<ReflectionReference> Ticked() =>
+        [.. References.Where(r => r.Ticked).Select(r => r.Stored), .. Added.Select(r => r.Stored)];
+
+    /// <summary>The typed line becomes an entry and is saved. A blank line is nothing.</summary>
+    [RelayCommand]
+    private async Task AddDraft()
+    {
+        var text = Draft.Trim();
+        Draft = "";
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        Added.Add(Row(new ReflectionReference($"{TypedKey}:{Guid.NewGuid():N}", "", text)));
+        OnPropertyChanged(nameof(HasAdded));
+        await SaveAsync().ConfigureAwait(true);
+    }
+
+    private async Task RemoveAddedAsync(AddedGuidanceRow row)
+    {
+        if (Added.Remove(row))
+        {
+            OnPropertyChanged(nameof(HasAdded));
+            await SaveAsync().ConfigureAwait(true);
         }
     }
 
@@ -152,78 +330,12 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Writes the answers only when they changed.</summary>
-    public async Task SaveAsync()
-    {
-        // Whitespace-only answers are empty: a stray line break would hide the hint and count as writing
-        Happened = Answer(Happened);
-        Learned = Answer(Learned);
-        Next = Answer(Next);
-        if (!Dirty || SessionId.Length == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            await _engine.UpdateReflectionAsync(SessionId, Happened, Learned, Next).ConfigureAwait(true);
-            _savedHappened = Happened;
-            _savedLearned = Learned;
-            _savedNext = Next;
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _status.Append($"could not save the reflection: {e.Message}");
-        }
-    }
-
-    /// <summary>A retitle renames the consultation itself. A blank title keeps the old name.</summary>
-    public async Task SaveTitleAsync()
-    {
-        var title = Title.Trim();
-        if (SessionId.Length == 0 || title.Length == 0 || title == _savedTitle)
-        {
-            return;
-        }
-
-        try
-        {
-            await _engine.LabelSessionAsync(SessionId, title).ConfigureAwait(true);
-            _savedTitle = title;
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _status.Append($"could not rename: {e.Message}");
-        }
-    }
-
-    /// <summary>The clinician corrected the summary, kept as their wording.</summary>
-    public async Task SaveSummaryAsync()
-    {
-        if (SessionId.Length == 0 || Summary == _savedSummary)
-        {
-            return;
-        }
-
-        try
-        {
-            await _engine.UpdateReflectionSummaryAsync(SessionId, Summary).ConfigureAwait(true);
-            _savedSummary = Summary;
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _status.Append($"could not save the summary: {e.Message}");
-        }
-    }
-
     [RelayCommand]
     private Task Copy() => _clipboard.CopyAsync(_status, ExportText, "Reflection");
 
     [RelayCommand]
     private Task SaveAsText() =>
-        ReflectionFile.SaveAsync(_dialogs, _picker, _status, ExportText, DisplayTitle);
-
-    public void Dispose() => _engine.NotificationReceived -= _onNotification;
+        ReflectionFile.SaveAsync(_dialogs, _picker, _status, ExportText, DisplayTitle, Warning);
 
     private void HandleNotification(EngineNotification notification)
     {
@@ -243,14 +355,5 @@ public sealed partial class ReflectionViewModel : ObservableObject, IDisposable
         }
     }
 
-    public static string MonthLabel(string startedAt)
-    {
-        var when = DateTimeOffset.TryParse(startedAt, CultureInfo.InvariantCulture, out var started)
-            ? started.ToLocalTime()
-            : DateTimeOffset.Now;
-        return when.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
-    }
-
     private static string Answer(string text) => text.Trim().Length == 0 ? "" : text;
-
 }

@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
@@ -66,9 +66,7 @@ public sealed partial class PrivacySettings : ObservableObject
 
         if (value && _dialogs is not null)
         {
-            _reverting = true;
-            KeepConsultations = false;  // holds until the clinician confirms
-            _reverting = false;
+            SetKeepConsultationsQuietly(false);  // holds until the clinician confirms
             _ = AskThenEnableAsync();
             return;
         }
@@ -83,27 +81,26 @@ public sealed partial class PrivacySettings : ObservableObject
                 + "\n\nContinue only if you have the necessary consent and approval.", "Turn on")
             .ConfigureAwait(true))
         {
-            _reverting = true;
-            KeepConsultations = true;
-            _reverting = false;
+            SetKeepConsultationsQuietly(true);
             PersistKeepConsultations(true);
         }
     }
 
-    private void PersistKeepConsultations(bool value)
+    private void SetKeepConsultationsQuietly(bool value)
     {
-        if (_preferences is not null)
-        {
-            _preferences.KeepConsultations = value;
-            _preferences.Save();
-        }
+        _reverting = true;
+        KeepConsultations = value;
+        _reverting = false;
     }
+
+    private void PersistKeepConsultations(bool value) =>
+        _preferences.Update(p => p.KeepConsultations = value);
 
     /// <summary>Erases every stored consultation, seeded or real.</summary>
     [RelayCommand]
     private async Task DeleteAllConsultations()
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
@@ -122,24 +119,18 @@ public sealed partial class PrivacySettings : ObservableObject
             return;
         }
 
-        try
+        await EngineCall.ReportAsync(_status, "could not delete", async () =>
         {
             var removed = await _client.DeleteAllSessionsAsync().ConfigureAwait(true);
-            _status?.Append(removed == 1 ? "1 consultation deleted" : $"{removed} consultations deleted");
+            _status?.Append($"{Words.Count(removed, "consultation")} deleted");
             // The seed was erased too. The switch follows, and switching on reseeds
             _seedFollowsStore = true;
             SeedDataEnabled = false;
             _seedFollowsStore = false;
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _status?.Append($"could not delete: {e.Message}");
-        }
+        }).ConfigureAwait(true);
     }
 
-    /// <summary>
-    /// Seed data: a year of sample consultations with reflections. A developer control.
-    /// </summary>
+    /// <summary>Seed data: a year of sample consultations with reflections. A developer control.</summary>
     [ObservableProperty]
     public partial bool SeedDataEnabled { get; set; }
 
@@ -150,12 +141,7 @@ public sealed partial class PrivacySettings : ObservableObject
             return;
         }
 
-        if (_preferences is not null)
-        {
-            _preferences.SeedDataEnabled = value;
-            _preferences.Save();
-        }
-
+        _preferences.Update(p => p.SeedDataEnabled = value);
         if (!_seedFollowsStore)
         {
             _ = ApplySeedDataAsync(value);
@@ -165,12 +151,12 @@ public sealed partial class PrivacySettings : ObservableObject
     // On seeds, a no-op when already seeded. Off clears
     private async Task ApplySeedDataAsync(bool enabled)
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
 
-        try
+        await EngineCall.ReportAsync(_status, "seed data", async () =>
         {
             var count = await (enabled ? _client.SeedDemoAsync() : _client.ClearDemoAsync())
                 .ConfigureAwait(true);
@@ -180,10 +166,6 @@ public sealed partial class PrivacySettings : ObservableObject
                     ? $"{count} sample consultations added"
                     : $"{count} sample consultations removed");
             }
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _status?.Append($"seed data: {e.Message}");
-        }
+        }).ConfigureAwait(true);
     }
 }

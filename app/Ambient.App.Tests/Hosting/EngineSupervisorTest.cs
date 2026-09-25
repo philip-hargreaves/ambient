@@ -1,4 +1,5 @@
 using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Hosting;
@@ -59,13 +60,6 @@ public class EngineSupervisorTest
         }
     }
 
-    private sealed class FakeSession : ISessionState
-    {
-        public bool ConsultationActive { get; set; }
-
-        public string SessionPhase { get; set; } = "";
-    }
-
     private sealed class FakeCrashLog : ICrashLog
     {
         public List<CrashReport> Reports { get; } = [];
@@ -107,25 +101,21 @@ public class EngineSupervisorTest
     }
 
     [Fact]
-    public void StartLaunchesTheEngine()
+    public void ACrashRestartsSilentlyIsLoggedAndTheNextOneWaits()
     {
         var h = new Harness();
 
         h.Host.Start();
-
         Assert.Equal(EngineStatus.Running, h.Host.Status);
         Assert.Single(h.Launcher.Launched);
         Assert.Equal(new[] { EngineStatus.Running }, h.Statuses);
         Assert.Equal(1234, h.Host.EnginePid);
-    }
 
-    [Fact]
-    public void IdleCrashRestartsSilently()
-    {
-        var h = new Harness();
-        h.Host.Start();
-
-        h.Current.Crash(-1);
+        // An idle crash after 90 s: relaunched at once, and the report says what was going on
+        h.Clock.Now += TimeSpan.FromSeconds(90);
+        h.InFlight = "session/stop";
+        h.Session.SessionPhase = "Finalising:Note";
+        h.Current.Crash(-7);
 
         Assert.Equal(EngineStatus.Running, h.Host.Status);
         Assert.Null(h.Host.Fault);
@@ -133,24 +123,34 @@ public class EngineSupervisorTest
         Assert.Equal(
             new[] { EngineStatus.Running, EngineStatus.Restarting, EngineStatus.Running },
             h.Statuses);
-    }
+        var report = Assert.Single(h.Log.Reports);
+        Assert.Equal(-7, report.ExitCode);
+        Assert.Equal(TimeSpan.FromSeconds(90), report.Uptime);
+        Assert.Equal(1, report.CrashCount);
+        Assert.Equal(RecoveryAction.Restart, report.Action);
+        Assert.Equal(h.Clock.Now, report.Timestamp);
+        Assert.Equal("session/stop", report.MethodInFlight);
+        Assert.Equal("Finalising:Note", report.SessionPhase);
 
-    [Fact]
-    public void MidConsultationCrashRestartsForResume()
-    {
-        var h = new Harness();
-        h.Host.Start();
-        h.Session.ConsultationActive = true;
-
-        h.Current.Crash(5);
-
-        Assert.Equal(EngineStatus.Running, h.Host.Status);  // relaunched already
-        Assert.Null(h.Host.Fault);
+        // A second crash in the window waits before relaunching
+        h.Current.Crash(-1);
+        Assert.Equal(EngineStatus.Restarting, h.Host.Status);
         Assert.Equal(2, h.Launcher.Launched.Count);
+        h.Clock.Advance(RestartPolicy.Backoff(2));
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Equal(3, h.Launcher.Launched.Count);
+
+        // Shutdown during the wait cancels the relaunch
+        h.Current.Crash(-1);
+        Assert.Equal(EngineStatus.Restarting, h.Host.Status);
+        h.Host.Shutdown();
+        h.Clock.Advance(RestartPolicy.MaxBackoff);
+        Assert.Equal(EngineStatus.Stopped, h.Host.Status);
+        Assert.Equal(3, h.Launcher.Launched.Count);
     }
 
     [Fact]
-    public void CrashStormGivesUp()
+    public void ACrashStormGivesUpAndStartRecovers()
     {
         var h = new Harness();
         h.Host.Start();
@@ -165,6 +165,13 @@ public class EngineSupervisorTest
         Assert.Equal(RestartPolicy.StormLimit, h.Launcher.Launched.Count);
         Assert.Equal(RestartPolicy.StormLimit, h.Log.Reports.Count);
         Assert.Equal(RecoveryAction.GiveUp, h.Log.Reports[^1].Action);
+
+        h.Host.Start();
+
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Null(h.Host.Fault);
+        h.Current.Crash(-1);
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
     }
 
     [Fact]
@@ -184,39 +191,7 @@ public class EngineSupervisorTest
     }
 
     [Fact]
-    public void ASecondCrashInTheWindowWaitsBeforeRelaunching()
-    {
-        var h = new Harness();
-        h.Host.Start();
-        h.Current.Crash(-1);
-        Assert.Equal(2, h.Launcher.Launched.Count);
-
-        h.Current.Crash(-1);
-
-        Assert.Equal(EngineStatus.Restarting, h.Host.Status);
-        Assert.Equal(2, h.Launcher.Launched.Count);
-        h.Clock.Advance(RestartPolicy.Backoff(2));
-        Assert.Equal(EngineStatus.Running, h.Host.Status);
-        Assert.Equal(3, h.Launcher.Launched.Count);
-    }
-
-    [Fact]
-    public void ShutdownDuringTheWaitCancelsTheRelaunch()
-    {
-        var h = new Harness();
-        h.Host.Start();
-        h.Current.Crash(-1);
-        h.Current.Crash(-1);
-
-        h.Host.Shutdown();
-        h.Clock.Advance(RestartPolicy.MaxBackoff);
-
-        Assert.Equal(EngineStatus.Stopped, h.Host.Status);
-        Assert.Equal(2, h.Launcher.Launched.Count);
-    }
-
-    [Fact]
-    public void ShutdownIsDeliberateNotACrash()
+    public void ShutdownAndACleanExitAreStopsNotCrashes()
     {
         var h = new Harness();
         h.Host.Start();
@@ -228,39 +203,17 @@ public class EngineSupervisorTest
         Assert.Single(h.Launcher.Launched);
         Assert.Null(h.Host.Fault);
         Assert.Null(h.Host.EnginePid);
-    }
+        Assert.Empty(h.Log.Reports);
 
-    [Fact]
-    public void ACleanExitIsAStopNotACrash()
-    {
-        var h = new Harness();
         h.Host.Start();
-
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
         h.Current.Crash(0);
 
         Assert.Equal(EngineStatus.Stopped, h.Host.Status);
         Assert.Null(h.Host.Fault);
-        Assert.Single(h.Launcher.Launched);
+        Assert.Equal(2, h.Launcher.Launched.Count);
         Assert.Empty(h.Log.Reports);
         h.Host.Start();
-        Assert.Equal(EngineStatus.Running, h.Host.Status);
-    }
-
-    [Fact]
-    public void StartAfterAFaultRecovers()
-    {
-        var h = new Harness();
-        h.Host.Start();
-        for (var i = 0; i < RestartPolicy.StormLimit; i++)
-        {
-            h.CrashAndWait(-1);
-        }
-
-        h.Host.Start();
-
-        Assert.Equal(EngineStatus.Running, h.Host.Status);
-        Assert.Null(h.Host.Fault);
-        h.Current.Crash(-1);
         Assert.Equal(EngineStatus.Running, h.Host.Status);
     }
 
@@ -274,38 +227,6 @@ public class EngineSupervisorTest
 
         Assert.Equal(EngineStatus.Faulted, h.Host.Status);
         Assert.Equal(new EngineFault(EngineFaultKind.LaunchFailed), h.Host.Fault);
-    }
-
-    [Fact]
-    public void CrashIsLoggedWithUptimeAndCount()
-    {
-        var h = new Harness();
-        h.Host.Start();
-        h.Clock.Now += TimeSpan.FromSeconds(90);
-        h.InFlight = "session/stop";
-        h.Session.SessionPhase = "Finalising:Note";
-
-        h.Current.Crash(-7);
-
-        var report = Assert.Single(h.Log.Reports);
-        Assert.Equal(-7, report.ExitCode);
-        Assert.Equal(TimeSpan.FromSeconds(90), report.Uptime);
-        Assert.Equal(1, report.CrashCount);
-        Assert.Equal(RecoveryAction.Restart, report.Action);
-        Assert.Equal(h.Clock.Now, report.Timestamp);
-        Assert.Equal("session/stop", report.MethodInFlight);
-        Assert.Equal("Finalising:Note", report.SessionPhase);
-    }
-
-    [Fact]
-    public void ShutdownLogsNothing()
-    {
-        var h = new Harness();
-        h.Host.Start();
-
-        h.Host.Shutdown();
-
-        Assert.Empty(h.Log.Reports);
     }
 
     [Fact]

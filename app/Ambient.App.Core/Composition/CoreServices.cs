@@ -4,9 +4,10 @@ using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Features.Help;
 using Ambient.App.Core.Features.Sessions;
 using Ambient.App.Core.Features.Settings;
-using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Core.Composition;
@@ -29,12 +30,14 @@ public static class CoreServices
         services.AddSingleton<MicViewModel>();
         services.AddSingleton<ConsultationViewModel>();
         services.AddSingleton<SessionControlsViewModel>();
+        services.AddSingleton<ConsultationHeaderViewModel>();
         services.AddSingleton<ShellViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<VoiceViewModel>();
         services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<AppraisalsViewModel>();
         services.AddSingleton<DemoTrayViewModel>();
+        services.AddSingleton<HelpViewModel>();
         return services;
     }
 }

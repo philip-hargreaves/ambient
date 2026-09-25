@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Ambient.App.Core.Ports;
+using Ambient.App.Core.Shell;
 using Ambient.App.Features.Appraisal;
 using Ambient.App.Features.Consultation;
 using Ambient.App.Features.Demo;
@@ -30,22 +31,29 @@ internal static class ViewServices
         services.AddTransient<PageView>();
         services.AddTransient<NoteEditorView>();
         services.AddTransient<PatientEditorView>();
-        services.AddTransient<NotePaneView>();
+        services.AddTransient<ReviewSurfaceView>();
         services.AddTransient<StatusBarView>();
         services.AddSingleton<ConsultationView>();
         services.AddSingleton<SessionsView>();
         services.AddSingleton<AppraisalsView>();
         services.AddSingleton<SettingsView>();
         services.AddSingleton<HelpView>();
-        services.AddSingleton<MainWindow>();
+        // The platform adapters reach the window through the accessor from the moment it exists
+        services.AddSingleton(sp =>
+        {
+            var window = ActivatorUtilities.CreateInstance<MainWindow>(sp);
+            sp.GetRequiredService<WindowAccessor>().Window = window;
+            return window;
+        });
+        services.AddSingleton<AppShutdown>();
         // The one place a page is looked up by name
         services.AddSingleton(sp => new NavigationService(new Dictionary<string, Func<UIElement>>
         {
-            ["consultation"] = sp.GetRequiredService<ConsultationView>,
-            ["sessions"] = sp.GetRequiredService<SessionsView>,
-            ["appraisals"] = sp.GetRequiredService<AppraisalsView>,
-            ["help"] = sp.GetRequiredService<HelpView>,
-            ["settings"] = sp.GetRequiredService<SettingsView>,
+            [Routes.Consultation] = sp.GetRequiredService<ConsultationView>,
+            [Routes.Sessions] = sp.GetRequiredService<SessionsView>,
+            [Routes.Appraisals] = sp.GetRequiredService<AppraisalsView>,
+            [Routes.Help] = sp.GetRequiredService<HelpView>,
+            [Routes.Settings] = sp.GetRequiredService<SettingsView>,
         }));
         services.AddSingleton<INavigationService>(sp => sp.GetRequiredService<NavigationService>());
         return services;

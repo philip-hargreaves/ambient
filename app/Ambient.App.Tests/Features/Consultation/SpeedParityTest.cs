@@ -1,7 +1,9 @@
 using Ambient.App.Core.Hosting;
 using Ambient.App.Platform;
 using Ambient.App.Tests.Support;
+using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
@@ -14,11 +16,6 @@ namespace Ambient.App.Tests.Features.Consultation;
 public class SpeedParityTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(20);
-
-    private sealed class FakeSession : ISessionState
-    {
-        public bool ConsultationActive { get; set; }
-    }
 
     [Fact]
     public async Task SixteenTimesMatchesRealTime()
@@ -96,35 +93,7 @@ public class SpeedParityTest
         return File.Exists(track) ? track : null;
     }
 
-    private static string? FindModels()
-    {
-        for (var dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))
-        {
-            var models = Path.Combine(dir, "models");
-            if (Directory.Exists(models))
-            {
-                return models;
-            }
-        }
-
-        return null;
-    }
+    private static string? FindModels() => EnginePath.FindModels();
 
     private static string FindEngine() => EnginePath.Find();
-
-    private static async Task<System.Text.Json.JsonElement> RetryAsync(
-        Func<Task<System.Text.Json.JsonElement>> request)
-    {
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                return await request();
-            }
-            catch (IOException) when (attempt < 600)
-            {
-                await Task.Delay(50);
-            }
-        }
-    }
 }

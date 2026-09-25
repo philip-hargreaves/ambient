@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Ambient.Client.Tests.Support;
 
 namespace Ambient.Client.Tests.Contract;
 

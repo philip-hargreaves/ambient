@@ -5,8 +5,6 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.System.JobObjects;
 
-using Ambient.App.Core.Hosting;
-
 namespace Ambient.App.Platform;
 
 /// <summary>

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Ambient.App.Core.Composition;
 using Ambient.App.Core.Features.Demo;
-using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Metrics;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -14,32 +13,14 @@ namespace Ambient.App.Tests.Composition;
 /// <summary>The view-model graph over fakes, so a new constructor parameter fails here before launch.</summary>
 public class CompositionTest
 {
-    private sealed class FakeHost : IEngineHost
-    {
-        public event Action<EngineStatus>? StatusChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public EngineStatus Status => EngineStatus.Stopped;
-
-        public EngineFault? Fault => null;
-
-        public int? EnginePid => null;
-
-        public void Start()
-        {
-        }
-
-        public void Shutdown()
-        {
-        }
-    }
-
     private sealed class FixedMachine : IMachineInfoProvider
     {
         public MachineInfo Describe() => new("cpu", 32, "os", [], null);
+    }
+
+    private sealed class FixedAppInfo : IAppInfo
+    {
+        public string Version => "0.0.0";
     }
 
     [Fact]
@@ -56,8 +37,9 @@ public class CompositionTest
         services.AddSingleton<IClipboard, FakeClipboard>();
         services.AddSingleton<IThemeService, FakeThemeService>();
         services.AddSingleton<INavigationService, RecordingNavigationService>();
-        services.AddSingleton<IEngineHost, FakeHost>();
+        services.AddSingleton<IEngineHost, FakeEngineHost>();
         services.AddSingleton<IMachineInfoProvider, FixedMachine>();
+        services.AddSingleton<IAppInfo, FixedAppInfo>();
         services.AddSingleton<IProcessMetrics, NoProcessMetrics>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(new AppPreferences(new MemoryPreferencesStore()));

@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using Ambient.Client.Tests.TestDoubles;
 
 namespace Ambient.Client.Tests;
 
@@ -10,42 +11,88 @@ public class PipeTransportTest
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-    [Fact]
-    public async Task RequestReceivesItsOwnResponse()
+    private static NamedPipeServerStream RawServer(string name) => new(
+        name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+
+    // One scripted engine, keyed on the method, so a single transport can walk every reply kind
+    private static IEnumerable<string> Script(JsonDocument request)
     {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, request =>
+        var id = request.RootElement.GetProperty("id").GetInt64();
+        return request.RootElement.GetProperty("method").GetString() switch
         {
-            var id = request.RootElement.GetProperty("id").GetInt64();
-            return [$"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{\"echoedId\":{id}}}}}"];
-        });
-        await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
+            "engine/echo" => [$"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{}}}}"],
+            "engine/notify" =>
+            [
+                "{\"jsonrpc\":\"2.0\",\"method\":\"engine/event\",\"params\":{\"n\":1}}",
+                $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{}}}}",
+            ],
+            "engine/nope" =>
+            [
+                $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":{{\"code\":-32601,\"message\":\"Method not found\"}}}}",
+            ],
+            // An id but neither result nor error
+            "engine/malformed" => [$"{{\"jsonrpc\":\"2.0\",\"id\":{id}}}"],
+            _ => [],  // silence
+        };
+    }
 
-        var first = await transport.RequestAsync("engine/echo", null, Timeout);
-        var second = await transport.RequestAsync("engine/echo", null, Timeout);
+    [Fact]
+    public async Task ATransportChecksThePidThenWalksEveryKindOfReply()
+    {
+        // The fake server runs in this test process, so a pid it cannot have is refused
+        var wrongName = UniquePipeName();
+        await using var refusing = new FakeEngine(wrongName, _ => []);
+        var wrongPid = (uint)(Environment.ProcessId + 1);
+        var refused = await Assert.ThrowsAsync<IOException>(
+            () => PipeTransport.ConnectAsync(wrongName, Timeout, wrongPid));
+        Assert.Contains("expected engine pid", refused.Message, StringComparison.Ordinal);
 
-        Assert.Equal(1, first.GetProperty("echoedId").GetInt64());
-        Assert.Equal(2, second.GetProperty("echoedId").GetInt64());
+        var name = UniquePipeName();
+        await using var fake = new FakeEngine(name, Script);
+        await using var transport = await PipeTransport.ConnectAsync(
+            name, Timeout, (uint)Environment.ProcessId);
+
+        // Non-ASCII goes over the wire as readable UTF-8, not escapes
+        const string clinical = "naïve café-au-lait 東京 µg °C";
+        var result = await transport.RequestAsync("engine/echo", new { payload = clinical }, Timeout);
+        Assert.Equal(JsonValueKind.Object, result.ValueKind);
+        Assert.Contains(clinical, fake.LastRequestJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\u", fake.LastRequestJson, StringComparison.Ordinal);
+
+        // A notification raises its event without disturbing the request it precedes
+        var notified = new TaskCompletionSource<string>();
+        transport.NotificationReceived += (method, _) => notified.TrySetResult(method);
+        await transport.RequestAsync("engine/notify", null, Timeout);
+        Assert.Equal("engine/event", await notified.Task.WaitAsync(Timeout));
+
+        // An error response surfaces as the typed exception
+        var error = await Assert.ThrowsAsync<EngineErrorException>(
+            () => transport.RequestAsync("engine/nope", null, Timeout));
+        Assert.Equal(-32601, error.Code);
+
+        // A malformed response faults its own request promptly, distinct from a timeout
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => transport.RequestAsync("engine/malformed", null, Timeout));
+
+        // Silence times out, and the transport is still usable afterwards
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => transport.RequestAsync("engine/silent", null, TimeSpan.FromMilliseconds(200)));
+        await transport.RequestAsync("engine/echo", null, Timeout);
     }
 
     [Fact]
     public async Task ResponsesCorrelateWhenDeliveredOutOfOrder()
     {
         var name = UniquePipeName();
-        using var server = new NamedPipeServerStream(
-            name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        using var server = RawServer(name);
         var serverTask = Task.Run(async () =>
         {
             await server.WaitForConnectionAsync();
             var ids = new List<long>();
             for (var i = 0; i < 2; i++)
             {
-                var header = new byte[Framing.HeaderBytes];
-                await server.ReadExactlyAsync(header);
-                var body = new byte[Framing.ReadDeclaredLength(header)];
-                await server.ReadExactlyAsync(body);
-                using var doc = JsonDocument.Parse(body);
+                using var doc = JsonDocument.Parse(await Framing.ReadFrameAsync(server));
                 ids.Add(doc.RootElement.GetProperty("id").GetInt64());
             }
 
@@ -71,119 +118,16 @@ public class PipeTransportTest
     }
 
     [Fact]
-    public async Task ConnectRejectsAServerWhosePidIsNotExpected()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, _ => []);
-        // The fake server runs in this test process, so demand a pid it cannot have.
-        var wrongPid = (uint)(Environment.ProcessId + 1);
-
-        var error = await Assert.ThrowsAsync<IOException>(
-            () => PipeTransport.ConnectAsync(name, Timeout, wrongPid));
-        Assert.Contains("expected engine pid", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task ConnectAcceptsAServerWithTheExpectedPid()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, request =>
-        {
-            var id = request.RootElement.GetProperty("id").GetInt64();
-            return [$"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{}}}}"];
-        });
-
-        await using var transport = await PipeTransport.ConnectAsync(
-            name, Timeout, (uint)Environment.ProcessId);
-        var result = await transport.RequestAsync("engine/echo", null, Timeout);
-
-        Assert.Equal(JsonValueKind.Object, result.ValueKind);
-    }
-
-    [Fact]
-    public async Task ErrorResponseSurfacesAsException()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, request =>
-        {
-            var id = request.RootElement.GetProperty("id").GetInt64();
-            return
-            [
-                $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":{{\"code\":-32601,\"message\":\"Method not found\"}}}}",
-            ];
-        });
-        await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
-
-        var error = await Assert.ThrowsAsync<EngineErrorException>(
-            () => transport.RequestAsync("engine/nope", null, Timeout));
-        Assert.Equal(-32601, error.Code);
-    }
-
-    [Fact]
-    public async Task MalformedResponseFaultsItsOwnRequestNotByTimeout()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, request =>
-        {
-            var id = request.RootElement.GetProperty("id").GetInt64();
-            // An id but neither result nor error: the request must fault promptly.
-            return [$"{{\"jsonrpc\":\"2.0\",\"id\":{id}}}"];
-        });
-        await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
-
-        // The missing result member raises its own exception, distinct from a timeout
-        await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => transport.RequestAsync("engine/echo", null, Timeout));
-    }
-
-    [Fact]
-    public async Task TimeoutFiresWhenServerStaysSilent()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, _ => []);
-        await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => transport.RequestAsync("engine/echo", null, TimeSpan.FromMilliseconds(200)));
-    }
-
-    [Fact]
-    public async Task NotificationRaisesEventWithoutDisturbingRequests()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, request =>
-        {
-            var id = request.RootElement.GetProperty("id").GetInt64();
-            return
-            [
-                "{\"jsonrpc\":\"2.0\",\"method\":\"engine/event\",\"params\":{\"n\":1}}",
-                $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{}}}}",
-            ];
-        });
-        await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
-        var notified = new TaskCompletionSource<string>();
-        transport.NotificationReceived += (method, _) => notified.TrySetResult(method);
-
-        await transport.RequestAsync("engine/echo", null, Timeout);
-
-        Assert.Equal("engine/event", await notified.Task.WaitAsync(Timeout));
-    }
-
-    [Fact]
     public async Task OversizeHeaderFaultsPendingRequests()
     {
         var name = UniquePipeName();
-        using var raw = new NamedPipeServerStream(
-            name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        using var raw = RawServer(name);
         var serverTask = Task.Run(async () =>
         {
             await raw.WaitForConnectionAsync();
             // Read and discard the client's request, then answer with a header
             // that declares a body far past the cap
-            var header = new byte[Framing.HeaderBytes];
-            await raw.ReadExactlyAsync(header);
-            await raw.ReadExactlyAsync(new byte[Framing.ReadDeclaredLength(header)]);
+            await Framing.ReadFrameAsync(raw);
             await raw.WriteAsync(BitConverter.GetBytes(uint.MaxValue));
             await raw.FlushAsync();
         });
@@ -192,23 +136,5 @@ public class PipeTransportTest
         await Assert.ThrowsAsync<InvalidDataException>(
             () => transport.RequestAsync("engine/echo", null, Timeout));
         await serverTask;
-    }
-
-    [Fact]
-    public async Task NonAsciiWiresAsReadableUtf8()
-    {
-        var name = UniquePipeName();
-        await using var fake = new FakeEngine(name, request =>
-        {
-            var id = request.RootElement.GetProperty("id").GetInt64();
-            return [$"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":{{}}}}"];
-        });
-        await using var transport = await PipeTransport.ConnectAsync(name, Timeout);
-        const string clinical = "naïve café-au-lait 東京 µg °C";
-
-        await transport.RequestAsync("engine/echo", new { payload = clinical }, Timeout);
-
-        Assert.Contains(clinical, fake.LastRequestJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("\\u", fake.LastRequestJson, StringComparison.Ordinal);
     }
 }

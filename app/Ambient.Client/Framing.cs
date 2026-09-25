@@ -33,4 +33,14 @@ public static class Framing
 
         return (int)length;
     }
+
+    /// <summary>One frame's payload, read whole. Throws when the stream ends first.</summary>
+    public static async Task<byte[]> ReadFrameAsync(Stream stream, CancellationToken cancellationToken = default)
+    {
+        var header = new byte[HeaderBytes];
+        await stream.ReadExactlyAsync(header, cancellationToken).ConfigureAwait(false);
+        var body = new byte[ReadDeclaredLength(header)];
+        await stream.ReadExactlyAsync(body, cancellationToken).ConfigureAwait(false);
+        return body;
+    }
 }

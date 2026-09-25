@@ -1,17 +1,17 @@
+using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
+using Windows.Win32.Foundation;
 using Windows.Win32.System.Threading;
-
-using Ambient.App.Core.Hosting;
 
 namespace Ambient.App.Platform;
 
 /// <summary>
 /// Windows throttles windowless background processes (EcoQoS) once the user
-/// is idle. Finalise measured 4.0 s to 6.3 s. The launched engine is opted
-/// out here as well as by itself, so the state never rests on one call.
+/// is idle, which stretched a finalise from 4.0 s to 6.3 s. The engine is
+/// opted out here as well as by itself, so the state never rests on one call.
 /// </summary>
-[System.Runtime.Versioning.SupportedOSPlatform("windows8.0")]
+[SupportedOSPlatform("windows8.0")]
 public static class PowerThrottling
 {
     public static unsafe bool Disable(SafeProcessHandle process)
@@ -23,7 +23,7 @@ public static class PowerThrottling
             StateMask = 0,
         };
         return PInvoke.SetProcessInformation(
-            new global::Windows.Win32.Foundation.HANDLE(process.DangerousGetHandle()),
+            new HANDLE(process.DangerousGetHandle()),
             PROCESS_INFORMATION_CLASS.ProcessPowerThrottling, &state,
             (uint)sizeof(PROCESS_POWER_THROTTLING_STATE));
     }
@@ -36,7 +36,7 @@ public static class PowerThrottling
             Version = PInvoke.PROCESS_POWER_THROTTLING_CURRENT_VERSION,
         };
         if (!PInvoke.GetProcessInformation(
-                new global::Windows.Win32.Foundation.HANDLE(process.DangerousGetHandle()),
+                new HANDLE(process.DangerousGetHandle()),
                 PROCESS_INFORMATION_CLASS.ProcessPowerThrottling, &state,
                 (uint)sizeof(PROCESS_POWER_THROTTLING_STATE)))
         {

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Shell;
 
@@ -35,6 +36,7 @@ public sealed partial class SessionControlsViewModel : ObservableObject
                 OnPropertyChanged(nameof(RefusedVisible));
                 DoneCommand.NotifyCanExecuteChanged();
                 OnPropertyChanged(nameof(FinalisingLabel));
+                OnPropertyChanged(nameof(StartLabel));
                 StartRecordingCommand.NotifyCanExecuteChanged();
                 StopRecordingCommand.NotifyCanExecuteChanged();
                 CancelRecordingCommand.NotifyCanExecuteChanged();
@@ -102,9 +104,13 @@ public sealed partial class SessionControlsViewModel : ObservableObject
     public bool FinalisingVisible =>
         _session.State == SessionState.Finalising && _session.Phase != FinalisePhase.Streaming;
 
-    public string ElapsedLabel =>
-        TimeSpan.FromSeconds(_session.AudioSeconds).ToString(@"mm\:ss",
-            System.Globalization.CultureInfo.InvariantCulture);
+    public string ElapsedLabel => Words.Position(_session.AudioSeconds);
+
+    /// <summary>The label under the record disc: the wait while the engine or models are not ready, else the invitation.</summary>
+    public string StartLabel =>
+        _session.State == SessionState.Idle && !(_session.EngineReady && _session.ModelsReady)
+            ? "Getting ready"
+            : "Ready to start recording";
 
     [RelayCommand(CanExecute = nameof(CanStartRecording))]
     private Task StartRecording() => _session.StartRecordingAsync();

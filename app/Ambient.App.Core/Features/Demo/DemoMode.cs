@@ -94,13 +94,11 @@ public sealed class DemoMode(AppPreferences? preferences = null, string? masters
 
     private void Persist()
     {
-        if (preferences is not null)
+        preferences.Update(p =>
         {
-            preferences.DemoMode = _enabled;
-            preferences.DemoTrack = _track;
-            preferences.Save();
-        }
-
+            p.DemoMode = _enabled;
+            p.DemoTrack = _track;
+        });
         Changed?.Invoke();
     }
 }

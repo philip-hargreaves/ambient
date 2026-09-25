@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Ambient.App.Tests.Support;
 using Ambient.Client;
 
 namespace Ambient.App.Tests.TestDoubles;
@@ -47,7 +48,7 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
         string method, object? parameters, TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
-        Requests.Add((method, parameters is null ? "" : JsonSerializer.Serialize(parameters)));
+        Requests.Add((method, parameters is null ? "" : JsonSerializer.Serialize(parameters, Protocol.JsonOptions)));
 
         if (FailNext?.Invoke(method) is { } failure)
         {
@@ -141,11 +142,12 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
                 id = JsonDocument.Parse(Requests[^1].Params).RootElement.GetProperty("id").GetString(),
                 label = ReflectionLabel,
                 summary = ReflectionSummary is null ? null : new { text = ReflectionSummary, generatedAt = "2026-09-06T10:00:00Z", editedAt = (string?)null },
-                reflection = ReflectionAnswers is null ? null : new
+                reflection = ReflectionAnswers is null && ReflectionReferences.Count == 0 ? null : new
                 {
-                    happened = ReflectionAnswers.Value.Happened,
-                    learned = ReflectionAnswers.Value.Learned,
-                    next = ReflectionAnswers.Value.Next,
+                    happened = ReflectionAnswers?.Happened ?? "",
+                    learned = ReflectionAnswers?.Learned ?? "",
+                    next = ReflectionAnswers?.Next ?? "",
+                    references = ReflectionReferences.ToArray(),
                     createdAt = "2026-09-06T10:05:00Z",
                     editedAt = (string?)null,
                 },
@@ -357,15 +359,7 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
     public string? GuidanceDetail { get; set; }
 
     /// <summary>The corpora guidance/corpora lists, one loaded fixture corpus by default.</summary>
-    public List<object> GuidanceCorpora { get; } =
-    [
-        new
-        {
-            id = "fixture", name = "Fixture guidance corpus", licence = "invented",
-            attribution = "none", source = "text", embedder = "gte-large-int8",
-            sha256 = "", chunks = 40, builtAt = "2026-09-11T00:00:00Z", unavailable = (string?)null,
-        },
-    ];
+    public List<object> GuidanceCorpora { get; } = [GuidanceRecords.Corpus()];
 
     /// <summary>Served by session/note when set, otherwise the stored note is empty.</summary>
     public string? StoredNote { get; set; }
@@ -417,6 +411,9 @@ public sealed class FakeEngineClient(bool autoNotify = true) : IEngineTransport
 
     /// <summary>Served by reflection/get, null until the clinician wrote something.</summary>
     public (string Happened, string Learned, string Next)? ReflectionAnswers { get; set; }
+
+    /// <summary>Served by reflection/get: the guidance ticked as referred to.</summary>
+    public List<ReflectionReference> ReflectionReferences { get; } = [];
 
     /// <summary>What reflection/summary produces, as the notification.</summary>
     public string WrittenSummary { get; set; } = "A patient in their forties presented with a swollen elbow.";

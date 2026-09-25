@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 
 namespace Ambient.App.Core.Preferences;
 
@@ -50,10 +51,6 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
     /// <summary>The values the shell can render or the engine accepts, each with its default first.</summary>
     public static readonly IReadOnlyList<string> Themes = ["system", "light", "dark"];
 
-    public static readonly IReadOnlyList<string> NoteStyles = ["prose", "soap"];
-
-    public static readonly IReadOnlyList<string> NoteDetails = ["standard", "concise", "detailed"];
-
     /// <summary>The note model tiers the engine's store can resolve, in ladder order.</summary>
     public static readonly IReadOnlyList<string> NoteTiers = ["constrained", "default", "accuracy"];
 
@@ -61,6 +58,9 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
         : this(new FilePreferencesStore(path), logger)
     {
     }
+
+    /// <summary>Raised after every save, so a page can follow a preference it does not own.</summary>
+    public event Action? Saved;
 
     public bool DemoTrayEnabled { get; set; }
 
@@ -98,9 +98,9 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
     /// <summary>"system" follows the OS, while "light" and "dark" override it.</summary>
     public string Theme { get; set; } = Themes[0];
 
-    public string NoteStyle { get; set; } = NoteStyles[0];
+    public string NoteStyle { get; set; } = NoteOptions.DefaultStyle.Value;
 
-    public string NoteDetail { get; set; } = NoteDetails[0];
+    public string NoteDetail { get; set; } = NoteOptions.DefaultDetail.Value;
 
     /// <summary>
     /// Which note model the engine loads, as a role ("default", "accuracy",
@@ -149,8 +149,8 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
         preferences.IncludeResearchGuidance = stored.IncludeResearchGuidance;
         preferences.MicId = stored.MicId ?? "";
         preferences.Theme = Known(stored.Theme, Themes, Themes[0]);
-        preferences.NoteStyle = Known(stored.NoteStyle, NoteStyles, NoteStyles[0]);
-        preferences.NoteDetail = Known(stored.NoteDetail, NoteDetails, NoteDetails[0]);
+        preferences.NoteStyle = NoteOptions.Style(stored.NoteStyle).Value;
+        preferences.NoteDetail = NoteOptions.Detail(stored.NoteDetail).Value;
         preferences.NoteTier = Known(stored.NoteTier, NoteTiers, "default");
         return preferences;
     }
@@ -181,6 +181,8 @@ public sealed class AppPreferences(IPreferencesStore store, ILogger? logger = nu
         {
             logger?.PreferencesNotSaved(e.Message);
         }
+
+        Saved?.Invoke();
     }
 
     private static string Known(string? value, IReadOnlyList<string> known, string fallback) =>

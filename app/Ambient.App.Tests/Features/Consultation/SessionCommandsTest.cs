@@ -1,119 +1,53 @@
 using Ambient.App.Core.Features.Consultation;
-using Ambient.App.Core.Features.Documents;
-using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
-using Ambient.Client;
+using static Ambient.App.Tests.Support.Waits;
 using static Ambient.App.Tests.Support.Wire;
-
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 public class SessionCommandsTest
 {
     [Fact]
-    public async Task CanExecuteFollowsTheSessionState()
+    public async Task CommandsDriveTheMachineAndCanExecuteVisibilityAndTheClockFollowTheState()
     {
         var (session, engine, _) = TestSession.Create();
         var controls = new SessionControlsViewModel(session, TestSession.Mic());
 
-        Assert.True(controls.StartRecordingCommand.CanExecute(null));
-        Assert.False(controls.StopRecordingCommand.CanExecute(null));
-        Assert.False(controls.NewConsultationCommand.CanExecute(null));
-
-        await session.StartRecordingAsync();
-        Assert.False(controls.StartRecordingCommand.CanExecute(null));
-        Assert.True(controls.StopRecordingCommand.CanExecute(null));
-        Assert.True(controls.CancelRecordingCommand.CanExecute(null));
-
-        await session.StopRecordingAsync();
-        engine.RaiseNotification("note/ready");
-        Assert.True(controls.NewConsultationCommand.CanExecute(null));
-    }
-
-    [Fact]
-    public async Task MicPickerAndNewConsultationNeverShareTheHeaderCell()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-
-        Assert.True(controls.MicPickerVisible);
-        Assert.True(controls.MicPickerEnabled);
-        Assert.False(controls.ReviewVisible);
-
-        await session.StartRecordingAsync();
-        Assert.True(controls.MicPickerVisible, "shown while recording, read-only");
-        Assert.False(controls.MicPickerEnabled, "pinned: changes apply next time");
-
-        await session.StopRecordingAsync();
-        engine.RaiseNotification("note/ready");
-        Assert.True(controls.ReviewVisible);
-        Assert.False(controls.MicPickerVisible, "the cell is New consultation's now");
-    }
-
-    [Fact]
-    public void RecordingWaitsForTheEngine()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-
+        // Recording waits for the engine
         engine.SetConnected(false);
         Assert.False(controls.StartRecordingCommand.CanExecute(null));
-
         engine.SetConnected(true);
         Assert.True(controls.StartRecordingCommand.CanExecute(null));
-    }
 
-    [Fact]
-    public async Task StatePropertyRaisesChangeNotification()
-    {
-        var (session, _, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-        var raised = false;
-        controls.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(SessionControlsViewModel.State))
-            {
-                raised = true;
-            }
-        };
-
-        await session.StartRecordingAsync();
-
-        Assert.True(raised);
-        Assert.Equal(SessionState.Recording, controls.State);
-    }
-
-    [Fact]
-    public async Task CommandsDriveTheMachine()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-
-        await controls.StartRecordingCommand.ExecuteAsync(null);
-        Assert.Equal(SessionState.Recording, session.State);
-
-        await controls.StopRecordingCommand.ExecuteAsync(null);
-        engine.RaiseNotification("note/ready");
-        controls.NewConsultationCommand.Execute(null);
-
-        Assert.Equal(SessionState.Idle, session.State);
-    }
-
-    [Fact]
-    public async Task VisibilityFollowsTheState()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-
+        Assert.False(controls.StopRecordingCommand.CanExecute(null));
+        Assert.False(controls.NewConsultationCommand.CanExecute(null));
         Assert.True(controls.IdleVisible);
         Assert.True(controls.CentreStageVisible);
         Assert.False(controls.PanesVisible);
+        Assert.False(controls.ReviewVisible);
+        Assert.True(controls.MicPickerVisible);
+        Assert.True(controls.MicPickerEnabled);
 
         await controls.StartRecordingCommand.ExecuteAsync(null);
+        Assert.Equal(SessionState.Recording, controls.State);
+        Assert.False(controls.StartRecordingCommand.CanExecute(null));
+        Assert.True(controls.StopRecordingCommand.CanExecute(null));
+        Assert.True(controls.CancelRecordingCommand.CanExecute(null));
         Assert.False(controls.IdleVisible);
         Assert.True(controls.RecordingVisible);
         Assert.True(controls.CentreStageVisible);
+        Assert.True(controls.MicPickerVisible, "shown while recording, read-only");
+        Assert.False(controls.MicPickerEnabled, "pinned: changes apply next time");
+
+        // The clock and the ring follow delivered audio
+        for (var i = 0; i < 754; i++)
+        {
+            engine.RaiseNotification("audio.level", Params(new { level = 0.5, clipped = false }));
+        }
+
+        Assert.Equal("01:15", controls.ElapsedLabel);
+        Assert.Equal(0.5, controls.Level);
 
         // Sealed, note not yet streaming: the centre holds and says why
         await controls.StopRecordingCommand.ExecuteAsync(null);
@@ -130,6 +64,12 @@ public class SessionCommandsTest
         Assert.True(controls.ReviewVisible);
         Assert.False(controls.RecordingVisible);
         Assert.False(controls.CentreStageVisible);
+        Assert.True(controls.NewConsultationCommand.CanExecute(null));
+        Assert.False(controls.MicPickerVisible, "the cell is New consultation's now");
+
+        controls.NewConsultationCommand.Execute(null);
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.True(controls.IdleVisible);
     }
 
     [Fact]
@@ -150,29 +90,14 @@ public class SessionCommandsTest
     }
 
     [Fact]
-    public async Task TheClockFormatsDeliveredAudio()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-        await session.StartRecordingAsync();
-
-        for (var i = 0; i < 754; i++)
-        {
-            engine.RaiseNotification("audio.level", System.Text.Json.JsonSerializer
-                .SerializeToElement(new { level = 0.5, clipped = false }));
-        }
-
-        Assert.Equal("01:15", controls.ElapsedLabel);
-    }
-
-    [Fact]
     public async Task FirstTimeSetupBlocksRecordingUntilModelsCompile()
     {
-        var engine = new FakeEngineClient(autoNotify: false) { FirstUse = true, ModelsCompiled = false };
-        var bar = new StatusBarViewModel();
-        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), bar, new FakeDialogService(), TestSession.Page(engine, bar), TestSession.Guidance(bar), readinessPollInterval: TimeSpan.FromMilliseconds(1));
+        var (session, engine, _) = TestSession.Create(
+            engine: new FakeEngineClient(autoNotify: false) { FirstUse = true, ModelsCompiled = false },
+            readinessPollInterval: TimeSpan.FromMilliseconds(1));
+        var bar = session.Status;
         var controls = new SessionControlsViewModel(session, TestSession.Mic());
-        bar.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running, null);
+        bar.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running);
         bar.SetEngineReady(true);
 
         Assert.False(session.ModelsReady);
@@ -180,31 +105,20 @@ public class SessionCommandsTest
         Assert.Contains("First-time setup", bar.DisplayLabel);
 
         engine.ModelsCompiled = true;
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        while (!session.ModelsReady && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(10);
-        }
+        await WaitUntilAsync(() => session.ModelsReady);
 
         Assert.True(session.ModelsReady);
         Assert.True(controls.StartRecordingCommand.CanExecute(null));
     }
 
     [Fact]
-    public void AWarmLaunchIsNeverGated()
-    {
-        var (session, engine, _) = TestSession.Create();
-
-        Assert.True(session.ModelsReady);
-        Assert.Equal(1, engine.Requests.Count(r => r.Method == "engine/readiness"));
-    }
-
-    [Fact]
-    public void AWarmNoteModelLoadNeitherHoldsRecordingNorSaysSo()
+    public void AWarmLaunchAndAWarmNoteModelLoadNeverGateRecording()
     {
         var (session, engine, _) = TestSession.Create();
         var controls = new SessionControlsViewModel(session, TestSession.Mic());
-        session.Status.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running, null);
+        Assert.True(session.ModelsReady);
+        Assert.Equal(1, engine.Requests.Count(r => r.Method == "engine/readiness"));
+        session.Status.SetEngineState(Ambient.App.Core.Hosting.EngineStatus.Running);
         session.Status.SetEngineReady(true);
 
         engine.RaiseNotification("note/model", System.Text.Json.JsonSerializer.SerializeToElement(
@@ -287,11 +201,16 @@ public class SessionCommandsTest
     }
 
     [Fact]
-    public async Task ARestartedEngineResumesTheLiveSession()
+    public async Task ARestartedEngineResumesTheLiveSessionButNothingWhileIdle()
     {
         var (session, engine, _) = TestSession.Create();
-        await session.StartRecordingAsync();
 
+        engine.SetConnected(false);
+        engine.SetConnected(true);
+        Assert.DoesNotContain(engine.Requests, r => r.Method == "session/start");
+        Assert.Equal(SessionState.Idle, session.State);
+
+        await session.StartRecordingAsync();
         engine.SetConnected(false);
         engine.SetConnected(true);
 
@@ -338,37 +257,5 @@ public class SessionCommandsTest
 
         Assert.Equal(SessionState.Idle, session.State);
         Assert.Equal("Could not resume - session kept", session.Status.LatestActivity);
-    }
-
-    [Fact]
-    public async Task ARestartWhileIdleDoesNotResume()
-    {
-        var (session, engine, _) = TestSession.Create();
-
-        engine.SetConnected(false);
-        engine.SetConnected(true);
-
-        Assert.DoesNotContain(engine.Requests, r => r.Method == "session/start");
-        Assert.Equal(SessionState.Idle, session.State);
-    }
-
-    [Fact]
-    public void TheRingFollowsTheMicrophoneLevel()
-    {
-        var (session, _, _) = TestSession.Create();
-        var controls = new SessionControlsViewModel(session, TestSession.Mic());
-        var raised = 0;
-        controls.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(SessionControlsViewModel.Level))
-            {
-                raised++;
-            }
-        };
-
-        session.Status.SetMicLevel(0.6, clipped: false);
-
-        Assert.Equal(0.6, controls.Level);
-        Assert.Equal(1, raised);
     }
 }

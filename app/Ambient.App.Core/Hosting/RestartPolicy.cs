@@ -13,7 +13,7 @@ public enum RecoveryAction
 /// </summary>
 public static class RestartPolicy
 {
-    // VS Code's language-client cutoff, the reference figure
+    // VS Code's language-client cutoff
     public const int StormLimit = 5;
 
     public static readonly TimeSpan StormWindow = TimeSpan.FromMinutes(3);
@@ -28,8 +28,7 @@ public static class RestartPolicy
 
     /// <summary>
     /// The wait before the relaunch: none for the first crash in the window, then doubling
-    /// from one second, so a launch that dies at once cannot burn the storm budget in
-    /// milliseconds.
+    /// from one second, so a launch that dies at once cannot burn the storm budget in ms.
     /// </summary>
     public static TimeSpan Backoff(int recentCrashes)
     {

@@ -17,8 +17,6 @@ namespace Ambient.App.Core.Features.Consultation;
 /// </summary>
 public sealed partial class ConsultationViewModel : ObservableObject, ISessionState
 {
-    private readonly IEngineApi _engine;
-
     public ConsultationViewModel(
         IEngineApi engine, IUiDispatcher dispatcher,
         TranscriptViewModel transcript, NoteViewModel note, StatusBarViewModel status,
@@ -26,7 +24,6 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Metrics.PerformanceCollector? metrics = null, TimeSpan? readinessPollInterval = null,
         AppPreferences? preferences = null, DemoMode? demo = null)
     {
-        _engine = engine;
         Transcript = transcript;
         Note = note;
         Guidance = guidance;
@@ -35,9 +32,8 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
         Recorder = new SessionRecorder(
             engine, status, note, guidance, pageView, transcript, metrics, preferences, demo);
         Review = new SessionReview(
-            engine, dispatcher, status, note, guidance, pageView, transcript, dialogs, Recorder,
-            preferences);
-        Readiness = new EngineReadiness(
+            engine, dispatcher, status, note, guidance, transcript, dialogs, Recorder, preferences);
+        Readiness = new ConsultationReadiness(
             engine, status, note, guidance, Recorder, preferences,
             readinessPollInterval ?? TimeSpan.FromSeconds(2));
         var router = new NotificationRouter(Recorder, Review, Readiness, note, guidance, status, metrics);
@@ -78,7 +74,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
         Note.OptionsChanged = Readiness.NoteOptionsChanged;
         // Off the transport's thread. A handler that throws must not take the others with it
-        _engine.NotificationReceived += notification => dispatcher.Post(() =>
+        engine.NotificationReceived += notification => dispatcher.Post(() =>
         {
             try
             {
@@ -89,14 +85,14 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
                 Status.Log($"{notification.GetType().Name} handler failed: {e.Message}");
             }
         });
-        // The status-bar label carries readiness. Only the loss is logged
-        _engine.ConnectedChanged += connected => dispatcher.Post(() =>
+        // The status-bar label carries readiness. The loss is only logged: an intentional
+        // restart (the NPU switch) must not read as a failure
+        engine.ConnectedChanged += connected => dispatcher.Post(() =>
         {
             EngineReady = connected;
             Status.SetEngineReady(connected);
             if (!connected)
             {
-                // An intentional restart (the NPU switch) must not read as a failure
                 Note.TranslationRunning = false;
                 Guidance.ConnectionLost();
                 Status.Log("connection lost");
@@ -123,7 +119,7 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     public SessionReview Review { get; }
 
-    public EngineReadiness Readiness { get; }
+    public ConsultationReadiness Readiness { get; }
 
     public TranscriptViewModel Transcript { get; }
 
@@ -188,6 +184,10 @@ public sealed partial class ConsultationViewModel : ObservableObject, ISessionSt
 
     /// <summary>A stored session is open for review, as opposed to the one just recorded.</summary>
     public bool ReviewingStored => Review.StoredOpen;
+
+    /// <summary>The consultation just recorded while its review is up, null once a stored one replaces it.</summary>
+    public string? LiveReviewId =>
+        State == SessionState.Review && !Review.StoredOpen ? Review.FinalisedSessionId : null;
 
     public Task SaveNoteAsync() => Review.SaveNoteAsync();
 

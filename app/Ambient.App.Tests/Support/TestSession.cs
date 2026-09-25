@@ -1,4 +1,5 @@
 using Ambient.App.Core.Features.Consultation;
+using Ambient.App.Core.Features.Demo;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Preferences;
@@ -10,16 +11,19 @@ namespace Ambient.App.Tests.Support;
 
 internal static class TestSession
 {
-    public static (ConsultationViewModel Session, FakeEngineClient Engine, NoteViewModel Note)
-        Create(AppPreferences? preferences = null, FakeDialogService? dialogs = null)
+    /// <summary>A consultation over a quiet fake engine. The status bar is the session's; its lines go to the log when one is given.</summary>
+    public static (ConsultationViewModel Session, FakeEngineClient Engine, NoteViewModel Note) Create(
+        AppPreferences? preferences = null, FakeDialogService? dialogs = null,
+        FakeEngineClient? engine = null, DemoMode? demo = null, TimeSpan? readinessPollInterval = null,
+        ListLogger? log = null)
     {
-        var engine = new FakeEngineClient(autoNotify: false);
+        engine ??= new FakeEngineClient(autoNotify: false);
         var note = new NoteViewModel();
-        var status = new StatusBarViewModel();
+        var status = new StatusBarViewModel(log);
         var session = new ConsultationViewModel(
             new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
             dialogs ?? new FakeDialogService(), Page(engine, status), Guidance(status),
-            preferences: preferences);
+            readinessPollInterval: readinessPollInterval, preferences: preferences, demo: demo);
         return (session, engine, note);
     }
 

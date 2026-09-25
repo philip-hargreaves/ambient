@@ -1,7 +1,6 @@
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
@@ -14,7 +13,7 @@ namespace Ambient.App.Core.Features.Settings;
 /// </summary>
 public sealed partial class VoiceViewModel : ObservableObject
 {
-    // Below this the automatic print is still settling. The copy says so
+    // Below this the automatic print is still settling, and the copy says so
     private const int LearnedAfterSessions = 5;
 
     private readonly IEngineApi _engine;
@@ -33,7 +32,8 @@ public sealed partial class VoiceViewModel : ObservableObject
         _clock = clock ?? TimeProvider.System;
         _engine.ConnectedChanged += connected =>
         {
-            NotifyCommands();
+            SetUpVoiceCommand.NotifyCanExecuteChanged();
+            ForgetVoiceCommand.NotifyCanExecuteChanged();
             if (connected)
             {
                 _ = RefreshAsync();
@@ -69,8 +69,8 @@ public sealed partial class VoiceViewModel : ObservableObject
     {
         "enrolled" => EnrolledDescription(),
         "accrued" when Sessions < LearnedAfterSessions =>
-            $"Learning automatically, {Plural(Sessions, "consultation")} so far",
-        "accrued" => $"Learned automatically from {Plural(Sessions, "consultation")}",
+            $"Learning automatically, {Words.Count(Sessions, "consultation")} so far",
+        "accrued" => $"Learned automatically from {Words.Count(Sessions, "consultation")}",
         _ => "Tells you apart from the patient. Learned automatically, or set up now.",
     };
 
@@ -81,18 +81,14 @@ public sealed partial class VoiceViewModel : ObservableObject
             return;
         }
 
-        try
+        // An unreachable engine leaves the last known state on screen
+        await EngineCall.LogAsync(_status, "anchor/status", async () =>
         {
             var status = await _engine.AnchorStatusAsync().ConfigureAwait(true);
             Origin = status.Origin;
             Sessions = status.Sessions;
             EnrolledAt = status.EnrolledAt is { } at ? DateTimeOffset.FromUnixTimeSeconds(at) : null;
-        }
-        catch (Exception e)
-        {
-            // An unreachable engine leaves the last known state on screen
-            _status?.Log($"anchor/status failed: {e.Message}");
-        }
+        }).ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanSetUp))]
@@ -142,13 +138,12 @@ public sealed partial class VoiceViewModel : ObservableObject
         Busy = true;
         try
         {
-            await _engine.ClearAnchorAsync().ConfigureAwait(true);
-            await RefreshAsync().ConfigureAwait(true);
-            _status?.Append("voice enrolment forgotten");
-        }
-        catch (Exception e)
-        {
-            _status?.Append($"could not forget voice enrolment: {e.Message}");
+            if (await EngineCall.ReportAsync(_status, "could not forget voice enrolment",
+                    _engine.ClearAnchorAsync).ConfigureAwait(true))
+            {
+                await RefreshAsync().ConfigureAwait(true);
+                _status?.Append("voice enrolment forgotten");
+            }
         }
         finally
         {
@@ -158,26 +153,13 @@ public sealed partial class VoiceViewModel : ObservableObject
 
     private bool CanForget() => _engine.Connected && !Busy && HasVoice;
 
-    /// <summary>Re-evaluate the commands after a connection change.</summary>
-    public void NotifyCommands()
-    {
-        SetUpVoiceCommand.NotifyCanExecuteChanged();
-        ForgetVoiceCommand.NotifyCanExecuteChanged();
-    }
-
     private string EnrolledDescription()
     {
-        var when = EnrolledAt?.ToLocalTime();
-        var date = when is null
-            ? "Set up"
-            : when.Value.Year == _clock.GetLocalNow().Year
-                ? $"Set up on {when.Value.ToString("d MMM", CultureInfo.CurrentCulture)}"
-                : $"Set up on {when.Value.ToString("d MMM yyyy", CultureInfo.CurrentCulture)}";
+        var date = EnrolledAt?.ToLocalTime() is { } when
+            ? $"Set up on {Words.Day(when, _clock.GetLocalNow().Year)}"
+            : "Set up";
         return Sessions > 0
-            ? $"{date}, refined automatically by {Plural(Sessions, "consultation")} since"
+            ? $"{date}, refined automatically by {Words.Count(Sessions, "consultation")} since"
             : date;
     }
-
-    private static string Plural(int count, string noun) =>
-        count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 }

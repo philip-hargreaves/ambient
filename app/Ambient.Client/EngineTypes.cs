@@ -113,9 +113,17 @@ public sealed record AnchorStatus(string Origin = "none", int Sessions = 0, long
 public sealed record ReflectionSummary(
     string? Text = null, string? GeneratedAt = null, string? EditedAt = null);
 
+/// <summary>A guideline or document the clinician ticked, with its own copy of the words.</summary>
+public sealed record ReflectionReference(
+    string Key = "", string Reference = "", string Title = "", string Link = "",
+    string Source = "");
+
 public sealed record ReflectionAnswers(
     string? Happened = null, string? Learned = null, string? Next = null,
-    string? CreatedAt = null, string? EditedAt = null);
+    string? CreatedAt = null, string? EditedAt = null)
+{
+    public IReadOnlyList<ReflectionReference> References { get; init; } = [];
+}
 
 public sealed record StoredReflection(
     string Id = "", string? Label = null, ReflectionSummary? Summary = null,

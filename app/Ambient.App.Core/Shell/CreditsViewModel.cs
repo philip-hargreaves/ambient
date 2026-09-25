@@ -2,9 +2,6 @@ using System.Text.Json;
 
 namespace Ambient.App.Core.Shell;
 
-/// <summary>One partner mark. Dark falls back to the light artwork.</summary>
-public sealed record CreditMark(string Name, string LightPath, string DarkPath, double Height);
-
 /// <summary>
 /// The credits row, driven by Assets/logos/credits.json so a showcase can add
 /// or remove marks by editing the deployed folder without a code change. A
@@ -12,14 +9,14 @@ public sealed record CreditMark(string Name, string LightPath, string DarkPath, 
 /// </summary>
 public sealed class CreditsViewModel
 {
-    public IReadOnlyList<CreditMark> Marks { get; }
-
     public CreditsViewModel(string? logosDirectory = null)
     {
         var directory = logosDirectory
             ?? Path.Combine(AppContext.BaseDirectory, "Assets", "logos");
         Marks = Load(directory);
     }
+
+    public IReadOnlyList<CreditMark> Marks { get; }
 
     private static List<CreditMark> Load(string directory)
     {

@@ -1,87 +1,6 @@
-using System.Globalization;
-using Ambient.App.Core.Ports;
-using Ambient.Client;
+using Ambient.App.Core.Common;
 
 namespace Ambient.App.Core.Features.Guidance;
-
-/// <summary>One recommendation as the wire gives it.</summary>
-public sealed record GuidanceRecommendation(
-    string Corpus, string ChunkId, string Code, string Number, string Title, string Section,
-    string Text, string Link, string LastUpdated, string UpdateTag, string Source,
-    string Citation, string Trigger, string SourceLabel, bool FromNote,
-    long Document = 0, int Page = 0, int Pages = 0, bool Labelled = false)
-{
-    /// <summary>Labelled when the corpus manifest names its publisher for the chip.</summary>
-    public static GuidanceRecommendation From(
-        GuidanceResult result, string sourceLabel, bool fromNote, bool labelled = false)
-    {
-        return new(
-            result.Corpus ?? "", result.ChunkId ?? "", result.Code ?? "", result.Number ?? "",
-            result.Title ?? "", result.Section ?? "", (result.Text ?? "").TrimEnd(),
-            result.Url ?? "", result.LastUpdated ?? "", result.UpdateTag ?? "", result.Source ?? "",
-            result.Citation ?? "", result.Trigger ?? "", sourceLabel, fromNote,
-            result.Document, result.Page, result.Pages, labelled);
-    }
-
-    /// <summary>A passage from a document the clinician added.</summary>
-    public bool FromDocument => Source == "upload";
-
-    /// <summary>"Page 2" of an added PDF, empty for anything without pages.</summary>
-    public string PageLabel => Pages > 0 ? $"Page {Page + 1}" : "";
-
-    public bool PageLabelVisible => PageLabel.Length > 0;
-
-    /// <summary>
-    /// "NG100 1.1.1", the code alone, or for a document its number, its page or its title.
-    /// </summary>
-    public string Reference => Code.Length > 0
-        ? Number.Length > 0 ? $"{Code.ToUpperInvariant()} {Number}" : Code.ToUpperInvariant()
-        : Number.Length > 0 ? Number
-        : PageLabel.Length > 0 ? PageLabel
-        : Title;
-
-    /// <summary>"[2009, amended 2018]" as the guideline marks it, empty when unmarked.</summary>
-    public string Tag => UpdateTag.Length > 0 ? $"[{UpdateTag}]" : "";
-
-    public bool TagVisible => UpdateTag.Length > 0;
-
-    /// <summary>The section path under the title. The wire's " > " reads as "›".</summary>
-    public string Path => Section.Replace(" > ", " › ", StringComparison.Ordinal);
-
-    public bool PathVisible => Section.Length > 0;
-
-    public bool LabelVisible =>
-        Number.Length > 0 || Section.Length > 0 || UpdateTag.Length > 0 || PageLabelVisible;
-
-    /// <summary>
-    /// The note sentence that found it, or the whole note. A typed query has no line.
-    /// </summary>
-    public string Matched => Trigger.Length > 0 ? $"Matched: “{Trigger}”"
-        : FromNote ? "Matched: the note as a whole"
-        : "";
-
-    public bool MatchedVisible => Matched.Length > 0;
-
-    /// <summary>A web link opens in the browser, a document as a copy in the PDF viewer.</summary>
-    public bool CanOpen => FromDocument || HasWebLink;
-
-    /// <summary>A plain-text corpus carries a file name here, which nothing can open.</summary>
-    private bool HasWebLink => WebLinks.IsWeb(Link);
-
-    /// <summary>The citation, with the web address on its own line when there is one.</summary>
-    public string CitationText => HasWebLink ? $"{Citation}\n{Link}" : Citation;
-
-    public string OpenTip => FromDocument ? "Opens the file in your PDF viewer." : "";
-
-    /// <summary>Show in document: the page view, for a document with pages.</summary>
-    public bool ShowVisible => FromDocument && Pages > 0;
-
-    public string ShowName => $"Show {Reference} in the document";
-
-    public string OpenName => FromDocument ? $"Open {Title}" : $"Open {Reference}";
-
-    public string CopyName => $"Copy citation for {Reference}";
-}
 
 /// <summary>One guideline, or one document, with the recommendations found in it.</summary>
 public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommendations)
@@ -127,8 +46,8 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
     {
         get
         {
-            var count = Count(Recommendations.Count, "recommendation");
-            var date = ShortDate(First.LastUpdated);
+            var count = Words.Count(Recommendations.Count, "recommendation");
+            var date = Words.ShortDate(First.LastUpdated);
             if (!FromDocument)
             {
                 return date.Length > 0 ? $"Updated {date} · {count}" : count;
@@ -137,7 +56,7 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
             var parts = new List<string>();
             if (First.Pages > 0)
             {
-                parts.Add(Count(First.Pages, "page"));
+                parts.Add(Words.Count(First.Pages, "page"));
             }
 
             if (date.Length > 0)
@@ -149,14 +68,4 @@ public sealed record GuidanceCard(IReadOnlyList<GuidanceRecommendation> Recommen
             return string.Join(" · ", parts);
         }
     }
-
-    /// <summary>"12 Oct 2020" from any ISO 8601 date, empty from anything else.</summary>
-    internal static string ShortDate(string value) =>
-        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date)
-            ? date.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
-            : "";
-
-    /// <summary>"1 page", "12 pages".</summary>
-    internal static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n:N0} {noun}s";
 }

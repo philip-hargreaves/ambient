@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -84,20 +84,17 @@ public sealed partial class GuidanceLibrary : ObservableObject
 
     private async Task LoadGuidanceCorporaAsync()
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
 
-        try
-        {
-            ApplyGuidanceCorpora(await _client.GuidanceCorporaAsync().ConfigureAwait(true));
-        }
-        catch (Exception e)
+        if (!await EngineCall.LogAsync(_status, "guidance/corpora",
+                async () => ApplyGuidanceCorpora(await _client.GuidanceCorporaAsync().ConfigureAwait(true)))
+            .ConfigureAwait(true))
         {
             GuidanceCorpora.Clear();
             GuidanceCaption = "Unavailable";
-            _status?.Log($"guidance/corpora failed: {e.Message}");
         }
     }
 
@@ -106,7 +103,7 @@ public sealed partial class GuidanceLibrary : ObservableObject
         GuidanceCorpora.Clear();
         foreach (var corpus in reply.Corpora)
         {
-            GuidanceCorpora.Add(RowFrom(corpus) with { Divided = GuidanceCorpora.Count > 0 });
+            GuidanceCorpora.Add(RowFrom(corpus));
         }
 
         var detail = reply.Detail ?? "";
@@ -135,7 +132,7 @@ public sealed partial class GuidanceLibrary : ObservableObject
             parts.Add($"{corpus.Chunks:N0} passages");
         }
 
-        var built = GuidanceCard.ShortDate(corpus.BuiltAt ?? "");
+        var built = Words.ShortDate(corpus.BuiltAt ?? "");
         if (built.Length > 0)
         {
             parts.Add(built);
@@ -182,7 +179,7 @@ public sealed partial class GuidanceLibrary : ObservableObject
                 (0, _) => $"{failed} could not be read",
                 _ => $"reading {working}, {failed} could not be read",
             };
-            return $"{GuidanceCard.Count(Documents.Count, "document")} · {state}";
+            return $"{Words.Count(Documents.Count, "document")} · {state}";
         }
     }
 
@@ -218,25 +215,23 @@ public sealed partial class GuidanceLibrary : ObservableObject
 
     private async Task AddPathsAsync(IReadOnlyList<string> paths)
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
 
-        try
-        {
-            var added = await _client.AddDocumentsAsync(paths).ConfigureAwait(true);
-            foreach (var document in added.Documents)
+        if (!await EngineCall.LogAsync(_status, "guidance/documents/add", async () =>
             {
-                Upsert(document);
-            }
+                var added = await _client.AddDocumentsAsync(paths).ConfigureAwait(true);
+                foreach (var document in added.Documents)
+                {
+                    Upsert(document);
+                }
 
-            DocumentsCaption = SkippedCaption(added.Skipped);
-        }
-        catch (Exception e)
+                DocumentsCaption = SkippedCaption(added.Skipped);
+            }).ConfigureAwait(true))
         {
             DocumentsCaption = "The documents could not be added";
-            _status?.Log($"guidance/documents/add failed: {e.Message}");
         }
     }
 
@@ -265,32 +260,30 @@ public sealed partial class GuidanceLibrary : ObservableObject
 
     private async Task LoadDocumentsAsync()
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
 
-        try
-        {
-            var list = await _client.ListDocumentsAsync().ConfigureAwait(true);
-            GuidelinesFolder = list.Folder ?? "";
-            FolderMissing = !list.Found;
-            FolderInOneDrive = InOneDrive(GuidelinesFolder, OneDriveRoots());
-            var unsupported = list.Unsupported;
-            Documents.Clear();
-            foreach (var document in list.Documents)
+        if (!await EngineCall.LogAsync(_status, "guidance/documents", async () =>
             {
-                Upsert(document);
-            }
+                var list = await _client.ListDocumentsAsync().ConfigureAwait(true);
+                GuidelinesFolder = list.Folder ?? "";
+                FolderMissing = !list.Found;
+                FolderInOneDrive = InOneDrive(GuidelinesFolder, OneDriveRoots());
+                var unsupported = list.Unsupported;
+                Documents.Clear();
+                foreach (var document in list.Documents)
+                {
+                    Upsert(document);
+                }
 
-            DocumentsCaption = unsupported == 0 ? ""
-                : unsupported == 1 ? "1 other file is not searched, not PDF or text"
-                : $"{unsupported} other files are not searched, not PDF or text";
-        }
-        catch (Exception e)
+                DocumentsCaption = unsupported == 0 ? ""
+                    : unsupported == 1 ? "1 other file is not searched, not PDF or text"
+                    : $"{unsupported} other files are not searched, not PDF or text";
+            }).ConfigureAwait(true))
         {
             Documents.Clear();
-            _status?.Log($"guidance/documents failed: {e.Message}");
         }
 
         OnPropertyChanged(nameof(DocumentsPresent));
@@ -376,7 +369,7 @@ public sealed partial class GuidanceLibrary : ObservableObject
     [RelayCommand]
     private async Task RemoveDocument(DocumentRow? row)
     {
-        if (row is null || _client is null || !_client.Connected)
+        if (row is null || !_client.IsConnected())
         {
             return;
         }
@@ -389,20 +382,14 @@ public sealed partial class GuidanceLibrary : ObservableObject
             return;
         }
 
-        try
-        {
-            await _client.RemoveDocumentAsync(row.Id).ConfigureAwait(true);
-        }
-        catch (Exception e)
-        {
-            _status?.Log($"guidance/documents/remove failed: {e.Message}");
-        }
+        await EngineCall.LogAsync(_status, "guidance/documents/remove",
+            () => _client.RemoveDocumentAsync(row.Id)).ConfigureAwait(true);
     }
 
     [RelayCommand]
     private async Task RemoveAllDocuments()
     {
-        if (_client is null || !_client.Connected || Documents.Count == 0)
+        if (!_client.IsConnected() || Documents.Count == 0)
         {
             return;
         }
@@ -416,14 +403,8 @@ public sealed partial class GuidanceLibrary : ObservableObject
             return;
         }
 
-        try
-        {
-            await _client.RemoveAllDocumentsAsync().ConfigureAwait(true);
-        }
-        catch (Exception e)
-        {
-            _status?.Log($"guidance/documents/removeAll failed: {e.Message}");
-        }
+        await EngineCall.LogAsync(_status, "guidance/documents/removeAll", _client.RemoveAllDocumentsAsync)
+            .ConfigureAwait(true);
     }
 
     // ---- the research corpus, a developer control
@@ -444,12 +425,7 @@ public sealed partial class GuidanceLibrary : ObservableObject
             return;
         }
 
-        if (_preferences is not null)
-        {
-            _preferences.IncludeResearchGuidance = value;
-            _preferences.Save();
-        }
-
+        _preferences.Update(p => p.IncludeResearchGuidance = value);
         _ = ApplyResearchAsync(value);
     }
 
@@ -457,18 +433,12 @@ public sealed partial class GuidanceLibrary : ObservableObject
     // list follows without a restart
     private async Task ApplyResearchAsync(bool include)
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
 
-        try
-        {
-            await _client.SetResearchGuidanceAsync(include).ConfigureAwait(true);
-        }
-        catch (Exception e)
-        {
-            _status?.Log($"guidance/research failed: {e.Message}");
-        }
+        await EngineCall.LogAsync(_status, "guidance/research",
+            () => _client.SetResearchGuidanceAsync(include)).ConfigureAwait(true);
     }
 }

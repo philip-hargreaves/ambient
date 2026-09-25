@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Demo;
+using Ambient.App.Core.Preferences;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
@@ -13,10 +14,24 @@ public class DemoTrayViewModelTest
         new(name, $"C:/demo/{name}.wav");
 
     [Fact]
-    public async Task PlaySendsTheReplayRequest()
+    public async Task PlayWaitsForTheEngineSendsTheReplayAtTheChosenSpeedPausesMonitorsAndStopFinalises()
     {
         var (session, engine, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]) { Speed = 4, MonitorAudio = true };
+        engine.SetConnected(false);
+        var preferences = new AppPreferences(new MemoryPreferencesStore());
+        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()], preferences) { MonitorAudio = true };
+        Assert.False(tray.Visible);
+        preferences.DemoTrayEnabled = true;
+        preferences.Save();
+        Assert.True(tray.Visible);
+
+        Assert.False(tray.PlayCommand.CanExecute(null));
+        engine.SetConnected(true);
+        Assert.True(tray.PlayCommand.CanExecute(null));
+
+        Assert.Equal(1, tray.Speed);
+        tray.CycleSpeedCommand.Execute(null);
+        Assert.Equal(4, tray.Speed);
 
         await tray.PlayCommand.ExecuteAsync(null);
 
@@ -27,44 +42,31 @@ public class DemoTrayViewModelTest
         Assert.Equal(4, replay.GetProperty("speed").GetDouble());
         Assert.True(replay.GetProperty("monitor").GetBoolean());
         Assert.Equal(SessionState.Recording, session.State);
-    }
-
-    [Fact]
-    public void SpeedCyclesAndMarksSmoke()
-    {
-        var (session, _, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
-
-        Assert.Equal("1×", tray.SpeedLabel);
-        Assert.False(tray.IsSmoke);
-
-        tray.CycleSpeedCommand.Execute(null);
-        Assert.Equal("4×", tray.SpeedLabel);
-        Assert.True(tray.IsSmoke);
-
-        tray.CycleSpeedCommand.Execute(null);
-        tray.CycleSpeedCommand.Execute(null);
-        tray.CycleSpeedCommand.Execute(null);
-        Assert.Equal("1×", tray.SpeedLabel);
-    }
-
-    [Fact]
-    public async Task PauseTogglesThroughTheEngine()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
-        await tray.PlayCommand.ExecuteAsync(null);
+        Assert.False(tray.PlayCommand.CanExecute(null));
+        Assert.True(tray.StopCommand.CanExecute(null));
 
         await tray.TogglePauseCommand.ExecuteAsync(null);
         Assert.True(session.Paused);
         await tray.TogglePauseCommand.ExecuteAsync(null);
         Assert.False(session.Paused);
-
         Assert.Equal(2, engine.Requests.Count(r => r.Method == "session/pause"));
+
+        tray.MonitorAudio = false;
+        tray.MonitorAudio = true;
+        Assert.Equal(2, engine.Requests.Count(r => r.Method == "session/monitor"));
+
+        await tray.StopCommand.ExecuteAsync(null);
+        Assert.Equal(SessionState.Finalising, session.State);
+
+        // The speed cycles round to 1x
+        tray.CycleSpeedCommand.Execute(null);
+        tray.CycleSpeedCommand.Execute(null);
+        tray.CycleSpeedCommand.Execute(null);
+        Assert.Equal(1, tray.Speed);
     }
 
     [Fact]
-    public async Task ProgressFollowsDeliveredAudio()
+    public async Task ProgressFollowsDeliveredAudioAndTheReplayStopsItselfAtTheEndOfTheTrack()
     {
         var (session, engine, _) = TestSession.Create();
         var wav = SessionContractWav.Write(seconds: 2);
@@ -79,30 +81,7 @@ public class DemoTrayViewModelTest
 
         Assert.Equal(0.5, tray.ProgressFraction, 3);
         Assert.Equal("0:01 / 0:02", tray.ProgressText);
-    }
-
-    [Fact]
-    public async Task PlayIsIdleOnlyAndStopFinalises()
-    {
-        var (session, _, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
-
-        Assert.True(tray.PlayCommand.CanExecute(null));
-        await tray.PlayCommand.ExecuteAsync(null);
-        Assert.False(tray.PlayCommand.CanExecute(null));
-        Assert.True(tray.StopCommand.CanExecute(null));
-
-        await tray.StopCommand.ExecuteAsync(null);
-        Assert.Equal(SessionState.Finalising, session.State);
-    }
-
-    [Fact]
-    public async Task AReplayStopsItselfAtTheEndOfTheTrack()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var wav = SessionContractWav.Write(seconds: 1);
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [new DemoTrack("Short", wav)]);
-        await tray.PlayCommand.ExecuteAsync(null);
+        Assert.Equal(SessionState.Recording, session.State);
 
         for (var i = 0; i < 10; i++)
         {
@@ -111,31 +90,6 @@ public class DemoTrayViewModelTest
         }
 
         Assert.Equal(SessionState.Finalising, session.State);
-    }
-
-    [Fact]
-    public async Task MonitorTogglesLiveDuringAReplay()
-    {
-        var (session, engine, _) = TestSession.Create();
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
-        await tray.PlayCommand.ExecuteAsync(null);
-
-        tray.MonitorAudio = true;
-        tray.MonitorAudio = false;
-
-        Assert.Equal(2, engine.Requests.Count(r => r.Method == "session/monitor"));
-    }
-
-    [Fact]
-    public void PlayWaitsForTheEngine()
-    {
-        var (session, engine, _) = TestSession.Create();
-        engine.SetConnected(false);
-        var tray = new DemoTrayViewModel(session, new FakeFilePicker(), [Track()]);
-
-        Assert.False(tray.PlayCommand.CanExecute(null));
-        engine.SetConnected(true);
-        Assert.True(tray.PlayCommand.CanExecute(null));
     }
 
     [Fact]

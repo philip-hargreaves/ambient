@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Ambient.App.Controls.BusyCaption"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+
+    <!-- The ring means "in progress"; the caption says what -->
+    <StackPanel Orientation="Horizontal" Spacing="8">
+        <ProgressRing
+            Width="14"
+            Height="14"
+            IsActive="{x:Bind IsActive, Mode=OneWay}"
+            Visibility="{x:Bind IsActive, Mode=OneWay}" />
+        <TextBlock
+            x:Name="Caption"
+            Style="{StaticResource MicroText}"
+            Text="{x:Bind Text, Mode=OneWay}"
+            Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>

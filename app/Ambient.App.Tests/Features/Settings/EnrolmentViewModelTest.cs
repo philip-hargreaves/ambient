@@ -8,13 +8,20 @@ namespace Ambient.App.Tests.Features.Settings;
 public class EnrolmentViewModelTest
 {
     [Fact]
-    public async Task StartAsksTheEngineForTheReadingWindowOnTheChosenMicrophone()
+    public async Task StartAsksTheEngineProgressCountsClearSpeechThenFinishAndSuccessClose()
     {
         var engine = new FakeEngineClient();
         using var enrolment = new EnrolmentViewModel(new EngineApi(engine), micId: "mic-7", seconds: 30);
         Assert.Equal(EnrolmentState.Ready, enrolment.State);
         Assert.Equal("Start", enrolment.PrimaryText);
+        Assert.True(enrolment.KeepsOpen);
         Assert.Equal("Cancel", enrolment.CloseText);
+
+        // Progress before Start belongs to someone else's window
+        engine.RaiseNotification("anchor/progress",
+            Params(new { elapsed = 3.0, speech = 1.0, level = 0.9, clipped = true }));
+        Assert.Equal(0, enrolment.Level);
+        Assert.Equal(EnrolmentState.Ready, enrolment.State);
 
         await enrolment.StartCommand.ExecuteAsync(null);
 
@@ -27,14 +34,6 @@ public class EnrolmentViewModelTest
         Assert.False(enrolment.StartCommand.CanExecute(null));
         Assert.True(enrolment.CancelCommand.CanExecute(null));
         Assert.True(enrolment.FinishCommand.CanExecute(null));
-    }
-
-    [Fact]
-    public async Task ProgressCountsClearSpeechThenFinishAndSuccessClose()
-    {
-        var engine = new FakeEngineClient();
-        using var enrolment = new EnrolmentViewModel(new EngineApi(engine));
-        await enrolment.StartCommand.ExecuteAsync(null);
 
         engine.RaiseNotification("anchor/progress",
             Params(new { elapsed = 12.0, speech = 10.0, level = 0.7, clipped = false }));
@@ -56,6 +55,7 @@ public class EnrolmentViewModelTest
             Params(new { ok = true, detail = "", speechSeconds = 34.0 }));
         Assert.Equal(EnrolmentState.Succeeded, enrolment.State);
         Assert.Equal("Done", enrolment.PrimaryText);
+        Assert.False(enrolment.KeepsOpen);
         Assert.Equal("", enrolment.CloseText);
         Assert.Equal(0, enrolment.Level);
         Assert.True(await enrolment.Outcome);
@@ -98,16 +98,5 @@ public class EnrolmentViewModelTest
         enrolment.Dismiss();
         Assert.False(await enrolment.Outcome);
         enrolment.Dispose();
-    }
-
-    [Fact]
-    public void ProgressBeforeStartIsIgnored()
-    {
-        var engine = new FakeEngineClient();
-        using var enrolment = new EnrolmentViewModel(new EngineApi(engine));
-        engine.RaiseNotification("anchor/progress",
-            Params(new { elapsed = 3.0, speech = 1.0, level = 0.9, clipped = true }));
-        Assert.Equal(0, enrolment.Level);
-        Assert.Equal(EnrolmentState.Ready, enrolment.State);
     }
 }

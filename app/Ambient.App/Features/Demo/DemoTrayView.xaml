@@ -12,6 +12,7 @@
             VerticalAlignment="Center"
             Visibility="{x:Bind ViewModel.Idle, Mode=OneWay}">
             <Button
+                AutomationProperties.Name="Replay"
                 VerticalAlignment="Center"
                 Command="{x:Bind ViewModel.PlayCommand}"
                 Style="{StaticResource TrayButton}"
@@ -25,6 +26,7 @@
                 </StackPanel>
             </Button>
             <DropDownButton
+                AutomationProperties.Name="{x:Bind ViewModel.TrackName, Mode=OneWay}"
                 VerticalAlignment="Center"
                 Style="{StaticResource TrayButton}"
                 ToolTipService.ToolTip="Recording to replay">
@@ -37,6 +39,7 @@
                 </DropDownButton.Flyout>
             </DropDownButton>
             <Button
+                AutomationProperties.Name="{x:Bind ViewModel.SpeedLabel, Mode=OneWay}"
                 VerticalAlignment="Center"
                 Command="{x:Bind ViewModel.CycleSpeedCommand}"
                 Style="{StaticResource TrayButton}"

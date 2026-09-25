@@ -1,94 +1,38 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
-using Ambient.App.Core.Features.Documents;
-using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
-using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Consultation;
 
 public class SessionStateMachineTest
 {
-    private sealed class TimingOutClient : IEngineTransport
-    {
-        public event Action<string, JsonElement>? NotificationReceived
-        {
-            add { }
-            remove { }
-        }
-
-        public event Action<bool>? ConnectedChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public bool Connected => true;
-
-        public Task<JsonElement> RequestAsync(
-            string method, object? parameters, TimeSpan timeout,
-            CancellationToken cancellationToken = default) =>
-            method == "session/stop"
-                ? Task.FromException<JsonElement>(new TaskCanceledException())
-                : Task.FromResult(JsonSerializer.SerializeToElement(new { }));
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class RefusingClient : IEngineTransport
-    {
-        public event Action<string, JsonElement>? NotificationReceived
-        {
-            add { }
-            remove { }
-        }
-
-        public event Action<bool>? ConnectedChanged
-        {
-            add { }
-            remove { }
-        }
-
-        public bool Connected => true;
-
-        public Task<JsonElement> RequestAsync(
-            string method, object? parameters, TimeSpan timeout,
-            CancellationToken cancellationToken = default) =>
-            Task.FromException<JsonElement>(
-                new InvalidOperationException("the speech model is still loading"));
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
     [Fact]
-    public async Task AFailedStartStaysIdleWithTheReasonLogged()
+    public async Task AFailedStartStaysIdleAndATimedOutStopRecoversToIdle()
     {
-        var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(new EngineApi(new RefusingClient()), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(new FakeEngineClient(), status), TestSession.Guidance(status));
+        var engine = new FakeEngineClient(autoNotify: false)
+        {
+            FailNext = method => method == "session/start"
+                ? new InvalidOperationException("the speech model is still loading")
+                : null,
+        };
+        var log = new ListLogger();
+        var (session, _, _) = TestSession.Create(engine: engine, log: log);
 
         await session.StartRecordingAsync();
-
         Assert.Equal(SessionState.Idle, session.State);
-        Assert.Contains(status.LogEntries, line => line.Contains("still loading"));
-    }
+        Assert.Contains(log.Lines, line => line.Contains("still loading"));
 
-    [Fact]
-    public async Task ATimedOutStopRecoversToIdle()
-    {
-        var status = new StatusBarViewModel();
-        var session = new ConsultationViewModel(new EngineApi(new TimingOutClient()), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), status, new FakeDialogService(), TestSession.Page(new FakeEngineClient(), status), TestSession.Guidance(status));
         await session.StartRecordingAsync();
-
+        engine.FailNext = method => method == "session/stop" ? new TaskCanceledException() : null;
         await session.StopRecordingAsync();
 
-        Assert.Contains(status.LogEntries, line => line.Contains("Taking longer"));
-        Assert.Contains(status.LogEntries, line => line.Contains("Stop failed"));
+        Assert.Contains(log.Lines, line => line.Contains("Taking longer"));
+        Assert.Contains(log.Lines, line => line.Contains("Stop failed"));
         Assert.Equal(SessionState.Idle, session.State);  // never wedged in Finalising
     }
 
     [Fact]
-    public async Task FullLifecycleAdvancesThroughEveryState()
+    public async Task FullLifecycleAdvancesThroughEveryStateAndCancelReturnsToIdle()
     {
         var (session, engine, _) = TestSession.Create();
         Assert.Equal(SessionState.Idle, session.State);
@@ -104,21 +48,14 @@ public class SessionStateMachineTest
 
         session.StartNewConsultation();
         Assert.Equal(SessionState.Idle, session.State);
-    }
 
-    [Fact]
-    public async Task CancelReturnsFromRecordingToIdle()
-    {
-        var (session, _, _) = TestSession.Create();
         await session.StartRecordingAsync();
-
         await session.CancelRecordingAsync();
-
         Assert.Equal(SessionState.Idle, session.State);
     }
 
     [Fact]
-    public async Task IllegalTransitionsAreRefused()
+    public async Task IllegalTransitionsAndUnknownNotificationsAreIgnored()
     {
         var (session, engine, _) = TestSession.Create();
 
@@ -138,16 +75,8 @@ public class SessionStateMachineTest
 
         session.StartNewConsultation();
         Assert.Equal(SessionState.Recording, session.State);
-    }
-
-    [Fact]
-    public async Task UnknownNotificationsAreIgnored()
-    {
-        var (session, engine, _) = TestSession.Create();
-        await session.StartRecordingAsync();
 
         engine.RaiseNotification("engine/unheard-of");
-
         Assert.Equal(SessionState.Recording, session.State);
     }
 }

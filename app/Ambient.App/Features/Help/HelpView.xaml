@@ -37,7 +37,7 @@
                         <toolkit:SettingsCard ContentAlignment="Left">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource HelpText}" Text="Ask everyone in the room before you record, including an interpreter on the phone. A sentence is enough: the consultation is transcribed by software to help write the notes, and nothing leaves this computer." />
-                                <TextBlock Style="{StaticResource HelpText}" Text="Start recording after the patient has given their name and date of birth, so the transcript carries neither." />
+                                <TextBlock Style="{StaticResource HelpText}" Text="Start the consultation after the patient has given their name and date of birth, so the transcript carries neither." />
                                 <TextBlock Style="{StaticResource HelpText}" Text="The audio is used to write the transcript and is then discarded. It is never kept." />
                             </StackPanel>
                         </toolkit:SettingsCard>
@@ -48,7 +48,7 @@
                     <toolkit:SettingsExpander.Items>
                         <toolkit:SettingsCard ContentAlignment="Left">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource HelpText}" Text="Press Start recording on the Consultation page. The microphone under the button is the one in use; pick another there if you need to." />
+                                <TextBlock Style="{StaticResource HelpText}" Text="Press the microphone button on the Consultation page. The microphone named at the top right is the one in use; pick another there if you need to." />
                                 <TextBlock Style="{StaticResource HelpText}" Text="Press Stop when the consultation ends. The transcript is finished first, then the clinical note is written, then the patient information sheet. Nothing shows until the transcript is complete." />
                                 <TextBlock Style="{StaticResource HelpText}" Text="Voices are told apart automatically. The doctor and the patient are labelled; anyone else is labelled as another speaker, and what they say still counts towards the note." />
                             </StackPanel>
@@ -109,7 +109,7 @@
                     <toolkit:SettingsExpander.Items>
                         <toolkit:SettingsCard ContentAlignment="Left">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource HelpText}" Text="Create reflection on a clinical note starts a reflection for that consultation. The case is summarised without identifying details, and you answer what stood out, what you learned and whether you would do anything differently." />
+                                <TextBlock Style="{StaticResource HelpText}" Text="Create reflection on a clinical note starts a reflection for that consultation. The case is summarised without identifying details, and you answer what stood out, what you learned and whether you would do anything differently. The guidance the consultation drew on is listed with a tick box each, so you can record which guideline or document you looked up." />
                                 <TextBlock Style="{StaticResource HelpText}" Text="Reflections gather on the Appraisal page by month. Copy takes one as plain text for your appraisal portfolio." />
                             </StackPanel>
                         </toolkit:SettingsCard>
@@ -119,8 +119,8 @@
                 <toolkit:SettingsCard Description="Ambient follows the text size in Windows Settings, Accessibility, Text size. Change it there and the app resizes as you do." Header="Larger text" />
 
                 <TextBlock Style="{StaticResource SettingsGroupHeader}" Text="About" />
-                <toolkit:SettingsExpander Description="{x:Bind Version}" Header="Ambient">
-                    <!-- Partner marks from Assets/logos/credits.json, as in the status bar -->
+                <toolkit:SettingsExpander Description="{x:Bind ViewModel.VersionLine}" Header="Ambient">
+                    <!-- Partner marks, listed in Assets/logos/credits.json -->
                     <StackPanel
                         x:Name="AboutMarks"
                         Orientation="Horizontal"

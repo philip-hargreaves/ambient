@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Ports;
@@ -10,28 +10,6 @@ using Ambient.App.Core.Shell;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Sessions;
-
-public sealed record SessionRow(
-    string Id, string Title, string Started, string Duration, string EditedLabel,
-    string StartedAt = "", bool Demo = false, bool HasReflection = false)
-{
-    public bool Edited => EditedLabel.Length > 0;
-
-    /// <summary>An unlabelled row shows the date once.</summary>
-    public bool HasLabel => Title != Started;
-
-    public string Heading => HasLabel ? Title : $"{Started} · {Duration}";
-
-    public string Meta => HasLabel ? $"{Started} · {Duration}" : "";
-
-    public bool MetaVisible => HasLabel || Edited;
-}
-
-/// <summary>One day's consultations, newest first.</summary>
-public sealed class SessionGroup(string day) : ObservableCollection<SessionRow>
-{
-    public string Day { get; } = day;
-}
 
 /// <summary>
 /// Past consultations. Selecting one opens it for review through the
@@ -45,6 +23,31 @@ public sealed partial class SessionsViewModel : ObservableObject
     private readonly ConsultationViewModel _consultation;
     private readonly IDialogService _dialogs;
     private readonly AppPreferences? _preferences;
+
+    // Set while the selection is moved by the list itself (a refresh or a rename),
+    // when the reselection must not reopen the session
+    private bool _reselecting;
+
+    public SessionsViewModel(
+        IEngineApi engine, StatusBarViewModel status, ConsultationViewModel consultation,
+        IDialogService dialogs, AppPreferences? preferences = null)
+    {
+        _engine = engine;
+        _status = status;
+        _consultation = consultation;
+        _dialogs = dialogs;
+        _preferences = preferences;
+        // The list is on screen while a recording ends, so it follows the store
+        consultation.Recorder.Sealed += id => _ = RefreshAsync();
+        // The line under the title names the note's style, which a rewrite changes
+        consultation.Note.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(NoteViewModel.Style) or nameof(NoteViewModel.Detail))
+            {
+                RefreshMeta();
+            }
+        };
+    }
 
     public ObservableCollection<SessionRow> Sessions { get; } = [];
 
@@ -68,6 +71,14 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial SessionRow? Selected { get; set; }
+
+    partial void OnSelectedChanged(SessionRow? value)
+    {
+        if (!_reselecting)
+        {
+            _ = OpenAsync(value);
+        }
+    }
 
     /// <summary>True while the selected session is open in the panes.</summary>
     [ObservableProperty]
@@ -94,65 +105,47 @@ public sealed partial class SessionsViewModel : ObservableObject
 
     public NoteViewModel Note => _consultation.Note;
 
-    public SessionsViewModel(
-        IEngineApi engine, StatusBarViewModel status, ConsultationViewModel consultation,
-        IDialogService dialogs, AppPreferences? preferences = null)
-    {
-        _engine = engine;
-        _status = status;
-        _consultation = consultation;
-        _dialogs = dialogs;
-        _preferences = preferences;
-        // The list is on screen while a recording ends, so it follows the store
-        consultation.Recorder.Sealed += id => _ = RefreshAsync();
-    }
-
-    // True while a rename swaps the selected row for its retitled copy.
-    // That reselection must not reopen the session
-    private bool _retitling;
-
-    partial void OnSelectedChanged(SessionRow? value)
-    {
-        if (!_retitling)
-        {
-            _ = OpenAsync(value);
-        }
-    }
-
     /// <summary>Entering the page: the list, with the most recent consultation open.</summary>
     public async Task EnterAsync()
     {
         await RefreshAsync().ConfigureAwait(true);
-        if (Selected is null && Sessions.Count > 0)
+        if (Selected is not null || Sessions.Count == 0)
         {
-            Selected = Sessions[0];
+            return;
         }
+
+        // The consultation just recorded is already in the shared panes: show it as it is,
+        // so going back to Consultation finds it still there
+        if (Sessions.FirstOrDefault(s => s.Id == _consultation.LiveReviewId) is { } live)
+        {
+            Reselect(live);
+            DetailOpen = true;
+            DetailTitle = live.Title;
+            RefreshMeta();
+            return;
+        }
+
+        Selected = Sessions[0];
     }
 
     /// <summary>Reloads the list, keeping the open session selected if it is still there.</summary>
-    [RelayCommand]
-    public async Task RefreshAsync()
-    {
-        try
+    public Task RefreshAsync() =>
+        EngineCall.ReportAsync(_status, "could not list sessions", async () =>
         {
             var sessions = await _engine.ListSessionsAsync().ConfigureAwait(true);
             var keep = DetailOpen ? Selected?.Id : null;
-            _retitling = true;
-            Selected = null;
-            _retitling = false;
+            Reselect(null);
             Sessions.Clear();
             foreach (var session in sessions)
             {
                 var started = session.StartedAt;
                 var label = session.Label ?? "";
-                // Without a stored label the
-                // date and time are the row's name
-                var startedLabel = FormatStarted(started);
+                var startedLabel = SessionText.Started(started);
                 Sessions.Add(new SessionRow(
                     session.Id,
                     label.Length > 0 ? label : startedLabel,
                     startedLabel,
-                    FormatDuration(session.AudioSeconds, started, session.EndedAt),
+                    SessionText.Duration(session.AudioSeconds, started, session.EndedAt),
                     EditedStamp.Label(started, session.EditedAt ?? ""),
                     started,
                     session.Demo,
@@ -168,19 +161,25 @@ public sealed partial class SessionsViewModel : ObservableObject
             // without reopening
             if (keep is not null && Sessions.FirstOrDefault(r => r.Id == keep) is { } again)
             {
-                _retitling = true;
-                Selected = again;
-                _retitling = false;
+                Reselect(again);
                 DetailOpen = true;
             }
             else
             {
                 DetailOpen = false;
             }
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
+        });
+
+    private void Reselect(SessionRow? row)
+    {
+        _reselecting = true;
+        try
         {
-            _status.Append($"could not list sessions: {e.Message}");
+            Selected = row;
+        }
+        finally
+        {
+            _reselecting = false;
         }
     }
 
@@ -194,35 +193,38 @@ public sealed partial class SessionsViewModel : ObservableObject
             {
                 continue;
             }
+
             var day = DayLabel(row.StartedAt);
             if (group is null || group.Day != day)
             {
                 group = new SessionGroup(day);
                 Groups.Add(group);
             }
+
             group.Add(row);
         }
     }
 
     private static string DayLabel(string startedAt)
     {
-        if (!DateTimeOffset.TryParse(startedAt, CultureInfo.InvariantCulture, out var started))
+        if (Words.LocalTime(startedAt) is not { } started)
         {
             return "";
         }
-        var date = started.ToLocalTime().Date;
+
+        var date = started.Date;
         var today = DateTime.Today;
         if (date == today)
         {
             return "Today";
         }
+
         if (date == today.AddDays(-1))
         {
             return "Yesterday";
         }
-        return date.Year == today.Year
-            ? date.ToString("d MMMM", CultureInfo.CurrentCulture)
-            : date.ToString("d MMMM yyyy", CultureInfo.CurrentCulture);
+
+        return Words.Day(started, today.Year, fullMonth: true);
     }
 
     private async Task OpenAsync(SessionRow? row)
@@ -239,39 +241,45 @@ public sealed partial class SessionsViewModel : ObservableObject
         if (DetailOpen)
         {
             DetailTitle = row.Title;
-            DetailMeta = $"{row.Started} · {row.Duration} · {OptionsLabel()}";
+            RefreshMeta();
+        }
+    }
+
+    private void RefreshMeta()
+    {
+        if (DetailOpen && Selected is { } row)
+        {
+            DetailMeta = SessionText.Meta(row.Started, row.Duration, SessionText.Options(Note.Style, Note.Detail));
         }
     }
 
     /// <summary>Commits an edited title as the session's label.</summary>
-    [RelayCommand]
     public async Task RenameAsync()
     {
-        if (Selected is null || DetailTitle.Length == 0 || DetailTitle == Selected.Title)
+        if (Selected is not { } row)
         {
             return;
         }
 
+        var title = await SessionLabel.SaveAsync(_engine, _status, row.Id, DetailTitle, row.Title)
+            .ConfigureAwait(true);
+        if (title == row.Title)
+        {
+            return;
+        }
+
+        var index = Sessions.IndexOf(row);
+        var renamed = row with { Title = title };
+        _reselecting = true;
         try
         {
-            await _engine.LabelSessionAsync(Selected.Id, DetailTitle).ConfigureAwait(true);
-            var index = Sessions.IndexOf(Selected);
-            var renamed = Selected with { Title = DetailTitle };
-            _retitling = true;
-            try
-            {
-                Sessions[index] = renamed;  // replacing the item deselects it
-                Regroup();
-                Selected = renamed;
-            }
-            finally
-            {
-                _retitling = false;
-            }
+            Sessions[index] = renamed;  // replacing the item deselects it
+            Regroup();
+            Selected = renamed;
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        finally
         {
-            _status.Append($"could not rename: {e.Message}");
+            _reselecting = false;
         }
     }
 
@@ -279,18 +287,14 @@ public sealed partial class SessionsViewModel : ObservableObject
     [RelayCommand]
     private async Task Delete(SessionRow row)
     {
-        if (await _dialogs.ConfirmAsync("Delete this consultation?",
+        if (!await _dialogs.ConfirmAsync("Delete this consultation?",
                 "The transcript, note and patient sheet are erased and cannot be recovered.",
                 "Delete", "Keep").ConfigureAwait(true))
         {
-            await DeleteAsync(row).ConfigureAwait(true);
+            return;
         }
-    }
 
-    /// <summary>Deletes one row, closing its review first if open.</summary>
-    public async Task DeleteAsync(SessionRow row)
-    {
-        try
+        await EngineCall.ReportAsync(_status, "could not delete session", async () =>
         {
             if (Selected?.Id == row.Id)
             {
@@ -301,11 +305,7 @@ public sealed partial class SessionsViewModel : ObservableObject
             await _engine.DeleteSessionAsync(row.Id).ConfigureAwait(true);
             _status.Append("Session deleted");
             await RefreshAsync().ConfigureAwait(true);
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            _status.Append($"could not delete session: {e.Message}");
-        }
+        }).ConfigureAwait(true);
     }
 
     /// <summary>Ends the review and saves any edits.</summary>
@@ -322,41 +322,4 @@ public sealed partial class SessionsViewModel : ObservableObject
     /// </summary>
     public Task CloseStoredReviewAsync() =>
         _consultation.ReviewingStored ? LeaveAsync() : Task.CompletedTask;
-
-    private string OptionsLabel()
-    {
-        var style = Note.Style switch { "soap" => "SOAP", _ => "Prose" };
-        var detail = Note.Detail switch
-        {
-            "concise" => "concise",
-            "detailed" => "detailed",
-            _ => "standard",
-        };
-        return $"{style}, {detail}";
-    }
-
-    private static string FormatStarted(string startedAt) =>
-        DateTimeOffset.TryParse(startedAt, CultureInfo.InvariantCulture, out var started)
-            ? started.ToLocalTime().ToString("d MMM HH:mm", CultureInfo.CurrentCulture)
-            : startedAt;
-
-    // The consultation's length is its audio, which a fast replay records in
-    // seconds of wall time. The wall clock is only the fallback
-    private static string FormatDuration(double audioSeconds, string startedAt, string endedAt)
-    {
-        var seconds = audioSeconds;
-        if (seconds <= 0)
-        {
-            if (!DateTimeOffset.TryParse(startedAt, CultureInfo.InvariantCulture, out var started)
-                || !DateTimeOffset.TryParse(endedAt, CultureInfo.InvariantCulture, out var ended))
-            {
-                return "";
-            }
-
-            seconds = (ended - started).TotalSeconds;
-        }
-
-        // Formatted as a duration so it does not read as a second clock time
-        return seconds < 90 ? "1 min" : $"{(int)Math.Round(seconds / 60)} min";
-    }
 }

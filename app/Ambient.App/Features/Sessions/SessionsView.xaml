@@ -22,212 +22,196 @@
 
         <controls:PageHeader Title="Sessions" />
 
-    <Grid Grid.Row="1" Padding="24,0,24,16" ColumnSpacing="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="340" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-
-        <!-- The search narrows the list beneath it -->
-        <TextBox
-            Margin="0,0,0,8"
-            AutomationProperties.Name="Search consultations"
-            PlaceholderText="Search consultations"
-            Text="{x:Bind ViewModel.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-        <!-- The inbox: one day per group, newest first, delete on the row's menu -->
-        <ListView
-            Grid.Row="1"
-            ItemsSource="{x:Bind Grouped.View, Mode=OneWay}"
-            SelectedItem="{x:Bind ViewModel.Selected, Mode=TwoWay}"
-            SelectionMode="Single">
-            <ListView.GroupStyle>
-                <GroupStyle>
-                    <GroupStyle.HeaderTemplate>
-                        <DataTemplate x:DataType="vm:SessionGroup">
-                            <TextBlock
-                                Margin="0,8,0,4"
-                                Style="{StaticResource CaptionText}"
-                                Text="{x:Bind Day}" />
-                        </DataTemplate>
-                    </GroupStyle.HeaderTemplate>
-                </GroupStyle>
-            </ListView.GroupStyle>
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:SessionRow">
-                    <!-- Unlabelled: one line. Labelled: title, then date and length -->
-                    <StackPanel Padding="0,8" Spacing="2">
-                        <StackPanel.ContextFlyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem
-                                    Command="{Binding ElementName=SessionsPage, Path=ViewModel.DeleteCommand}"
-                                    CommandParameter="{x:Bind}"
-                                    Text="Delete">
-                                    <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE74D;" />
-                                    </MenuFlyoutItem.Icon>
-                                </MenuFlyoutItem>
-                            </MenuFlyout>
-                        </StackPanel.ContextFlyout>
-                        <TextBlock Text="{x:Bind Heading}" TextTrimming="CharacterEllipsis" />
-                        <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind MetaVisible}">
-                            <TextBlock
-                                Style="{StaticResource CaptionText}"
-                                Text="{x:Bind Meta}"
-                                Visibility="{x:Bind HasLabel}" />
-                            <TextBlock
-                                Style="{StaticResource MicroText}"
-                                Text="{x:Bind EditedLabel}"
-                                Visibility="{x:Bind Edited}" />
-                        </StackPanel>
-                    </StackPanel>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-
-        <Grid
-            x:Name="DetailGrid"
-            Grid.Row="1"
-            Grid.Column="1"
-            RowSpacing="20"
-            SizeChanged="OnDetailSizeChanged"
-            Visibility="{x:Bind ViewModel.DetailOpen, Mode=OneWay}">
+        <Grid Grid.Row="1" Padding="24,0,24,16" ColumnSpacing="24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <!-- The title is the label, edited in place. The header shares the documents' column -->
+            <!-- One hairline between the inbox and the review, centred in the gap -->
+            <Border
+                Grid.RowSpan="2"
+                Width="1"
+                Margin="0,0,-12,0"
+                HorizontalAlignment="Right"
+                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+            <!-- The search narrows the list beneath it -->
+            <TextBox
+                Margin="0,0,0,8"
+                AutomationProperties.Name="Search consultations"
+                PlaceholderText="Search consultations"
+                Text="{x:Bind ViewModel.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <!-- The inbox: one day per group, newest first, delete on the row's menu -->
+            <ListView
+                Grid.Row="1"
+                ItemsSource="{x:Bind Grouped.View, Mode=OneWay}"
+                SelectedItem="{x:Bind ViewModel.Selected, Mode=TwoWay}"
+                SelectionMode="Single">
+                <ListView.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="vm:SessionGroup">
+                                <TextBlock
+                                    Margin="0,8,0,4"
+                                    Style="{StaticResource CaptionText}"
+                                    Text="{x:Bind Day}" />
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SessionRow">
+                        <!-- Unlabelled: one line. Labelled: title, then date and length -->
+                        <StackPanel Padding="0,8" Spacing="2">
+                            <StackPanel.ContextFlyout>
+                                <MenuFlyout>
+                                    <!-- ElementName: an x:Bind inside a template sees only the row -->
+                                    <MenuFlyoutItem
+                                        Command="{Binding ElementName=SessionsPage, Path=ViewModel.DeleteCommand}"
+                                        CommandParameter="{x:Bind}"
+                                        Text="Delete">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE74D;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </StackPanel.ContextFlyout>
+                            <TextBlock Text="{x:Bind Heading}" TextTrimming="CharacterEllipsis" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind MetaVisible}">
+                                <TextBlock
+                                    Style="{StaticResource CaptionText}"
+                                    Text="{x:Bind Meta}"
+                                    Visibility="{x:Bind HasLabel}" />
+                                <TextBlock
+                                    Style="{StaticResource MicroText}"
+                                    Text="{x:Bind EditedLabel}"
+                                    Visibility="{x:Bind Edited}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
             <Grid
-                x:Name="DetailHeader"
-                MaxWidth="1480"
-                HorizontalAlignment="Stretch"
-                ColumnSpacing="16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Spacing="0">
-                    <TextBox
-                        AutomationProperties.Name="Consultation label"
-                        LostFocus="OnTitleCommitted"
-                        Style="{StaticResource TitleTextBox}"
-                        PlaceholderText="Name this consultation"
-                        Text="{x:Bind ViewModel.DetailTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Style="{StaticResource CaptionText}"
-                            Text="{x:Bind ViewModel.DetailMeta, Mode=OneWay}" />
-                        <TextBlock
-                            Style="{StaticResource MicroText}"
-                            Text="{x:Bind ViewModel.Note.EditedStamp, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.Note.Edited, Mode=OneWay}" />
+                Grid.Row="1"
+                Grid.Column="1"
+                RowSpacing="20"
+                Visibility="{x:Bind ViewModel.DetailOpen, Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- The title is the label, edited in place. The header shares the documents' column -->
+                <Grid
+                    MaxWidth="1480"
+                    HorizontalAlignment="Stretch"
+                    ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="0">
+                        <TextBox
+                            AutomationProperties.Name="Consultation label"
+                            LostFocus="OnTitleCommitted"
+                            Style="{StaticResource TitleTextBox}"
+                            PlaceholderText="Name this consultation"
+                            Text="{x:Bind ViewModel.DetailTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CaptionText}"
+                                Text="{x:Bind ViewModel.DetailMeta, Mode=OneWay}" />
+                            <TextBlock
+                                Style="{StaticResource MicroText}"
+                                Text="{x:Bind ViewModel.Note.EditedStamp, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.Note.Edited, Mode=OneWay}" />
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
+                    <Button
+                        Grid.Column="1"
+                        VerticalAlignment="Top"
+                        AutomationProperties.Name="Delete this consultation"
+                        Command="{x:Bind ViewModel.DeleteCommand}"
+                        CommandParameter="{x:Bind ViewModel.Selected, Mode=OneWay}"
+                        Style="{StaticResource TrayButton}"
+                        ToolTipService.ToolTip="Delete this consultation">
+                        <FontIcon FontSize="16" Glyph="&#xE74D;" />
+                    </Button>
+                </Grid>
+
+                <!-- The review surface the live screen shows too: documents behind one
+                     selector, references behind another -->
+                <ContentControl
+                    x:Name="SurfaceHost"
+                    Grid.Row="1"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch" />
+            </Grid>
+
+            <StackPanel
+                Grid.Row="1"
+                Grid.Column="1"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8"
+                Visibility="{x:Bind ViewModel.SelectHintVisible, Mode=OneWay}">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource PaneHeaderText}"
+                    Text="No consultations yet"
+                    Visibility="{x:Bind ViewModel.NothingStored, Mode=OneWay}" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource CaptionText}"
+                    Text="Each one you record is kept here, with its transcript, note and patient sheet."
+                    Visibility="{x:Bind ViewModel.NothingStored, Mode=OneWay}" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource PaneHeaderText}"
+                    Text="Select a consultation"
+                    Visibility="{x:Bind ViewModel.NoneOpen, Mode=OneWay}" />
+            </StackPanel>
+
+            <!-- Keep consultations is off and nothing is stored: the page explains
+                 why the list is empty -->
+            <StackPanel
+                Grid.Row="1"
+                Grid.ColumnSpan="2"
+                MaxWidth="420"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="12"
+                Visibility="{x:Bind ViewModel.EmptyBecauseOff, Mode=OneWay}">
+                <FontIcon
+                    HorizontalAlignment="Center"
+                    FontSize="24"
+                    Foreground="{ThemeResource FaintTextBrush}"
+                    Glyph="&#xE72E;" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource PaneHeaderText}"
+                    Text="Consultations are not being kept" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource CaptionText}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap"
+                    Text="Each consultation is erased when you leave it. Turn on Save consultation data in Settings to keep the transcript, note and patient sheet on this device." />
                 <Button
-                    Grid.Column="1"
-                    VerticalAlignment="Top"
-                    AutomationProperties.Name="Delete this consultation"
-                    Command="{x:Bind ViewModel.DeleteCommand}"
-                    CommandParameter="{x:Bind ViewModel.Selected, Mode=OneWay}"
-                    Style="{StaticResource TrayButton}"
-                    ToolTipService.ToolTip="Delete this consultation">
-                    <FontIcon FontSize="16" Glyph="&#xE74D;" />
+                    AutomationProperties.Name="Open Settings"
+                    HorizontalAlignment="Center"
+                    Command="{x:Bind Shell.ShowSettingsCommand}">
+                    <controls:IconLabel Glyph="&#xE713;" Text="Open Settings" />
                 </Button>
-            </Grid>
-
-            <!-- Wide: the documents on the left, the references on the right, each behind a
-                 selector. Narrow: one selector. Views move in code -->
-            <Grid
-                x:Name="WideLayout"
-                Grid.Row="1"
-                MaxWidth="1480"
-                Margin="0,0,0,16"
-                HorizontalAlignment="Center"
-                ColumnSpacing="24">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MaxWidth="760" />
-                    <ColumnDefinition Width="*" MaxWidth="700" />
-                </Grid.ColumnDefinitions>
-                <controls:DocumentTabs x:Name="DocumentTabs" VerticalAlignment="Stretch" />
-                <controls:DocumentTabs
-                    x:Name="ReferenceTabs"
-                    Grid.Column="1"
-                    VerticalAlignment="Stretch" />
-            </Grid>
-
-            <Grid
-                x:Name="NarrowLayout"
-                Grid.Row="1"
-                MaxWidth="760"
-                HorizontalAlignment="Center">
-                <controls:DocumentTabs x:Name="NarrowTabs" VerticalAlignment="Stretch" />
-            </Grid>
+            </StackPanel>
         </Grid>
-
-        <StackPanel
-            Grid.Row="1"
-            Grid.Column="1"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="8"
-            Visibility="{x:Bind ViewModel.SelectHintVisible, Mode=OneWay}">
-            <TextBlock
-                HorizontalAlignment="Center"
-                Style="{StaticResource PaneHeaderText}"
-                Text="No consultations yet"
-                Visibility="{x:Bind ViewModel.NothingStored, Mode=OneWay}" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Style="{StaticResource CaptionText}"
-                Text="Each one you record is kept here, with its transcript, note and patient sheet."
-                Visibility="{x:Bind ViewModel.NothingStored, Mode=OneWay}" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Style="{StaticResource PaneHeaderText}"
-                Text="Select a consultation"
-                Visibility="{x:Bind ViewModel.NoneOpen, Mode=OneWay}" />
-        </StackPanel>
-
-        <!-- Keep consultations is off and nothing is stored: the page explains
-             why the list is empty -->
-        <StackPanel
-            Grid.Row="1"
-            Grid.ColumnSpan="2"
-            MaxWidth="420"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="12"
-            Visibility="{x:Bind ViewModel.EmptyBecauseOff, Mode=OneWay}">
-            <FontIcon
-                HorizontalAlignment="Center"
-                FontSize="24"
-                Foreground="{ThemeResource FaintTextBrush}"
-                Glyph="&#xE72E;" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Style="{StaticResource PaneHeaderText}"
-                Text="Consultations are not being kept" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Style="{StaticResource CaptionText}"
-                TextAlignment="Center"
-                TextWrapping="Wrap"
-                Text="Each consultation is erased when you leave it. Turn on Save consultation data in Settings to keep the transcript, note and patient sheet on this device." />
-            <Button
-                HorizontalAlignment="Center"
-                Command="{x:Bind Shell.ShowSettingsCommand}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon FontSize="14" Glyph="&#xE713;" />
-                    <TextBlock Text="Open Settings" />
-                </StackPanel>
-            </Button>
-        </StackPanel>
-    </Grid>
     </Grid>
 </UserControl>

@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Ambient.App.Themes;
 
 namespace Ambient.App.Controls;
 
@@ -10,8 +11,7 @@ internal static class EditingChrome
     {
         if (editing)
         {
-            box.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)
-                Application.Current.Resources["AccentFillColorDefaultBrush"];
+            box.BorderBrush = ThemedResources.GetBrush("AccentFillColorDefaultBrush", box.ActualTheme);
             box.BorderThickness = new Thickness(1.5);
         }
         else

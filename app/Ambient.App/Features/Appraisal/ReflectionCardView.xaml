@@ -17,6 +17,7 @@
             <StackPanel>
                 <!-- Closed: the title line with the day and the opener, then the case study -->
                 <Button
+                    AutomationProperties.Name="{x:Bind Card.Title, Mode=OneWay}"
                     Padding="16,12"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Stretch"
@@ -71,7 +72,8 @@
                             AutomationProperties.Name="Reflection title"
                             LostFocus="OnTitleCommitted"
                             Style="{StaticResource TitleTextBox}"
-                            PlaceholderText="{x:Bind Card.MonthLabel, Mode=OneWay}" />
+                            PlaceholderText="{x:Bind Card.MonthLabel, Mode=OneWay}"
+                            Text="{x:Bind Card.Editor.Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <Button
                             Grid.Column="1"
                             VerticalAlignment="Center"

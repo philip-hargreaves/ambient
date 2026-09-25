@@ -4,11 +4,10 @@ using System.Runtime.InteropServices;
 namespace Ambient.Client;
 
 /// <summary>
-/// Reads the pid of the process serving a named pipe. The spawner knows which
-/// engine pid it started and compares, which needs no signature and cannot be
-/// spoofed by renaming a binary.
+/// The pid of the process serving a named pipe. Comparing it with the pid the
+/// launcher started needs no signature and cannot be spoofed by renaming a binary.
 /// </summary>
-public static partial class ServerVerifier
+internal static partial class ServerVerifier
 {
     public static uint? GetServerProcessId(NamedPipeClientStream pipe) =>
         GetNamedPipeServerProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var pid)

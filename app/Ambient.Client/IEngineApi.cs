@@ -2,8 +2,7 @@ namespace Ambient.Client;
 
 /// <summary>
 /// The engine as the shell uses it: one method per request, typed replies.
-/// EngineApi is the only implementation and owns every method name, parameter
-/// shape and reply shape.
+/// Method names and wire shapes live in EngineApi, nowhere else.
 /// </summary>
 public interface IEngineApi
 {
@@ -119,7 +118,9 @@ public interface IEngineApi
 
     Task SummariseReflectionAsync(string id);
 
-    Task UpdateReflectionAsync(string id, string happened, string learned, string nextTime);
+    Task UpdateReflectionAsync(
+        string id, string happened, string learned, string nextTime,
+        IReadOnlyList<ReflectionReference> references);
 
     Task UpdateReflectionSummaryAsync(string id, string summary);
 

@@ -16,56 +16,59 @@ public class DocumentExportViewModelTest
         return (new DocumentExportViewModel(note, clipboard, picker, status), note, clipboard, picker, status);
     }
 
+    // The patient takes the sheet home in their language, and the record shows what they were given
     [Fact]
-    public async Task CopyPutsTheDocumentOnTheClipboardAndSaysSo()
+    public async Task CopyPutsTheDocumentOnTheClipboardWithItsTranslationOnceThereIsOne()
     {
         var (export, note, clipboard, _, status) = Create();
         note.ClinicalNoteText = "the note";
-        note.PatientInfoText = "the sheet";
+        note.PatientInfoText = "take one tablet";
+        Assert.Equal("Copies the sheet", note.PatientCopyTip);
 
         await export.CopyNoteCommand.ExecuteAsync(null);
         await export.CopyPatientCommand.ExecuteAsync(null);
-
-        Assert.Equal(["the note", "the sheet"], clipboard.Copied);
+        Assert.Equal(["the note", "take one tablet"], clipboard.Copied);
         Assert.Contains("Patient note copied", status.LatestActivity);
+
+        note.TranslationLanguage = "Urdu";
+        note.TranslationText = "ایک گولی لیں";
+        Assert.Equal("Copies the sheet and its translation", note.PatientCopyTip);
+        Assert.Contains("translation", note.PatientExportTip);
+
+        await export.CopyPatientCommand.ExecuteAsync(null);
+        Assert.Equal("take one tablet\n\nUrdu translation\n\nایک گولی لیں", clipboard.Copied[^1]);
     }
 
     [Fact]
-    public async Task ExportWritesTheFileWithTheMarkerAndTheTranslation()
+    public async Task ExportWritesTheFileWithTheMarkerAndTheTranslationAndACancelledPickerWritesNothing()
     {
         var (export, note, _, picker, status) = Create();
         var dir = Directory.CreateTempSubdirectory();
         try
         {
+            note.ClinicalNoteText = "the note";
             note.PatientInfoText = "take one tablet";
             note.TranslationText = "prendre un comprimé";
             note.TranslationLanguage = "French";
-            picker.SavePath = Path.Combine(dir.FullName, "sheet.txt");
 
+            picker.SavePath = null;
+            await export.ExportNoteCommand.ExecuteAsync(null);
+            Assert.Equal(["clinical-note.txt"], picker.SuggestedNames);
+            Assert.Equal("", status.LatestActivity);
+            Assert.Empty(Directory.GetFiles(dir.FullName));
+
+            picker.SavePath = Path.Combine(dir.FullName, "sheet.txt");
             await export.ExportPatientCommand.ExecuteAsync(null);
 
             var written = await File.ReadAllTextAsync(picker.SavePath);
             Assert.StartsWith(DocumentExport.Marker, written);
             Assert.Contains("take one tablet\n\nFrench translation\n\nprendre un comprimé", written);
-            Assert.Equal(["patient-sheet.txt"], picker.SuggestedNames);
+            Assert.Equal(["clinical-note.txt", "patient-sheet.txt"], picker.SuggestedNames);
             Assert.Contains("outside the encrypted store", status.LatestActivity);
         }
         finally
         {
             dir.Delete(recursive: true);
         }
-    }
-
-    [Fact]
-    public async Task ACancelledPickerWritesNothing()
-    {
-        var (export, note, _, picker, status) = Create();
-        note.ClinicalNoteText = "the note";
-        picker.SavePath = null;
-
-        await export.ExportNoteCommand.ExecuteAsync(null);
-
-        Assert.Equal(["clinical-note.txt"], picker.SuggestedNames);
-        Assert.Equal("", status.LatestActivity);
     }
 }

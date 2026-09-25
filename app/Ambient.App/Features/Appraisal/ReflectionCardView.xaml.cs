@@ -12,10 +12,7 @@ public sealed partial class ReflectionCardView : UserControl
         nameof(Card), typeof(ReflectionCard), typeof(ReflectionCardView),
         new PropertyMetadata(null, OnCardChanged));
 
-    public ReflectionCardView()
-    {
-        InitializeComponent();
-    }
+    public ReflectionCardView() => InitializeComponent();
 
     public ReflectionCard? Card
     {
@@ -51,6 +48,15 @@ public sealed partial class ReflectionCardView : UserControl
         }
     }
 
+    // The header title binds on every keystroke, so the editor is current by LostFocus
+    private async void OnTitleCommitted(object sender, RoutedEventArgs e)
+    {
+        if (Card?.Editor is { } editor)
+        {
+            await editor.SaveTitleAsync();
+        }
+    }
+
     private void SyncEditor()
     {
         if (Card is not { Editor: { } editor } card)
@@ -59,24 +65,10 @@ public sealed partial class ReflectionCardView : UserControl
             return;
         }
 
-        TitleBox.Text = editor.Title;
         if (EditorHost.Content is not ReflectionEditorView view || view.ViewModel != editor)
         {
             EditorHost.Content = new ReflectionEditorView(
                 editor, showHeading: false, removeCommand: card.DeleteCommand);
         }
-    }
-
-    // The header title is the consultation's label, like the sheet's
-    private async void OnTitleCommitted(object sender, RoutedEventArgs e)
-    {
-        if (Card?.Editor is not { } editor)
-        {
-            return;
-        }
-
-        editor.Title = TitleBox.Text;
-        await editor.SaveTitleAsync();
-        Card.Title = editor.DisplayTitle;
     }
 }

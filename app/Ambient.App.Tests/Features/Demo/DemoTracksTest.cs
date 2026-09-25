@@ -7,23 +7,25 @@ namespace Ambient.App.Tests.Features.Demo;
 public class DemoTracksTest
 {
     [Fact]
-    public void ManifestListsOnlyTracksWhoseWavsExist()
+    public void ManifestListsOnlyTracksWhoseWavsExistABrokenOneYieldsNoneAndDurationComesFromTheHeader()
     {
         var root = Directory.CreateTempSubdirectory("ambient-demo-test");
+        var manifest = Path.Combine(root.FullName, "tracks.json");
         try
         {
+            File.WriteAllText(manifest, "not json");
+            Assert.Empty(DemoTracks.Parse(manifest));
+
             var wav = Path.Combine(root.FullName, "elbow.wav");
             File.WriteAllBytes(wav, new byte[44]);
-            File.WriteAllText(Path.Combine(root.FullName, "tracks.json"), """
+            File.WriteAllText(manifest, """
                 {"tracks":[
                   {"name":"Elbow swelling","file":"elbow.wav"},
                   {"name":"Missing","file":"gone.wav"}
                 ]}
                 """);
 
-            var tracks = DemoTracks.Parse(Path.Combine(root.FullName, "tracks.json"));
-
-            var track = Assert.Single(tracks);
+            var track = Assert.Single(DemoTracks.Parse(manifest));
             Assert.Equal("Elbow swelling", track.Name);
             Assert.Equal(wav, track.Path);
         }
@@ -31,40 +33,17 @@ public class DemoTracksTest
         {
             root.Delete(recursive: true);
         }
-    }
 
-    [Fact]
-    public void ABrokenManifestYieldsNoTracks()
-    {
-        var root = Directory.CreateTempSubdirectory("ambient-demo-test");
+        var real = SessionContractWav.Write(seconds: 3);
         try
         {
-            File.WriteAllText(Path.Combine(root.FullName, "tracks.json"), "not json");
-            Assert.Empty(DemoTracks.Parse(Path.Combine(root.FullName, "tracks.json")));
+            Assert.Equal(3.0, DemoTracks.DurationSeconds(real), 3);
         }
         finally
         {
-            root.Delete(recursive: true);
+            File.Delete(real);
         }
-    }
 
-    [Fact]
-    public void DurationComesFromTheHeader()
-    {
-        var wav = SessionContractWav.Write(seconds: 3);
-        try
-        {
-            Assert.Equal(3.0, DemoTracks.DurationSeconds(wav), 3);
-        }
-        finally
-        {
-            File.Delete(wav);
-        }
-    }
-
-    [Fact]
-    public void AnUnreadableFileHasZeroDuration()
-    {
         Assert.Equal(0, DemoTracks.DurationSeconds("C:/does/not/exist.wav"));
     }
 }

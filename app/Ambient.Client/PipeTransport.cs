@@ -24,8 +24,8 @@ public sealed class PipeTransport : IEngineTransport
 
     public event Action<string, JsonElement>? NotificationReceived;
 
-    // A raw transport is connected until it faults. EngineConnection is the
-    // layer that raises transitions
+    // Connected until it faults. EngineConnection raises the transitions, so
+    // the event below is inert here
     public bool Connected => Volatile.Read(ref _fault) is null && Volatile.Read(ref _disposed) == 0;
 
     public event Action<bool>? ConnectedChanged
@@ -53,8 +53,7 @@ public sealed class PipeTransport : IEngineTransport
             cts.CancelAfter(timeout);
             await pipe.ConnectAsync(cts.Token).ConfigureAwait(false);
 
-            // The caller that spawned the engine knows its pid. Any other
-            // process that may have claimed the pipe name first is refused.
+            // Refuse any other process that claimed the pipe name first
             if (expectedServerProcessId is uint expected)
             {
                 var actual = ServerVerifier.GetServerProcessId(pipe);
@@ -93,8 +92,7 @@ public sealed class PipeTransport : IEngineTransport
             TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = completion;
 
-        // Close the register-after-fault window: a fault between the check above
-        // and this insert would not have seen our completion.
+        // A fault between the check above and the insert did not see this completion
         if (Volatile.Read(ref _fault) is { } raced)
         {
             _pending.TryRemove(id, out _);
@@ -128,8 +126,7 @@ public sealed class PipeTransport : IEngineTransport
     private async Task SendAsync(object message, CancellationToken cancellationToken)
     {
         var frame = Framing.Encode(JsonSerializer.SerializeToUtf8Bytes(message, Protocol.JsonOptions));
-        // One token governs the send. A cancelled write desyncs the stream, so
-        // it is terminal
+        // A cancelled write desyncs the stream, so any write failure is terminal
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken, _closed.Token);
         await _writeLock.WaitAsync(linked.Token).ConfigureAwait(false);
@@ -141,8 +138,7 @@ public sealed class PipeTransport : IEngineTransport
         catch (Exception e)
         {
             Fault(e);
-            // If closure cancelled this write, surface the closure cause rather
-            // than the incidental cancellation.
+            // A write cancelled by closure reports the closure cause, not the cancellation
             if (Volatile.Read(ref _fault) is { } cause && !ReferenceEquals(cause, e))
             {
                 throw new IOException("pipe transport is closed", cause);
@@ -158,14 +154,11 @@ public sealed class PipeTransport : IEngineTransport
 
     private async Task ReadLoopAsync()
     {
-        var header = new byte[Framing.HeaderBytes];
         try
         {
             while (true)
             {
-                await _pipe.ReadExactlyAsync(header, _closed.Token).ConfigureAwait(false);
-                var body = new byte[Framing.ReadDeclaredLength(header)];
-                await _pipe.ReadExactlyAsync(body, _closed.Token).ConfigureAwait(false);
+                var body = await Framing.ReadFrameAsync(_pipe, _closed.Token).ConfigureAwait(false);
                 using var document = JsonDocument.Parse(body);
                 Dispatch(document.RootElement);
             }
@@ -201,8 +194,7 @@ public sealed class PipeTransport : IEngineTransport
             return;
         }
 
-        // Build the outcome before completing: a malformed response must fault its
-        // own request so the removed completion is not left stranded.
+        // A malformed response faults its own request; the completion is already removed
         try
         {
             if (root.TryGetProperty("error", out var error))
@@ -225,14 +217,13 @@ public sealed class PipeTransport : IEngineTransport
 
     private void Fault(Exception cause)
     {
-        // First fault wins. The transport is terminal thereafter.
+        // First fault wins
         if (Interlocked.CompareExchange(ref _fault, cause, null) is not null)
         {
             return;
         }
 
-        // Fault the pending requests before cancelling I/O, so each observes the
-        // real cause rather than a bare cancellation.
+        // Pending requests see the real cause, not the cancellation that follows
         foreach (var id in _pending.Keys)
         {
             if (_pending.TryRemove(id, out var completion))
@@ -262,7 +253,7 @@ public sealed class PipeTransport : IEngineTransport
             // The loop's exit already faulted every pending request
         }
 
-        // Left undisposed on purpose: parked requests must see the clean close,
-        // and neither holds an unmanaged handle
+        // _writeLock and _closed stay undisposed: a request parked on either must
+        // see the clean close, and neither holds an unmanaged handle
     }
 }

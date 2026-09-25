@@ -1,7 +1,6 @@
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Core.Features.Appraisal;
-using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Features.Appraisal;
 
@@ -10,10 +9,9 @@ public sealed partial class AppraisalsView : UserControl
 {
     private bool _syncing;
 
-    public AppraisalsView(AppraisalsViewModel viewModel, ShellViewModel shell)
+    public AppraisalsView(AppraisalsViewModel viewModel)
     {
         ViewModel = viewModel;
-        Shell = shell;
         InitializeComponent();
         for (var month = 1; month <= 12; month++)
         {
@@ -31,8 +29,6 @@ public sealed partial class AppraisalsView : UserControl
     }
 
     public AppraisalsViewModel ViewModel { get; }
-
-    public ShellViewModel Shell { get; }
 
     // Months with entries can be chosen, this month is in ink, the narrowed month is selected
     private void SyncMonths()

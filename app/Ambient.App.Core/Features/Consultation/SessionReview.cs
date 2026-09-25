@@ -1,3 +1,4 @@
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Features.Demo;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Guidance;
@@ -19,7 +20,6 @@ public sealed class SessionReview
     private readonly StatusBarViewModel _status;
     private readonly NoteViewModel _note;
     private readonly GuidanceViewModel _guidance;
-    private readonly PageViewModel _pageView;
     private readonly TranscriptViewModel _transcript;
     private readonly IDialogService _dialogs;
     private readonly SessionRecorder _recorder;
@@ -27,21 +27,23 @@ public sealed class SessionReview
 
     private string _finalisedStartedAt = "";
 
+    // The stored note while an example case stands in for it, so it can come back
+    private string? _originalNote;
+
     // Bumped by every open and close, so a slow open that was overtaken applies nothing
     private int _open;
     private int _documentsGeneration;
 
     public SessionReview(
         IEngineApi engine, IUiDispatcher dispatcher, StatusBarViewModel status, NoteViewModel note,
-        GuidanceViewModel guidance, PageViewModel pageView, TranscriptViewModel transcript,
-        IDialogService dialogs, SessionRecorder recorder, AppPreferences? preferences)
+        GuidanceViewModel guidance, TranscriptViewModel transcript, IDialogService dialogs,
+        SessionRecorder recorder, AppPreferences? preferences)
     {
         _engine = engine;
         _dispatcher = dispatcher;
         _status = status;
         _note = note;
         _guidance = guidance;
-        _pageView = pageView;
         _transcript = transcript;
         _dialogs = dialogs;
         _recorder = recorder;
@@ -56,9 +58,6 @@ public sealed class SessionReview
             }
         };
     }
-
-    // The stored note while an example case stands in for it, so it can come back
-    private string? _originalNote;
 
     /// <summary>An example case is showing in place of the stored note.</summary>
     public bool ExampleShown => _originalNote is not null;
@@ -77,6 +76,9 @@ public sealed class SessionReview
     /// <summary>How long added documents must stop changing before the note is searched again.</summary>
     public TimeSpan DocumentsSettle { get; set; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>True while the review is a stored session rather than the one just recorded.</summary>
+    public bool StoredOpen { get; private set; }
+
     // A stop sealed the session: the documents arriving next belong to it
     private void Sealed(string id)
     {
@@ -87,8 +89,6 @@ public sealed class SessionReview
         _note.HasReflection = false;
     }
 
-    // An example case stands in as the note of a demo record: the guidance
-    // search runs on it and the patient sheet can be rewritten from it
     /// <summary>
     /// A written case stands in for the note of a demo record and is searched as the
     /// note is. The stored note is kept aside and written back by
@@ -110,18 +110,16 @@ public sealed class SessionReview
     /// <summary>The stored note back in place of an example, saved and searched again.</summary>
     public async Task RestoreOriginalNoteAsync()
     {
-        if (_originalNote is not { } original || _recorder.State != SessionState.Review)
+        if (!ExampleShown || _recorder.State != SessionState.Review)
         {
             return;
         }
 
-        _originalNote = null;
-        _note.ClinicalNoteText = original;
+        DropExample();
         _status.Append("Original note");
         await SearchGuidanceAsync().ConfigureAwait(true);
     }
 
-    // Leaving with an example showing puts the stored note back before the autosave
     private void DropExample()
     {
         if (_originalNote is { } original)
@@ -160,16 +158,13 @@ public sealed class SessionReview
         }
 
         _guidance.SearchStarted();
-        if (_note.ClinicalNoteText != LoadedNote)
+        await SaveNoteAsync().ConfigureAwait(true);
+        if (id != FinalisedSessionId)
         {
-            await SaveNoteAsync().ConfigureAwait(true);
-            if (id != FinalisedSessionId)
-            {
-                return;
-            }
+            return;
         }
 
-        if (!await EngineStep.TryAsync(_status, "guidance/search", () => _engine.SearchGuidanceAsync(id))
+        if (!await EngineCall.TryAsync(_status, "guidance/search", () => _engine.SearchGuidanceAsync(id))
             .ConfigureAwait(true))
         {
             _guidance.ApplyFailed();
@@ -178,7 +173,7 @@ public sealed class SessionReview
 
     public async Task SearchGuidanceAsync(string text)
     {
-        if (!await EngineStep.TryAsync(_status, "guidance/search", () => _engine.SearchGuidanceAsync(text, 3))
+        if (!await EngineCall.TryAsync(_status, "guidance/search", () => _engine.SearchGuidanceAsync(text, 3))
             .ConfigureAwait(true))
         {
             _guidance.ApplyQueryFailed();
@@ -220,14 +215,15 @@ public sealed class SessionReview
             return;
         }
 
-        if (failed.Id is null)
-        {
-            _guidance.ApplyQueryFailed();
-        }
-        else if (failed.Id != FinalisedSessionId)
+        if (failed.Id is not null && failed.Id != FinalisedSessionId)
         {
             _status.Log($"guidance for another session dropped: {failed.Id}");
             return;
+        }
+
+        if (failed.Id is null)
+        {
+            _guidance.ApplyQueryFailed();
         }
         else
         {
@@ -245,7 +241,7 @@ public sealed class SessionReview
         }
 
         _note.TranslationText = "";
-        await EngineStep.TryAsync(_status, "patient/translate", () => _engine.TranslatePatientAsync(id, language))
+        await EngineCall.TryAsync(_status, "patient/translate", () => _engine.TranslatePatientAsync(id, language))
             .ConfigureAwait(true);
     }
 
@@ -270,7 +266,7 @@ public sealed class SessionReview
         }
 
         await SaveNoteAsync().ConfigureAwait(true);
-        var accepted = await EngineStep.TryAsync(_status, "patient/regenerate", () => _engine.RegeneratePatientAsync())
+        var accepted = await EngineCall.TryAsync(_status, "patient/regenerate", () => _engine.RegeneratePatientAsync())
             .ConfigureAwait(true);
         if (accepted)
         {
@@ -287,14 +283,12 @@ public sealed class SessionReview
             return;
         }
 
-        var accepted = await EngineStep.TryAsync(_status, "note/regenerate",
+        var accepted = await EngineCall.TryAsync(_status, "note/regenerate",
             () => _engine.RegenerateNoteAsync(_note.Style, _note.Detail)).ConfigureAwait(true);
         if (accepted)
         {
             _originalNote = null;  // the rewrite replaces whatever showed
-            Regenerating = true;
-            _note.BeginRegenerate();
-            _guidance.NoteStarted();
+            NoteRewriteStarted();
         }
     }
 
@@ -306,15 +300,20 @@ public sealed class SessionReview
             return;
         }
 
-        var accepted = await EngineStep.TryAsync(_status, "note/regenerate",
+        var accepted = await EngineCall.TryAsync(_status, "note/regenerate",
             () => _engine.RegenerateNoteAsync(_note.Style, _note.Detail, confirmed: true)).ConfigureAwait(true);
         if (accepted)
         {
-            Regenerating = true;
-            _note.BeginRegenerate();
-            _guidance.NoteStarted();
+            NoteRewriteStarted();
             _recorder.EnterReview();  // insisted: the transcript and note are worth showing
         }
+    }
+
+    private void NoteRewriteStarted()
+    {
+        Regenerating = true;
+        _note.BeginRegenerate();
+        _guidance.NoteStarted();
     }
 
     // An unchanged note is not saved: every write counts as an edit in the
@@ -329,7 +328,7 @@ public sealed class SessionReview
             return;
         }
 
-        var saved = await EngineStep.TryAsync(_status, "note/update", () => _engine.UpdateNoteAsync(id, text))
+        var saved = await EngineCall.TryAsync(_status, "note/update", () => _engine.UpdateNoteAsync(id, text))
             .ConfigureAwait(true);
         if (saved && id == FinalisedSessionId)
         {
@@ -348,7 +347,7 @@ public sealed class SessionReview
             return;
         }
 
-        var saved = await EngineStep.TryAsync(_status, "patient/update",
+        var saved = await EngineCall.TryAsync(_status, "patient/update",
             () => _engine.UpdatePatientAsync(id, _note.PatientInfoText)).ConfigureAwait(true);
         if (saved)
         {
@@ -362,9 +361,6 @@ public sealed class SessionReview
     /// the same panes, and regenerate, translate and save act on it. Refused
     /// while recording. Unsaved edits to the previous review are saved first.
     /// </summary>
-    /// <summary>True while the review is a stored session rather than the one just recorded.</summary>
-    public bool StoredOpen { get; private set; }
-
     public async Task<bool> OpenStoredSessionAsync(string id, string startedLabel = "",
         string startedAt = "", bool hasReflection = false, bool demo = false)
     {
@@ -375,7 +371,7 @@ public sealed class SessionReview
 
         var open = ++_open;
         await AutosaveReviewAsync().ConfigureAwait(true);
-        if (!await EngineStep.TryAsync(_status, "session/open", () => _engine.OpenSessionAsync(id)).ConfigureAwait(true)
+        if (!await EngineCall.TryAsync(_status, "session/open", () => _engine.OpenSessionAsync(id)).ConfigureAwait(true)
             || open != _open)
         {
             return false;
@@ -386,16 +382,14 @@ public sealed class SessionReview
         FinalisedSessionId = id;
         _finalisedStartedAt = startedAt;
         Regenerating = false;
-        _note.Reset();
-        _guidance.Reset();
-        _pageView.Hide();
+        _recorder.ClearPanes();
         _note.ReflectAvailable = true;  // stored, so it will still be there
         _note.HasReflection = hasReflection;
         await _recorder.LoadFinalTranscriptAsync(id).ConfigureAwait(true);
 
-        var note = await EngineStep.TryAsync(_status, "session/note", () => _engine.StoredNoteAsync(id))
+        var note = await EngineCall.TryAsync(_status, "session/note", () => _engine.StoredNoteAsync(id))
             .ConfigureAwait(true);
-        var patient = await EngineStep.TryAsync(_status, "session/patient", () => _engine.StoredPatientAsync(id))
+        var patient = await EngineCall.TryAsync(_status, "session/patient", () => _engine.StoredPatientAsync(id))
             .ConfigureAwait(true);
         if (open != _open)
         {
@@ -418,7 +412,7 @@ public sealed class SessionReview
         // What this note was shown, without a model. Nothing to read for an empty note
         if (_note.ClinicalNoteText.Length > 0)
         {
-            var stored = await EngineStep.TryAsync(_status, "session/guidance", () => _engine.StoredGuidanceAsync(id))
+            var stored = await EngineCall.TryAsync(_status, "session/guidance", () => _engine.StoredGuidanceAsync(id))
                 .ConfigureAwait(true);
             if (open != _open)
             {
@@ -450,10 +444,8 @@ public sealed class SessionReview
 
         _open++;
         await AutosaveReviewAsync().ConfigureAwait(true);
-        await EngineStep.TryAsync(_status, "session/close", () => _engine.CloseSessionAsync()).ConfigureAwait(true);
-        _note.Reset();
-        _guidance.Reset();
-        _pageView.Hide();
+        await EngineCall.TryAsync(_status, "session/close", () => _engine.CloseSessionAsync()).ConfigureAwait(true);
+        _recorder.ClearPanes();
         _transcript.Clear();
         Regenerating = false;
         StoredOpen = false;
@@ -475,11 +467,7 @@ public sealed class SessionReview
         }
 
         DropExample();
-        if (_note.ClinicalNoteText != LoadedNote)
-        {
-            await SaveNoteAsync().ConfigureAwait(true);
-        }
-
+        await SaveNoteAsync().ConfigureAwait(true);
         if (_note.PatientInfoText != LoadedPatient)
         {
             await SavePatientAsync().ConfigureAwait(true);

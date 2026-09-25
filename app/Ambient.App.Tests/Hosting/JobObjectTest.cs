@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Ambient.App.Core.Hosting;
 using Ambient.App.Platform;
 
 namespace Ambient.App.Tests.Hosting;

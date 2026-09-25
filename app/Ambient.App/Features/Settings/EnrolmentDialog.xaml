@@ -18,7 +18,7 @@
                    Text="Read it aloud in your normal voice, as you would speak to a patient. Only a voiceprint is kept; the recording is not saved." />
 
         <!-- The passage, set larger than body text so it reads from a normal sitting distance -->
-        <Border Style="{StaticResource SettingsCard}" Padding="20,16">
+        <Border Style="{StaticResource InnerCardSurface}" Padding="20,16">
             <TextBlock
                 Style="{ThemeResource BodyLargeTextBlockStyle}"
                 TextWrapping="Wrap"
@@ -26,7 +26,7 @@
         </Border>
 
         <!-- The ring breathes with the microphone while it listens -->
-        <Grid Height="112" HorizontalAlignment="Center">
+        <Grid Height="104" HorizontalAlignment="Center">
             <controls:LevelRing Diameter="64" Level="{x:Bind ViewModel.Level, Mode=OneWay}" />
             <Border
                 Width="64"

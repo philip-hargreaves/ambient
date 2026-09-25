@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Ambient.App.Core.Common;
 
 namespace Ambient.App.Core.Features.Demo;
 
@@ -9,8 +10,8 @@ public sealed record DemoTrack(string Name, string Path)
 
     private static string Label(string name, string path)
     {
-        var seconds = (int)Math.Round(DemoTracks.DurationSeconds(path));
-        return seconds <= 0 ? name : $"{name} ({seconds / 60}:{seconds % 60:00})";
+        var seconds = DemoTracks.DurationSeconds(path);
+        return Math.Round(seconds) <= 0 ? name : $"{name} ({Words.Clock(seconds)})";
     }
 }
 
@@ -67,9 +68,7 @@ public static class DemoTracks
         }
     }
 
-    /// <summary>
-    /// Duration of a 16 kHz mono wav, from its header alone. 0 when unreadable.
-    /// </summary>
+    /// <summary>Duration of a 16 kHz mono wav, from its header alone. 0 when unreadable.</summary>
     public static double DurationSeconds(string path)
     {
         try

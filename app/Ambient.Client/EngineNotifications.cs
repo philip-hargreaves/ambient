@@ -83,7 +83,7 @@ public static class EngineNotifications
 {
     /// <summary>
     /// The record for a wire notification, or null for a method the shell does not know or a
-    /// payload it cannot read. An event with no payload still counts where nothing is needed.
+    /// payload it cannot read. Events whose fields are all optional fall back to an empty record.
     /// </summary>
     public static EngineNotification? Parse(string method, JsonElement parameters) => method switch
     {

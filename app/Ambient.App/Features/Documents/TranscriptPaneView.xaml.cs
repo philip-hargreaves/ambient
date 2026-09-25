@@ -11,28 +11,21 @@ public sealed partial class TranscriptPaneView : UserControl
     {
         ViewModel = viewModel;
         InitializeComponent();
-        // Presentation only: keep the newest turn in view
         viewModel.Turns.CollectionChanged += OnTurnsChanged;
-        // Realised items keep old brushes. A theme change or re-attach after an
-        // off-tree change re-realises the list
-        SpeakerPalette.Theme = ActualTheme;
-        ActualThemeChanged += (_, _) => RefreshStripes();
-        Loaded += (_, _) => RefreshStripes();
-    }
-
-    private void RefreshStripes()
-    {
-        if (SpeakerPalette.Theme == ActualTheme)
-        {
-            return;
-        }
-
-        SpeakerPalette.Theme = ActualTheme;
-        TurnList.ItemsSource = null;
-        TurnList.ItemsSource = ViewModel.Turns;
     }
 
     public TranscriptViewModel ViewModel { get; }
+
+    /// <summary>
+    /// Beside the note the turns stop where the note column does and scroll past it, so the
+    /// columns end together. Infinity lifts the cap when the pane has the area to itself.
+    /// </summary>
+    public void CapHeight(double maxHeight)
+    {
+        var capped = !double.IsPositiveInfinity(maxHeight);
+        TurnList.MaxHeight = capped ? Math.Max(160, maxHeight) : double.PositiveInfinity;
+        TurnList.VerticalAlignment = capped ? VerticalAlignment.Top : VerticalAlignment.Stretch;
+    }
 
     /// <summary>Without the heading and its padding, for a host whose tab names the pane.</summary>
     public void ShowHeading(bool shown)
@@ -41,6 +34,7 @@ public sealed partial class TranscriptPaneView : UserControl
         Root.Padding = shown ? new Thickness(16, 12, 16, 8) : new Thickness(0);
     }
 
+    // Keeps the newest turn in view
     private void OnTurnsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (ViewModel.Turns.Count > 0)

@@ -45,4 +45,19 @@ public static class EnginePath
         throw new FileNotFoundException(
             $"{exe} not found, build it with: cmake --workflow --preset release");
     }
+
+    /// <summary>The staged models folder above the test output, null when none is staged.</summary>
+    public static string? FindModels()
+    {
+        for (var dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))
+        {
+            var models = Path.Combine(dir, "models");
+            if (Directory.Exists(models))
+            {
+                return models;
+            }
+        }
+
+        return null;
+    }
 }

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Hosting;
@@ -21,11 +20,6 @@ namespace Ambient.App.Tests.Features.Consultation;
 public class ReplaySessionTest
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
-
-    private sealed class FakeSession : ISessionState
-    {
-        public bool ConsultationActive { get; set; }
-    }
 
     [Fact]
     public async Task PlayAfterIdleReplaysAndFinalises()
@@ -441,39 +435,7 @@ public class ReplaySessionTest
         Assert.True(crashes == 0, $"{crashes}/6 accelerated session starts crashed the engine");
     }
 
-    private static string? FindModels()
-    {
-        for (var dir = AppContext.BaseDirectory; dir is not null; dir = Path.GetDirectoryName(dir))
-        {
-            var models = Path.Combine(dir, "models");
-            if (Directory.Exists(models))
-            {
-                return models;
-            }
-        }
-
-        return null;
-    }
+    private static string? FindModels() => EnginePath.FindModels();
 
     private static string FindEngine() => EnginePath.Find();
-
-    private static async Task<JsonElement> RetryAsync(Func<Task<JsonElement>> request)
-    {
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                return await request();
-            }
-            catch (IOException e) when (attempt < 600)  // model init takes seconds
-            {
-                if (attempt == 599)
-                {
-                    throw new IOException($"gave up: {e}", e);
-                }
-
-                await Task.Delay(50);
-            }
-        }
-    }
 }

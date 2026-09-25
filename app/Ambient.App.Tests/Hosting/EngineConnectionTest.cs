@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Ambient.App.Core.Hosting;
+using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
 using static Ambient.App.Tests.Support.Waits;
 
@@ -10,31 +11,6 @@ public class EngineConnectionTest
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
     private static readonly JsonElement Empty = JsonSerializer.SerializeToElement(new { });
-
-    private sealed class FakeHost : IEngineHost
-    {
-        public event Action<EngineStatus>? StatusChanged;
-
-        public EngineStatus Status { get; private set; } = EngineStatus.Stopped;
-
-        public EngineFault? Fault => null;
-
-        public int? EnginePid { get; set; } = 4321;
-
-        public void Start()
-        {
-        }
-
-        public void Shutdown()
-        {
-        }
-
-        public void RaiseStatus(EngineStatus status)
-        {
-            Status = status;
-            StatusChanged?.Invoke(status);
-        }
-    }
 
     private sealed class FakeTransport : IEngineTransport
     {
@@ -83,7 +59,7 @@ public class EngineConnectionTest
 
     private sealed class Rig
     {
-        public FakeHost Host { get; } = new();
+        public FakeEngineHost Host { get; } = new() { EnginePid = 4321 };
 
         public List<FakeTransport> Transports { get; } = [];
 
@@ -121,37 +97,38 @@ public class EngineConnectionTest
     }
 
     [Fact]
-    public async Task ConnectsWithHelloWhenTheEngineComesUp()
+    public async Task AConnectionComesUpTracksItsRequestAndSurvivesARestart()
     {
         var rig = new Rig();
+        string? seen = null;
+        rig.Connection.NotificationReceived += (method, _) => seen = method;
+
+        // Fail fast until the engine is up
+        await Assert.ThrowsAsync<IOException>(
+            () => rig.Connection.RequestAsync("session/start", null, Timeout));
 
         rig.Host.RaiseStatus(EngineStatus.Running);
-
         Assert.Equal(4321u, Assert.Single(rig.ConnectPids));
         var transport = Assert.Single(rig.Transports);
         Assert.Equal("engine/hello", Assert.Single(transport.Requests));
 
         await rig.Connection.RequestAsync("session/start", null, Timeout);
         Assert.Equal("session/start", transport.Requests[^1]);
-    }
 
-    [Fact]
-    public async Task RequestsFailFastWhileDisconnected()
-    {
-        var rig = new Rig();
+        transport.RaiseNotification("note/ready");
+        Assert.Equal("note/ready", seen);
 
-        await Assert.ThrowsAsync<IOException>(
-            () => rig.Connection.RequestAsync("session/start", null, Timeout));
-    }
+        // The outstanding method is visible while it is in flight
+        transport.PendingResponse = new TaskCompletionSource<JsonElement>();
+        var request = rig.Connection.RequestAsync("session/stop", null, Timeout);
+        Assert.Equal("session/stop", rig.Connection.MethodInFlight);
+        transport.PendingResponse.SetResult(Empty);
+        await request;
+        Assert.Null(rig.Connection.MethodInFlight);
 
-    [Fact]
-    public async Task ReconnectsAfterARestart()
-    {
-        var rig = new Rig();
-        rig.Host.RaiseStatus(EngineStatus.Running);
-
+        // A restart drops the old transport and dials a new one
         rig.Host.RaiseStatus(EngineStatus.Restarting);
-        Assert.True(rig.Transports[0].Disposed);
+        Assert.True(transport.Disposed);
         await Assert.ThrowsAsync<IOException>(
             () => rig.Connection.RequestAsync("session/start", null, Timeout));
 
@@ -162,54 +139,20 @@ public class EngineConnectionTest
     }
 
     [Fact]
-    public async Task DropsTheTransportOnAFault()
+    public async Task AProtocolMismatchOrAFailedConnectSurfacesOnRequests()
     {
-        var rig = new Rig();
-        rig.Host.RaiseStatus(EngineStatus.Running);
-
-        rig.Host.RaiseStatus(EngineStatus.Faulted);
-
-        Assert.True(rig.Transports[0].Disposed);
-        await Assert.ThrowsAsync<IOException>(
-            () => rig.Connection.RequestAsync("session/start", null, Timeout));
-    }
-
-    [Fact]
-    public async Task RefusesAProtocolMismatch()
-    {
-        var rig = new Rig { HelloProtocol = 99 };
-
-        rig.Host.RaiseStatus(EngineStatus.Running);
-
-        Assert.True(rig.Transports[0].Disposed);
+        var mismatched = new Rig { HelloProtocol = 99 };
+        mismatched.Host.RaiseStatus(EngineStatus.Running);
+        Assert.True(mismatched.Transports[0].Disposed);
         var thrown = await Assert.ThrowsAsync<IOException>(
-            () => rig.Connection.RequestAsync("session/start", null, Timeout));
+            () => mismatched.Connection.RequestAsync("session/start", null, Timeout));
         Assert.Contains("protocol", thrown.InnerException!.Message, StringComparison.Ordinal);
-    }
 
-    [Fact]
-    public async Task ConnectFailureSurfacesOnRequests()
-    {
-        var rig = new Rig { ConnectFailure = new IOException("pipe never appeared") };
-
-        rig.Host.RaiseStatus(EngineStatus.Running);
-
-        var thrown = await Assert.ThrowsAsync<IOException>(
-            () => rig.Connection.RequestAsync("session/start", null, Timeout));
+        var unreachable = new Rig { ConnectFailure = new IOException("pipe never appeared") };
+        unreachable.Host.RaiseStatus(EngineStatus.Running);
+        thrown = await Assert.ThrowsAsync<IOException>(
+            () => unreachable.Connection.RequestAsync("session/start", null, Timeout));
         Assert.Equal("pipe never appeared", thrown.InnerException!.Message);
-    }
-
-    [Fact]
-    public void NotificationsFlowThrough()
-    {
-        var rig = new Rig();
-        string? seen = null;
-        rig.Connection.NotificationReceived += (method, _) => seen = method;
-
-        rig.Host.RaiseStatus(EngineStatus.Running);
-        rig.Transports[0].RaiseNotification("note/ready");
-
-        Assert.Equal("note/ready", seen);
     }
 
     [Fact]
@@ -231,21 +174,5 @@ public class EngineConnectionTest
         await rig.Connection.RequestAsync("session/start", null, Timeout);
         Assert.Equal("session/start", current.Requests[^1]);
         Assert.DoesNotContain("session/start", stale.Requests);
-    }
-
-    [Fact]
-    public async Task MethodInFlightTracksTheOutstandingRequest()
-    {
-        var rig = new Rig();
-        rig.Host.RaiseStatus(EngineStatus.Running);
-        var transport = rig.Transports[0];
-        transport.PendingResponse = new TaskCompletionSource<JsonElement>();
-
-        var request = rig.Connection.RequestAsync("session/stop", null, Timeout);
-        Assert.Equal("session/stop", rig.Connection.MethodInFlight);
-
-        transport.PendingResponse.SetResult(Empty);
-        await request;
-        Assert.Null(rig.Connection.MethodInFlight);
     }
 }

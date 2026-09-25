@@ -14,17 +14,36 @@
         <controls:PageHeader Title="Consultation">
             <controls:PageHeader.Centre>
                 <!-- Replay controls, a developer tool, on the page's centre line -->
-                <ContentControl x:Name="DemoTrayHost" Visibility="Collapsed" />
+                <ContentControl x:Name="DemoTrayHost" Visibility="{x:Bind DemoTray.Visible, Mode=OneWay}" />
             </controls:PageHeader.Centre>
             <controls:PageHeader.Commands>
                 <StackPanel Orientation="Horizontal" Spacing="8">
+                    <!-- The microphone is checked once, so it sits with the page's commands -->
+                    <DropDownButton
+                        AutomationProperties.Name="{x:Bind Mic.Label, Mode=OneWay}"
+                        IsEnabled="{x:Bind Controls.MicPickerEnabled, Mode=OneWay}"
+                        Style="{StaticResource TrayButton}"
+                        ToolTipService.ToolTip="{x:Bind Controls.MicTip, Mode=OneWay}"
+                        Visibility="{x:Bind Controls.MicPickerVisible, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="14" Glyph="&#xE720;" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource MutedTextBrush}"
+                                Text="{x:Bind Mic.Label, Mode=OneWay}" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout
+                                x:Name="MicFlyout"
+                                Opening="OnMicFlyoutOpening"
+                                Placement="BottomEdgeAlignedRight" />
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <Button
+                        AutomationProperties.Name="New consultation"
                         Command="{x:Bind Controls.NewConsultationCommand}"
                         Visibility="{x:Bind Controls.ReviewVisible, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="14" Glyph="&#xE710;" />
-                            <TextBlock Text="New consultation" />
-                        </StackPanel>
+                        <controls:IconLabel Glyph="&#xE710;" Text="New consultation" />
                     </Button>
                 </StackPanel>
             </controls:PageHeader.Commands>
@@ -33,57 +52,57 @@
         <!-- One region, two occupants: the record control while idle or
              recording, the documents from the stop onward -->
         <Grid Grid.Row="1" Margin="24,0,24,16">
-            <!-- The record control with the microphone as its caption -->
-            <StackPanel
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Spacing="4"
-                Visibility="{x:Bind Controls.CentreStageVisible, Mode=OneWay}">
-                <ContentControl x:Name="ControlsHost" HorizontalAlignment="Center" />
-                <DropDownButton
+            <!-- The record control at the optical centre, two fifths down, with the
+                 standing reminder under it -->
+            <Grid Visibility="{x:Bind Controls.CentreStageVisible, Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="2*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="3*" />
+                </Grid.RowDefinitions>
+                <StackPanel
+                    Grid.Row="1"
+                    MaxWidth="560"
                     HorizontalAlignment="Center"
-                    x:Name="MicPicker"
-                    IsEnabled="{x:Bind Controls.MicPickerEnabled, Mode=OneWay}"
-                    Style="{StaticResource TrayButton}"
-                    ToolTipService.ToolTip="{x:Bind Controls.MicTip, Mode=OneWay}"
-                    Visibility="{x:Bind Controls.MicPickerVisible, Mode=OneWay}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="14" Glyph="&#xE720;" />
-                        <TextBlock VerticalAlignment="Center"
-                                   Foreground="{ThemeResource MutedTextBrush}"
-                                   Text="{x:Bind Mic.Label, Mode=OneWay}" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <MenuFlyout x:Name="MicFlyout" Placement="BottomEdgeAlignedLeft" />
-                    </DropDownButton.Flyout>
-                </DropDownButton>
-            </StackPanel>
-            <Grid ColumnSpacing="20" Visibility="{x:Bind Controls.PanesVisible, Mode=OneWay}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="TranscriptColumn" Width="1.15*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition x:Name="PageColumn" Width="0" />
-                </Grid.ColumnDefinitions>
+                    Spacing="20">
+                    <ContentControl x:Name="ControlsHost" HorizontalAlignment="Center" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource MutedTextBrush}"
+                        Style="{StaticResource BodyText}"
+                        Text="Ensure patient consent is given before starting to record the consultation."
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind Controls.IdleVisible, Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
+            <!-- The same review as Sessions, from the moment the note streams. The top
+                 margin is the height of the inbox's search row, so the title sits where
+                 it does there -->
+            <Grid
+                Margin="0,44,0,0"
+                RowSpacing="20"
+                Visibility="{x:Bind Controls.PanesVisible, Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
                 <Grid.ChildrenTransitions>
                     <TransitionCollection>
                         <EntranceThemeTransition FromVerticalOffset="16" />
                     </TransitionCollection>
                 </Grid.ChildrenTransitions>
-                <!-- No pane containers: the content items are the cards,
-                     floating on the layer the way the turns do -->
+                <!-- The start time, at the inbox title's size and weight -->
+                <TextBlock
+                    MaxWidth="1480"
+                    Padding="0,4"
+                    HorizontalAlignment="Stretch"
+                    FontSize="{StaticResource SubtitleTextBlockFontSize}"
+                    FontWeight="SemiBold"
+                    Text="{x:Bind Header.Title, Mode=OneWay}" />
                 <ContentControl
-                    x:Name="TranscriptHost"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch" />
-                <ContentControl
-                    x:Name="NoteHost"
-                    Grid.Column="1"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch" />
-                <!-- The page view takes the transcript's place while it is open -->
-                <ContentControl
-                    x:Name="PageHost"
-                    Grid.Column="2"
+                    x:Name="SurfaceHost"
+                    Grid.Row="1"
                     HorizontalContentAlignment="Stretch"
                     VerticalContentAlignment="Stretch" />
             </Grid>

@@ -1,5 +1,4 @@
 using Ambient.App.Core.Features.Settings;
-using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
@@ -8,24 +7,42 @@ namespace Ambient.App.Tests.Features.Settings;
 
 public class VoiceViewModelTest
 {
-    private sealed class FakeSession : ISessionState
-    {
-        public bool ConsultationActive { get; set; }
-    }
-
     [Fact]
-    public async Task TheHeadlineNamesEachStateOfThePrint()
+    public async Task SettingUpRunsTheDialogRereadsTheEngineAndTheHeadlineNamesEachStateOfThePrint()
     {
         var engine = new FakeEngineClient();
-        var voice = new VoiceViewModel(new EngineApi(engine), new FakeDialogService());
+        var status = new StatusBarViewModel();
+        var dialogs = new FakeDialogService
+        {
+            OnEnrolment = () =>
+            {
+                engine.AnchorOrigin = "enrolled";  // what the dialog's enrolment did
+                engine.AnchorEnrolledAt = new DateTimeOffset(2026, 9, 4, 14, 2, 0, TimeSpan.Zero)
+                    .ToUnixTimeSeconds();
+            },
+        };
+        var voice = new VoiceViewModel(new EngineApi(engine), dialogs, new FakeSession(), status);
 
         await voice.RefreshAsync();
         Assert.False(voice.HasVoice);
         Assert.StartsWith("Tells you apart", voice.Headline);
         Assert.EndsWith("or set up now.", voice.Headline);
         Assert.Equal("Set up", voice.SetUpLabel);
+        Assert.True(voice.SetUpVoiceCommand.CanExecute(null));
+
+        await voice.SetUpVoiceCommand.ExecuteAsync(null);
+
+        Assert.Equal("enrolled", voice.Origin);
+        Assert.StartsWith("Set up on 4 Sep", voice.Headline);
+        Assert.Contains("enrolment complete", status.LatestActivity);
+        Assert.False(voice.Busy);
+
+        engine.AnchorSessions = 1;
+        await voice.RefreshAsync();
+        Assert.EndsWith("refined automatically by 1 consultation since", voice.Headline);
 
         engine.AnchorOrigin = "accrued";
+        engine.AnchorEnrolledAt = null;
         engine.AnchorSessions = 3;
         await voice.RefreshAsync();
         Assert.Equal("Learning automatically, 3 consultations so far", voice.Headline);
@@ -34,17 +51,6 @@ public class VoiceViewModelTest
         await voice.RefreshAsync();
         Assert.Equal("Learned automatically from 12 consultations", voice.Headline);
         Assert.Equal("Redo", voice.SetUpLabel);
-
-        engine.AnchorOrigin = "enrolled";
-        engine.AnchorSessions = 0;
-        engine.AnchorEnrolledAt = new DateTimeOffset(2026, 9, 4, 14, 2, 0, TimeSpan.Zero)
-            .ToUnixTimeSeconds();
-        await voice.RefreshAsync();
-        Assert.StartsWith("Set up on 4 Sep", voice.Headline);
-
-        engine.AnchorSessions = 1;
-        await voice.RefreshAsync();
-        Assert.EndsWith("refined automatically by 1 consultation since", voice.Headline);
     }
 
     [Fact]
@@ -84,29 +90,5 @@ public class VoiceViewModelTest
         Assert.DoesNotContain(engine.Requests, r => r.Method == "anchor/clear");
         Assert.True(voice.HasVoice);
         Assert.Contains("finish the consultation", status.LatestActivity);
-    }
-
-    [Fact]
-    public async Task SettingUpRunsTheDialogThenRereadsTheEngine()
-    {
-        var engine = new FakeEngineClient();
-        var status = new StatusBarViewModel();
-        var dialogs = new FakeDialogService
-        {
-            OnEnrolment = () =>
-            {
-                engine.AnchorOrigin = "enrolled";  // what the dialog's enrolment did
-                engine.AnchorEnrolledAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            },
-        };
-        var voice = new VoiceViewModel(new EngineApi(engine), dialogs, new FakeSession(), status);
-        await voice.RefreshAsync();
-        Assert.True(voice.SetUpVoiceCommand.CanExecute(null));
-        await voice.SetUpVoiceCommand.ExecuteAsync(null);
-
-        Assert.Equal("enrolled", voice.Origin);
-        Assert.StartsWith("Set up on", voice.Headline);
-        Assert.Contains("enrolment complete", status.LatestActivity);
-        Assert.False(voice.Busy);
     }
 }

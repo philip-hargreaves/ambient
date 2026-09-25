@@ -17,6 +17,5 @@
     <Color x:Key="StatusSecureSoft">#FFE8F4EC</Color>
     <Color x:Key="StatusSecureBorder">#FFCFE6D8</Color>
     <Color x:Key="StatusCaution">#FFB54708</Color>
-    <Color x:Key="StatusCautionSoft">#FFFDF1E7</Color>
 
 </ResourceDictionary>

@@ -8,9 +8,3 @@ public sealed record MachineInfo(
     string Os,
     IReadOnlyList<GpuInfo> Gpus,
     GpuInfo? Npu);
-
-/// <summary>Hardware identity for the performance report, queried once.</summary>
-public interface IMachineInfoProvider
-{
-    MachineInfo Describe();
-}

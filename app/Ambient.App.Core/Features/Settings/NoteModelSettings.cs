@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Common;
+using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
@@ -55,9 +56,6 @@ public sealed partial class NoteModelSettings : ObservableObject
     public string NoteModelCaption =>
         string.IsNullOrEmpty(NoteModelStatus) ? "Larger models are more accurate and use more memory." : NoteModelStatus;
 
-    /// <summary>The tier the shell wants. The engine's store resolves it.</summary>
-    public string NoteTier => _noteTier;
-
     /// <summary>The engine connected: the options come from its store.</summary>
     public void Connected() => _ = LoadNoteModelsAsync();
 
@@ -65,33 +63,25 @@ public sealed partial class NoteModelSettings : ObservableObject
     public void Apply(NoteModelState model) =>
         ApplyNoteModel(model.State, model.Tier, model.FirstUse, model.Detail ?? "");
 
-    private static int LadderRank(string tier) => tier switch
-    {
-        "constrained" => 0,
-        "default" => 1,
-        "accuracy" => 2,
-        _ => 3,
-    };
-
     private async Task LoadNoteModelsAsync()
     {
-        if (_client is null || !_client.Connected)
+        if (!_client.IsConnected())
         {
             return;
         }
 
-        try
+        await EngineCall.LogAsync(_status, "engine/models", async () =>
         {
+            var ladder = AppPreferences.NoteTiers.ToList();
             var models = await _client.ListModelsAsync().ConfigureAwait(true);
             var staged = models
-                .Where(m => m.Task == "note")
+                .Where(m => m.Task == "note" && ladder.Contains(m.Tier))
                 .Select(m => (
                     m.Tier,
                     Name: string.IsNullOrWhiteSpace(m.Name)
-                        ? StatusBarViewModel.FriendlyModelName(m.Id)
+                        ? ModelNames.Friendly(m.Id)
                         : m.Name))
-                .Where(m => AppPreferences.NoteTiers.Contains(m.Tier))
-                .OrderBy(m => LadderRank(m.Tier))
+                .OrderBy(m => ladder.IndexOf(m.Tier))
                 .ToList();
 
             _populating = true;
@@ -123,14 +113,9 @@ public sealed partial class NoteModelSettings : ObservableObject
             }
 
             NoteModelIndex = _tiers.IndexOf(_noteTier);
-            _populating = false;
             NoteModelEnabled = _tiers.Count > 1;
-        }
-        catch (Exception e)
-        {
-            _populating = false;
-            _status?.Log($"engine/models failed: {e.Message}");
-        }
+        }).ConfigureAwait(true);
+        _populating = false;
     }
 
     private string NameOf(string tier)
@@ -155,9 +140,7 @@ public sealed partial class NoteModelSettings : ObservableObject
         // The switch ends the resident model. A consultation needs it
         if (_session?.ConsultationActive == true)
         {
-            _reverting = true;
-            NoteModelIndex = _tiers.IndexOf(_noteTier);
-            _reverting = false;
+            Reselect(_noteTier);
             _status?.Append("finish the consultation before changing the note model");
             return;
         }
@@ -171,14 +154,15 @@ public sealed partial class NoteModelSettings : ObservableObject
         _ = SendTierAsync(tier);
     }
 
-    private void PersistTier()
+    // Moves the control's selection without treating it as a switch
+    private void Reselect(string tier)
     {
-        if (_preferences is not null)
-        {
-            _preferences.NoteTier = _noteTier;
-            _preferences.Save();
-        }
+        _reverting = true;
+        NoteModelIndex = _tiers.IndexOf(tier);
+        _reverting = false;
     }
+
+    private void PersistTier() => _preferences.Update(p => p.NoteTier = _noteTier);
 
     private async Task SendTierAsync(string tier)
     {
@@ -218,9 +202,7 @@ public sealed partial class NoteModelSettings : ObservableObject
 
         _noteTier = back;
         PersistTier();
-        _reverting = true;
-        NoteModelIndex = _tiers.IndexOf(back);
-        _reverting = false;
+        Reselect(back);
         _ = SendTierAsync(back);
     }
 
@@ -249,9 +231,7 @@ public sealed partial class NoteModelSettings : ObservableObject
                 {
                     _noteTier = tier;
                     PersistTier();
-                    _reverting = true;
-                    NoteModelIndex = _tiers.IndexOf(tier);
-                    _reverting = false;
+                    Reselect(tier);
                 }
 
                 break;

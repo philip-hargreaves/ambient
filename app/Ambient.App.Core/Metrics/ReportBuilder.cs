@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Ambient.App.Core.Common;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Metrics;
 
@@ -33,7 +35,7 @@ public static class ReportBuilder
         double? PeakGb)
     {
         public bool RealTime => Speed is null || Speed <= 1.0;
-        public bool Short => Number(Source, "engine", "audioSeconds") is { } s && s < MinAudioSeconds;
+        public bool Short => Source.Number("engine", "audioSeconds") is { } s && s < MinAudioSeconds;
     }
 
     public static string Build(MachineInfo machine, IReadOnlyList<string> jsonlLines,
@@ -105,29 +107,30 @@ public static class ReportBuilder
 
     private static Consultation ToRow(JsonElement s)
     {
-        var transcript = Number(s, "engine", "stageSeconds", "transcript sealed");
-        var first = Number(s, "note", "firstPartialAfterStopSeconds");
-        var ready = Number(s, "note", "readyAfterStopSeconds");
-        var patient = Number(s, "patient", "readyAfterNoteSeconds");
-        var device = Text(s, "engine", "devices", "asr") ?? "";
+        var transcript = s.Number("engine", "stageSeconds", "transcript sealed");
+        var first = s.Number("note", "firstPartialAfterStopSeconds");
+        var ready = s.Number("note", "readyAfterStopSeconds");
+        var patient = s.Number("patient", "readyAfterNoteSeconds");
+        var device = s.Text("engine", "devices", "asr") ?? "";
         var dot = device.IndexOf('.');
+        var start = s.Text("start") ?? "";
         return new Consultation(
             s,
-            Text(s, "start")?[..Math.Min(16, Text(s, "start")!.Length)].Replace('T', ' ') ?? "",
-            Text(s, "track") ?? "Microphone",
-            Clock(Number(s, "engine", "audioSeconds")),
+            start[..Math.Min(16, start.Length)].Replace('T', ' '),
+            s.Text("track") ?? "Microphone",
+            Clock(s.Number("engine", "audioSeconds")),
             dot > 0 ? device[..dot] : device,
-            Text(s, "note", "model") ?? "Note model not recorded",
-            Number(s, "replaySpeed"),
+            s.Text("note", "model") ?? "Note model not recorded",
+            s.Number("replaySpeed"),
             transcript,
             Delta(transcript, first),
             Delta(first, ready),
             ready,
             patient,
             ready is null || patient is null ? null : ready + patient,
-            Number(s, "note", "tokensPerSecond"),
-            Number(s, "note", "modelLoadSeconds"),
-            Number(s, "memory", "noteHostPeakWorkingSetMb") is { } mb ? Math.Round(mb / 1024, 1) : null);
+            s.Number("note", "tokensPerSecond"),
+            s.Number("note", "modelLoadSeconds"),
+            s.Number("memory", "noteHostPeakWorkingSetMb") is { } mb ? Math.Round(mb / 1024, 1) : null);
     }
 
     private static void AppendSummary(StringBuilder html, List<Consultation> rows)
@@ -304,7 +307,7 @@ public static class ReportBuilder
         }
 
         var matched = new HashSet<GpuInfo>();
-        var hardware = sessions.Select(s => Find(s, "engine", "hardware"))
+        var hardware = sessions.Select(s => s.Find("engine", "hardware"))
             .LastOrDefault(h => h is { ValueKind: JsonValueKind.Object });
         if (hardware is not null)
         {
@@ -335,7 +338,7 @@ public static class ReportBuilder
                 $"{driver.Name} · driver {driver.Driver}");
         }
 
-        var openvino = sessions.Select(s => Text(s, "engine", "openvino"))
+        var openvino = sessions.Select(s => s.Text("engine", "openvino"))
             .LastOrDefault(v => v is not null);
         if (openvino is not null)
         {
@@ -344,16 +347,16 @@ public static class ReportBuilder
 
         // Power mode and throttling decide the finalise floor. The last
         // session's state stands for the report
-        var power = sessions.Select(s => Find(s, "power"))
+        var power = sessions.Select(s => s.Find("power"))
             .LastOrDefault(p => p is { ValueKind: JsonValueKind.Object });
-        var throttling = sessions.Select(s => Text(s, "engine", "powerThrottling"))
+        var throttling = sessions.Select(s => s.Text("engine", "powerThrottling"))
             .LastOrDefault(v => v is not null);
         if (power is not null || throttling is not null)
         {
             var parts = new List<string>();
             if (power is not null)
             {
-                parts.Add($"{Text(power.Value, "mode") ?? "?"} mode");
+                parts.Add($"{power.Value.Text("mode") ?? "?"} mode");
                 parts.Add(power.Value.TryGetProperty("onMains", out var mains) && mains.GetBoolean()
                     ? "mains" : "battery");
             }
@@ -369,18 +372,19 @@ public static class ReportBuilder
         html.Append("</table>");
     }
 
-    // The driver names every Intel NPU "AI Boost". The architecture code is
-    // the actual model, so translate it to the generation
+    private static readonly Dictionary<string, string> NpuGenerations = new()
+    {
+        ["2700"] = "NPU 2",
+        ["3720"] = "NPU 3",
+        ["4000"] = "NPU 4",
+        ["5000"] = "NPU 5",
+    };
+
+    // The driver names every Intel NPU "AI Boost"; the architecture code is
+    // the actual model, so it is translated to the generation
     private static string NpuGeneration(string name)
     {
-        var known = new Dictionary<string, string>
-        {
-            ["2700"] = "NPU 2",
-            ["3720"] = "NPU 3",
-            ["4000"] = "NPU 4",
-            ["5000"] = "NPU 5",
-        };
-        foreach (var (arch, generation) in known)
+        foreach (var (arch, generation) in NpuGenerations)
         {
             if (name.Contains($"(arch {arch})", StringComparison.Ordinal))
             {
@@ -411,18 +415,9 @@ public static class ReportBuilder
             ? sorted[sorted.Count / 2]
             : (sorted[sorted.Count / 2 - 1] + sorted[sorted.Count / 2]) / 2;
 
-    private static string Plural(int n, string noun) => $"{n} {noun}{(n == 1 ? "" : "s")}";
+    private static string Plural(int n, string noun) => Words.Count(n, noun);
 
-    private static string Clock(double? seconds)
-    {
-        if (seconds is null)
-        {
-            return "-";
-        }
-
-        var whole = (int)Math.Round(seconds.Value);
-        return $"{whole / 60}:{whole % 60:00}";
-    }
+    private static string Clock(double? seconds) => seconds is null ? "-" : Words.Clock(seconds.Value);
 
     private static string Format(double? value) => value is null
         ? "–"
@@ -437,31 +432,4 @@ public static class ReportBuilder
     private static void Cell(StringBuilder html, string? value, string? cls = null) =>
         html.Append(CultureInfo.InvariantCulture,
             $"<td{(cls is null ? "" : $" class=\"{cls}\"")}>{WebUtility.HtmlEncode(value ?? "–")}</td>");
-
-    private static JsonElement? Find(JsonElement root, params string[] path)
-    {
-        JsonElement current = root;
-        foreach (var key in path)
-        {
-            if (current.ValueKind != JsonValueKind.Object
-                || !current.TryGetProperty(key, out current))
-            {
-                return null;
-            }
-        }
-
-        return current;
-    }
-
-    private static double? Number(JsonElement root, params string[] path)
-    {
-        var found = Find(root, path);
-        return found is { ValueKind: JsonValueKind.Number } n ? n.GetDouble() : null;
-    }
-
-    private static string? Text(JsonElement root, params string[] path)
-    {
-        var found = Find(root, path);
-        return found is { ValueKind: JsonValueKind.String } s ? s.GetString() : null;
-    }
 }

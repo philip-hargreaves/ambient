@@ -1,9 +1,10 @@
 using System.ComponentModel;
 using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
+using Windows.Win32.Foundation;
 using Windows.Win32.System.Threading;
-
 using Ambient.App.Core.Hosting;
+using Ambient.App.Core.Ports;
 
 namespace Ambient.App.Platform;
 
@@ -34,8 +35,7 @@ public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
             if (stderr is not null)
             {
                 startup.dwFlags = STARTUPINFOW_FLAGS.STARTF_USESTDHANDLES;
-                startup.hStdError = new global::Windows.Win32.Foundation.HANDLE(
-                    stderr.SafeFileHandle.DangerousGetHandle());
+                startup.hStdError = new HANDLE(stderr.SafeFileHandle.DangerousGetHandle());
             }
 
             if (!PInvoke.CreateProcess(
@@ -76,8 +76,8 @@ public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
         }
     }
 
-    // Appended across launches, rotated once per run. The handle is marked
-    // inheritable for the child
+    // Appended across launches, rotated once per run; the handle must be
+    // inheritable for CreateProcess to pass it on
     private FileStream? OpenStderr()
     {
         if (stderrPath is null)
@@ -97,9 +97,8 @@ public sealed class ProcessEngineLauncher(string exePath, string arguments = "",
             var stream = new FileStream(
                 stderrPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
             PInvoke.SetHandleInformation(
-                stream.SafeFileHandle,
-                (uint)global::Windows.Win32.Foundation.HANDLE_FLAGS.HANDLE_FLAG_INHERIT,
-                global::Windows.Win32.Foundation.HANDLE_FLAGS.HANDLE_FLAG_INHERIT);
+                stream.SafeFileHandle, (uint)HANDLE_FLAGS.HANDLE_FLAG_INHERIT,
+                HANDLE_FLAGS.HANDLE_FLAG_INHERIT);
             return stream;
         }
         catch (IOException)

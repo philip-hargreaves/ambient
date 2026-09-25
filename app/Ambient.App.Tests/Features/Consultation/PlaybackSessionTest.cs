@@ -1,12 +1,9 @@
 using System.Text.Json;
 using Ambient.App.Core.Features.Consultation;
 using Ambient.App.Core.Features.Demo;
-using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Preferences;
-using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
-using Ambient.Client;
 using static Ambient.App.Tests.Support.Wire;
 
 namespace Ambient.App.Tests.Features.Consultation;
@@ -27,14 +24,13 @@ public class PlaybackSessionTest
     private static (ConsultationViewModel Session, FakeEngineClient Engine, DemoMode Demo) DemoSession(
         params (string Name, string Id, double Seconds)[] masters)
     {
-        var engine = new FakeEngineClient(autoNotify: false);
         var demo = new DemoMode(null, MastersFile(masters), []);
-        var session = new ConsultationViewModel(new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(), new StatusBarViewModel(), new FakeDialogService(), TestSession.Page(engine, new StatusBarViewModel()), TestSession.Guidance(new StatusBarViewModel()), demo: demo);
+        var (session, engine, _) = TestSession.Create(demo: demo);
         return (session, engine, demo);
     }
 
     [Fact]
-    public async Task PlaybackWalksTheSameStatesAsARecording()
+    public async Task PlaybackWalksTheSameStatesAsARecordingAndOnlyASeededSampleIsMarkedAsADemo()
     {
         var (session, engine, note) = TestSession.Create();
 
@@ -75,6 +71,14 @@ public class PlaybackSessionTest
         await session.CloseReviewAsync();
         Assert.Equal(SessionState.Idle, session.State);
         Assert.False(session.Status.Demo);
+
+        // A stored review carries the marker only for a seeded sample
+        Assert.True(await session.OpenStoredSessionAsync("s-sample", demo: true));
+        Assert.True(session.Status.Demo);
+        await session.CloseReviewAsync();
+        Assert.False(session.Status.Demo);
+        Assert.True(await session.OpenStoredSessionAsync("s-real"));
+        Assert.False(session.Status.Demo);
     }
 
     [Fact]
@@ -97,58 +101,23 @@ public class PlaybackSessionTest
     }
 
     [Fact]
-    public async Task APlaybackStopsItselfWhenItsClockReachesTheEnd()
+    public async Task CancelClearsThePlaybackAndItsClockStopsItAtTheEnd()
     {
         var (session, engine, _) = TestSession.Create();
         await session.StartPlaybackAsync(Elbow);
 
+        await session.CancelRecordingAsync();
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.Null(session.ActivePlayback);
+        Assert.False(session.Status.Demo);
+
+        await session.StartPlaybackAsync(Elbow);
         engine.RaiseNotification("audio.level", Params(new { level = 0.4, clipped = false, seconds = 271.0 }));
         Assert.DoesNotContain(engine.Requests, r => r.Method == "session/stop");
 
         engine.RaiseNotification("audio.level", Params(new { level = 0.4, clipped = false, seconds = 542.0 }));
         Assert.Contains(engine.Requests, r => r.Method == "session/stop");
         Assert.Equal(SessionState.Finalising, session.State);
-    }
-
-    [Fact]
-    public async Task AMicrophoneReadingStillCountsTenthsOfASecond()
-    {
-        var (session, engine, _) = TestSession.Create();
-        await session.StartRecordingAsync();
-
-        engine.RaiseNotification("audio.level", Params(new { level = 0.4, clipped = false }));
-        engine.RaiseNotification("audio.level", Params(new { level = 0.4, clipped = false }));
-
-        Assert.Equal(0.2, session.AudioSeconds, 6);
-        Assert.False(session.Status.Demo);
-    }
-
-    [Fact]
-    public async Task ASeededSampleUnderReviewIsMarkedAsADemo()
-    {
-        var (session, _, _) = TestSession.Create();
-
-        Assert.True(await session.OpenStoredSessionAsync("s-sample", demo: true));
-        Assert.True(session.Status.Demo);
-
-        await session.CloseReviewAsync();
-        Assert.False(session.Status.Demo);
-
-        Assert.True(await session.OpenStoredSessionAsync("s-real"));
-        Assert.False(session.Status.Demo);
-    }
-
-    [Fact]
-    public async Task CancelClearsThePlayback()
-    {
-        var (session, _, _) = TestSession.Create();
-        await session.StartPlaybackAsync(Elbow);
-
-        await session.CancelRecordingAsync();
-
-        Assert.Equal(SessionState.Idle, session.State);
-        Assert.Null(session.ActivePlayback);
-        Assert.False(session.Status.Demo);
     }
 
     // ---- demo mode: the record button plays the chosen saved run back
@@ -172,7 +141,7 @@ public class PlaybackSessionTest
     }
 
     [Fact]
-    public async Task WithDemoModeOffRecordListensToTheMicrophone()
+    public async Task WithDemoModeOffRecordListensToTheMicrophoneAndCountsTenthsOfASecond()
     {
         var (session, engine, demo) = DemoSession(("Elbow swelling", "s-elbow", 540));
         Assert.False(session.Status.Demo);
@@ -182,6 +151,10 @@ public class PlaybackSessionTest
         var start = engine.Requests.Single(r => r.Method == "session/start");
         Assert.Contains("micId", start.Params);
         Assert.Null(session.ActivePlayback);
+
+        engine.RaiseNotification("audio.level", Params(new { level = 0.4, clipped = false }));
+        engine.RaiseNotification("audio.level", Params(new { level = 0.4, clipped = false }));
+        Assert.Equal(0.2, session.AudioSeconds, 6);
 
         demo.Enabled = true;
         Assert.True(session.Status.Demo, "switching on mid-session lights the badge");

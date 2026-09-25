@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Ambient.Client.Tests;
 
-/// <summary>The fixtures both languages must agree on.</summary>
+/// <summary>The fixtures both languages must agree on, one test per family.</summary>
 public class FixtureTest
 {
     private static JsonDocument LoadFixture(string name)
@@ -19,136 +19,116 @@ public class FixtureTest
     }
 
     [Fact]
-    public void PeerInfoSerializesToHelloRequestParams()
+    public void ProtocolFixturesRoundTripThroughTheClientTypes()
     {
         var serialized = JsonSerializer.SerializeToElement(
             new PeerInfo("ambient-shell", "0.1.0", Protocol.ProtocolVersion),
             Protocol.JsonOptions);
         var expected = LoadFixture("hello-request.json").RootElement.GetProperty("params");
-
         Assert.True(JsonElement.DeepEquals(serialized, expected));
-    }
-
-    [Fact]
-    public void HelloResponseFixtureDeserializesToPeerInfo()
-    {
-        var result = LoadFixture("hello-response.json").RootElement.GetProperty("result");
-        var peer = result.Deserialize<PeerInfo>(Protocol.JsonOptions);
 
         // Against the constants, so drift from the shared fixture fails here
+        var result = LoadFixture("hello-response.json").RootElement.GetProperty("result");
+        var peer = result.Deserialize<PeerInfo>(Protocol.JsonOptions);
         Assert.Equal(
             new PeerInfo(EngineInfo.Name, EngineInfo.Version, Protocol.ProtocolVersion), peer);
-    }
 
-    [Fact]
-    public void EchoFixturePayloadSurvivesRoundTrip()
-    {
-        var fixture = LoadFixture("echo-request-nonascii.json");
-        var payload = fixture.RootElement.GetProperty("params").GetProperty("payload").GetString();
+        var echo = LoadFixture("echo-request-nonascii.json");
+        var payload = echo.RootElement.GetProperty("params").GetProperty("payload").GetString();
         Assert.NotNull(payload);
-
         var reserialized = JsonSerializer.Serialize(new { payload }, Protocol.JsonOptions);
         Assert.Contains("naïve", reserialized, StringComparison.Ordinal);
         Assert.Contains("東京", reserialized, StringComparison.Ordinal);
+
+        var error = LoadFixture("error-method-not-found.json").RootElement.GetProperty("error");
+        Assert.Equal(-32601, error.GetProperty("code").GetInt32());
     }
 
     [Fact]
-    public void AudioLevelFixtureCarriesLevelAndClip()
+    public void SessionFixturesNameTheirMethodAndCarryTheirParams()
     {
-        var root = LoadFixture("audio-level.json").RootElement;
+        var label = LoadFixture("session-label.json").RootElement;
+        Assert.Equal("session/label", label.GetProperty("method").GetString());
+        Assert.Equal("Elbow swelling", label.GetProperty("params").GetProperty("text").GetString());
 
-        Assert.Equal("audio.level", root.GetProperty("method").GetString());
-        Assert.Equal(0.5, root.GetProperty("params").GetProperty("level").GetDouble());
-        Assert.False(root.GetProperty("params").GetProperty("clipped").GetBoolean());
-    }
+        var open = LoadFixture("session-open.json").RootElement;
+        Assert.Equal("session/open", open.GetProperty("method").GetString());
+        Assert.False(string.IsNullOrEmpty(open.GetProperty("params").GetProperty("id").GetString()));
 
-    [Fact]
-    public void PlaybackFixturesNameTheSessionAndCarryTheClock()
-    {
+        var close = LoadFixture("session-close.json").RootElement;
+        Assert.Equal("session/close", close.GetProperty("method").GetString());
+        Assert.Equal(JsonValueKind.Null, close.GetProperty("params").ValueKind);
+
+        var level = LoadFixture("audio-level.json").RootElement;
+        Assert.Equal("audio.level", level.GetProperty("method").GetString());
+        Assert.Equal(0.5, level.GetProperty("params").GetProperty("level").GetDouble());
+        Assert.False(level.GetProperty("params").GetProperty("clipped").GetBoolean());
+
         var start = LoadFixture("session-start-playback.json").RootElement;
         Assert.Equal("session/start", start.GetProperty("method").GetString());
         Assert.False(string.IsNullOrEmpty(
             start.GetProperty("params").GetProperty("playback").GetProperty("id").GetString()));
 
-        var level = LoadFixture("audio-level-playback.json").RootElement;
-        Assert.Equal("audio.level", level.GetProperty("method").GetString());
-        Assert.Equal(271.4, level.GetProperty("params").GetProperty("seconds").GetDouble());
-    }
+        var playback = LoadFixture("audio-level-playback.json").RootElement;
+        Assert.Equal("audio.level", playback.GetProperty("method").GetString());
+        Assert.Equal(271.4, playback.GetProperty("params").GetProperty("seconds").GetDouble());
 
-    [Fact]
-    public void SessionInterruptedFixtureCarriesReasonAndDetail()
-    {
-        var root = LoadFixture("session-interrupted.json").RootElement;
-
-        Assert.Equal("session/interrupted", root.GetProperty("method").GetString());
-        Assert.Equal("deviceLost", root.GetProperty("params").GetProperty("reason").GetString());
+        var interrupted = LoadFixture("session-interrupted.json").RootElement;
+        Assert.Equal("session/interrupted", interrupted.GetProperty("method").GetString());
+        Assert.Equal("deviceLost", interrupted.GetProperty("params").GetProperty("reason").GetString());
         Assert.False(
-            string.IsNullOrEmpty(root.GetProperty("params").GetProperty("detail").GetString()));
+            string.IsNullOrEmpty(interrupted.GetProperty("params").GetProperty("detail").GetString()));
+
+        var progress = LoadFixture("session-progress.json").RootElement;
+        Assert.Equal("session/progress", progress.GetProperty("method").GetString());
+        Assert.Equal("speakers", progress.GetProperty("params").GetProperty("stage").GetString());
     }
 
     [Fact]
-    public void SessionProgressFixtureCarriesStage()
-    {
-        var root = LoadFixture("session-progress.json").RootElement;
-
-        Assert.Equal("session/progress", root.GetProperty("method").GetString());
-        Assert.Equal("speakers", root.GetProperty("params").GetProperty("stage").GetString());
-    }
-
-    [Fact]
-    public void SessionListFixtureCarriesTheLabelAndEditStamp()
+    public void SessionReadbackAndDemoFixturesCarryTheStoredRecords()
     {
         var session = LoadFixture("session-list.json").RootElement
             .GetProperty("result").GetProperty("sessions")[0];
-
         Assert.Equal("finalised", session.GetProperty("state").GetString());
         Assert.False(string.IsNullOrEmpty(session.GetProperty("label").GetString()));
         Assert.Equal(JsonValueKind.Null, session.GetProperty("editedAt").ValueKind);
-    }
+        Assert.False(session.GetProperty("demo").GetBoolean());
 
-    [Fact]
-    public void DemoFixturesCarryTheCountsAndTheSampleFlag()
-    {
         var seeded = LoadFixture("demo-seed.json").RootElement.GetProperty("result");
         var cleared = LoadFixture("demo-clear.json").RootElement.GetProperty("result");
         Assert.Equal(seeded.GetProperty("added").GetInt32(), cleared.GetProperty("removed").GetInt32());
 
-        var session = LoadFixture("session-list.json").RootElement
-            .GetProperty("result").GetProperty("sessions")[0];
-        Assert.False(session.GetProperty("demo").GetBoolean());
-        var entry = LoadFixture("reflection-list.json").RootElement
-            .GetProperty("result").GetProperty("reflections")[0];
-        Assert.False(entry.GetProperty("demo").GetBoolean());
-    }
-
-    [Fact]
-    public void SessionNoteFixtureCarriesTheRecordFields()
-    {
         var note = LoadFixture("session-note.json").RootElement.GetProperty("result");
-
         Assert.False(string.IsNullOrEmpty(note.GetProperty("text").GetString()));
         Assert.Equal("prose", note.GetProperty("style").GetString());
         Assert.Equal("standard", note.GetProperty("detail").GetString());
         Assert.True(DateTimeOffset.TryParse(note.GetProperty("generatedAt").GetString(), out _));
         Assert.True(DateTimeOffset.TryParse(note.GetProperty("editedAt").GetString(), out _));
-    }
 
-    [Fact]
-    public void SessionPatientFixtureCarriesTheTranslation()
-    {
         var patient = LoadFixture("session-patient.json").RootElement.GetProperty("result");
-
         Assert.Equal("en", patient.GetProperty("language").GetString());
         var translation = patient.GetProperty("translation");
         Assert.Equal("pl", translation.GetProperty("language").GetString());
         Assert.Contains("łokcia", translation.GetProperty("text").GetString(), StringComparison.Ordinal);
+
+        var guidance = LoadFixture("session-guidance.json").RootElement
+            .GetProperty("result").GetProperty("guidance");
+        Assert.True(
+            DateTimeOffset.TryParse(guidance.GetProperty("generatedAt").GetString(), out _));
+        Assert.Equal(JsonValueKind.False, guidance.GetProperty("stale").ValueKind);
+        Assert.Equal(1, guidance.GetProperty("version").GetInt32());
+        Assert.True(guidance.GetProperty("noteRevision").GetInt64() > 0);
+        Assert.Equal(1, guidance.GetProperty("shown").GetArrayLength());
+        Assert.Equal(1, guidance.GetProperty("searched").GetArrayLength());
+        // The stored record is the ready payload minus what only the wire carries
+        Assert.False(guidance.TryGetProperty("id", out _));
+        Assert.False(guidance.TryGetProperty("storeError", out _));
     }
 
     [Fact]
-    public void ReflectionGetFixtureCarriesTheSummaryAndTheThreeAnswers()
+    public void ReflectionFixturesCarryTheThreeAnswersAndAgreeAcrossMethods()
     {
         var result = LoadFixture("reflection-get.json").RootElement.GetProperty("result");
-
         Assert.False(string.IsNullOrEmpty(result.GetProperty("label").GetString()));
         Assert.False(string.IsNullOrEmpty(result.GetProperty("summary").GetProperty("text").GetString()));
         var reflection = result.GetProperty("reflection");
@@ -158,70 +138,47 @@ public class FixtureTest
         }
 
         Assert.True(DateTimeOffset.TryParse(reflection.GetProperty("createdAt").GetString(), out _));
-    }
+        var reference = reflection.GetProperty("references")[0];
+        foreach (var key in new[] { "key", "reference", "title", "link", "source" })
+        {
+            Assert.False(string.IsNullOrEmpty(reference.GetProperty(key).GetString()), key);
+        }
 
-    [Fact]
-    public void ReflectionListAndUpdateFixturesAgreeOnTheAnswers()
-    {
         var listed = LoadFixture("reflection-list.json").RootElement
             .GetProperty("result").GetProperty("reflections")[0];
+        Assert.False(listed.GetProperty("demo").GetBoolean());
         var update = LoadFixture("reflection-update.json").RootElement.GetProperty("params");
-
         Assert.Equal(update.GetProperty("id").GetString(), listed.GetProperty("id").GetString());
         Assert.Equal(update.GetProperty("learned").GetString(), listed.GetProperty("learned").GetString());
+        Assert.Equal(1, update.GetProperty("references").GetArrayLength());
         Assert.True(DateTimeOffset.TryParse(listed.GetProperty("startedAt").GetString(), out _));
+
         var summary = LoadFixture("reflection-summary.json").RootElement;
         Assert.Equal("reflection/summary", summary.GetProperty("method").GetString());
         Assert.False(summary.TryGetProperty("id", out _), "a notification, not a request");
     }
 
     [Fact]
-    public void SessionLabelFixtureIsARequestWithIdAndText()
+    public void GuidanceRetrievalFixturesAreARequestItsTwoOutcomesAndTheEmbedderState()
     {
-        var root = LoadFixture("session-label.json").RootElement;
-
-        Assert.Equal("session/label", root.GetProperty("method").GetString());
-        Assert.Equal("Elbow swelling", root.GetProperty("params").GetProperty("text").GetString());
-    }
-
-    [Fact]
-    public void SessionOpenAndCloseFixturesAreRequests()
-    {
-        var open = LoadFixture("session-open.json").RootElement;
-        Assert.Equal("session/open", open.GetProperty("method").GetString());
-        Assert.False(string.IsNullOrEmpty(open.GetProperty("params").GetProperty("id").GetString()));
-
-        var close = LoadFixture("session-close.json").RootElement;
-        Assert.Equal("session/close", close.GetProperty("method").GetString());
-        Assert.Equal(JsonValueKind.Null, close.GetProperty("params").ValueKind);
-    }
-
-    [Fact]
-    public void ErrorFixtureCarriesReservedCode()
-    {
-        var error = LoadFixture("error-method-not-found.json").RootElement.GetProperty("error");
-        Assert.Equal(-32601, error.GetProperty("code").GetInt32());
-    }
-
-    [Fact]
-    public void GuidanceSearchFixtureIsARequestWithAnIdAndALimit()
-    {
-        var root = LoadFixture("guidance-search.json").RootElement;
-
-        Assert.Equal("guidance/search", root.GetProperty("method").GetString());
-        Assert.True(root.TryGetProperty("id", out _), "a request, not a notification");
+        var search = LoadFixture("guidance-search.json").RootElement;
+        Assert.Equal("guidance/search", search.GetProperty("method").GetString());
+        Assert.True(search.TryGetProperty("id", out _), "a request, not a notification");
         Assert.False(
-            string.IsNullOrEmpty(root.GetProperty("params").GetProperty("id").GetString()));
-        Assert.Equal(3, root.GetProperty("params").GetProperty("limit").GetInt32());
-    }
+            string.IsNullOrEmpty(search.GetProperty("params").GetProperty("id").GetString()));
+        Assert.Equal(3, search.GetProperty("params").GetProperty("limit").GetInt32());
 
-    [Fact]
-    public void GuidanceReadyFixtureCarriesTheRecordAndBothResultShapes()
-    {
-        var root = LoadFixture("guidance-ready.json").RootElement;
-        Assert.Equal("guidance/ready", root.GetProperty("method").GetString());
-        var record = root.GetProperty("params");
+        var failed = LoadFixture("guidance-failed.json").RootElement;
+        Assert.Equal("guidance/failed", failed.GetProperty("method").GetString());
+        Assert.False(failed.TryGetProperty("id", out _), "a notification, not a request");
+        Assert.False(
+            string.IsNullOrEmpty(failed.GetProperty("params").GetProperty("id").GetString()));
+        Assert.False(
+            string.IsNullOrEmpty(failed.GetProperty("params").GetProperty("detail").GetString()));
 
+        var ready = LoadFixture("guidance-ready.json").RootElement;
+        Assert.Equal("guidance/ready", ready.GetProperty("method").GetString());
+        var record = ready.GetProperty("params");
         Assert.False(string.IsNullOrEmpty(record.GetProperty("id").GetString()));
         Assert.Equal(JsonValueKind.Null, record.GetProperty("storeError").ValueKind);
         Assert.Equal(JsonValueKind.False, record.GetProperty("stale").ValueKind);
@@ -256,34 +213,28 @@ public class FixtureTest
         }
 
         Assert.False(Uri.TryCreate(plain.GetProperty("url").GetString(), UriKind.Absolute, out _));
+        foreach (var result in shown.EnumerateArray())
+        {
+            Assert.Equal(JsonValueKind.Number, result.GetProperty("pages").ValueKind);
+        }
 
         var searched = record.GetProperty("searched");
         Assert.Equal(2, searched.GetArrayLength());
         Assert.Equal(64, searched[0].GetProperty("sha256").GetString()!.Length);
         Assert.Equal(JsonValueKind.Null, searched[0].GetProperty("unavailable").ValueKind);
-    }
 
-    [Fact]
-    public void GuidanceFailedFixtureNamesTheSessionAndTheReason()
-    {
-        var root = LoadFixture("guidance-failed.json").RootElement;
-
-        Assert.Equal("guidance/failed", root.GetProperty("method").GetString());
-        Assert.False(root.TryGetProperty("id", out _), "a notification, not a request");
+        // The embedder announces its state, and the corpus listing has both shapes
+        var model = LoadFixture("guidance-model.json").RootElement;
+        Assert.Equal("guidance/model", model.GetProperty("method").GetString());
+        Assert.False(model.TryGetProperty("id", out _), "a notification, not a request");
+        Assert.Equal("unavailable", model.GetProperty("params").GetProperty("state").GetString());
         Assert.False(
-            string.IsNullOrEmpty(root.GetProperty("params").GetProperty("id").GetString()));
-        Assert.False(
-            string.IsNullOrEmpty(root.GetProperty("params").GetProperty("detail").GetString()));
-    }
+            string.IsNullOrEmpty(model.GetProperty("params").GetProperty("detail").GetString()));
 
-    [Fact]
-    public void GuidanceCorporaFixtureCarriesTheStateAndBothCorpusShapes()
-    {
-        var result = LoadFixture("guidance-corpora.json").RootElement.GetProperty("result");
-
-        Assert.Equal("ready", result.GetProperty("state").GetString());
-        Assert.Equal(JsonValueKind.Null, result.GetProperty("detail").ValueKind);
-        var corpora = result.GetProperty("corpora");
+        var corporaResult = LoadFixture("guidance-corpora.json").RootElement.GetProperty("result");
+        Assert.Equal("ready", corporaResult.GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, corporaResult.GetProperty("detail").ValueKind);
+        var corpora = corporaResult.GetProperty("corpora");
         Assert.Equal(2, corpora.GetArrayLength());
         Assert.Equal(JsonValueKind.Null, corpora[0].GetProperty("unavailable").ValueKind);
         foreach (var key in new[] { "id", "name", "licence", "attribution" })
@@ -299,23 +250,10 @@ public class FixtureTest
     }
 
     [Fact]
-    public void GuidanceModelFixtureIsANotificationWithStateAndDetail()
-    {
-        var root = LoadFixture("guidance-model.json").RootElement;
-
-        Assert.Equal("guidance/model", root.GetProperty("method").GetString());
-        Assert.False(root.TryGetProperty("id", out _), "a notification, not a request");
-        Assert.Equal("unavailable", root.GetProperty("params").GetProperty("state").GetString());
-        Assert.False(
-            string.IsNullOrEmpty(root.GetProperty("params").GetProperty("detail").GetString()));
-    }
-
-    [Fact]
-    public void GuidanceDocumentsFixturesCarryARowInEveryState()
+    public void GuidanceDocumentFixturesCarryEveryStateTheBoxesAndTheNotifications()
     {
         var listing = LoadFixture("guidance-documents.json").RootElement.GetProperty("result");
         var documents = listing.GetProperty("documents");
-
         Assert.False(string.IsNullOrEmpty(listing.GetProperty("folder").GetString()));
         Assert.True(listing.GetProperty("found").GetBoolean());
         Assert.True(listing.GetProperty("unsupported").GetInt32() >= 0);
@@ -341,11 +279,7 @@ public class FixtureTest
         Assert.Equal(1, add.GetProperty("documents").GetArrayLength());
         Assert.Equal(["unsupported", "unreadable"], add.GetProperty("skipped").EnumerateArray()
             .Select(s => s.GetProperty("reason").GetString()));
-    }
 
-    [Fact]
-    public void GuidancePageAndOpenFixturesCarryAPathAndTheBoxes()
-    {
         var page = LoadFixture("guidance-page.json").RootElement.GetProperty("result");
         Assert.EndsWith(".bmp", page.GetProperty("path").GetString());
         Assert.True(page.GetProperty("width").GetInt32() > 0);
@@ -362,21 +296,10 @@ public class FixtureTest
         var opened = LoadFixture("guidance-documents-open.json").RootElement.GetProperty("result");
         Assert.False(string.IsNullOrEmpty(opened.GetProperty("path").GetString()));
 
-        var shown = LoadFixture("guidance-ready.json").RootElement.GetProperty("params")
-            .GetProperty("shown");
-        foreach (var result in shown.EnumerateArray())
-        {
-            Assert.Equal(JsonValueKind.Number, result.GetProperty("pages").ValueKind);
-        }
-    }
-
-    [Fact]
-    public void GuidanceDocumentNotificationsCarryTheirParams()
-    {
-        var document = LoadFixture("guidance-document.json").RootElement;
-        Assert.Equal("guidance/document", document.GetProperty("method").GetString());
-        Assert.False(document.TryGetProperty("id", out _), "a notification, not a request");
-        Assert.Equal("ready", document.GetProperty("params").GetProperty("state").GetString());
+        var indexed = LoadFixture("guidance-document.json").RootElement;
+        Assert.Equal("guidance/document", indexed.GetProperty("method").GetString());
+        Assert.False(indexed.TryGetProperty("id", out _), "a notification, not a request");
+        Assert.Equal("ready", indexed.GetProperty("params").GetProperty("state").GetString());
 
         var progress = LoadFixture("guidance-progress.json").RootElement.GetProperty("params");
         Assert.Equal("preparing", progress.GetProperty("phase").GetString());
@@ -386,23 +309,5 @@ public class FixtureTest
         var changed = LoadFixture("guidance-documentsChanged.json").RootElement;
         Assert.Equal("guidance/documentsChanged", changed.GetProperty("method").GetString());
         Assert.Empty(changed.GetProperty("params").EnumerateObject());
-    }
-
-    [Fact]
-    public void SessionGuidanceFixtureCarriesTheStoredRecord()
-    {
-        var guidance = LoadFixture("session-guidance.json").RootElement
-            .GetProperty("result").GetProperty("guidance");
-
-        Assert.True(
-            DateTimeOffset.TryParse(guidance.GetProperty("generatedAt").GetString(), out _));
-        Assert.Equal(JsonValueKind.False, guidance.GetProperty("stale").ValueKind);
-        Assert.Equal(1, guidance.GetProperty("version").GetInt32());
-        Assert.True(guidance.GetProperty("noteRevision").GetInt64() > 0);
-        Assert.Equal(1, guidance.GetProperty("shown").GetArrayLength());
-        Assert.Equal(1, guidance.GetProperty("searched").GetArrayLength());
-        // The stored record is the ready payload minus what only the wire carries
-        Assert.False(guidance.TryGetProperty("id", out _));
-        Assert.False(guidance.TryGetProperty("storeError", out _));
     }
 }

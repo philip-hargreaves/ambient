@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Ambient.App.Features.Documents.ReviewSurfaceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Ambient.App.Controls"
+    SizeChanged="OnSizeChanged">
+
+    <!-- Wide: the documents on the left, the references on the right, each behind a
+         selector. Narrow: one selector. Views move in code. Both stretch to their
+         MaxWidth, which centres them: a centred grid would size its star columns to
+         whatever the documents happen to hold, so the note column would jump as a
+         note is rewritten -->
+    <Grid>
+        <Grid
+            x:Name="WideLayout"
+            MaxWidth="1480"
+            Margin="0,0,0,16"
+            HorizontalAlignment="Stretch"
+            ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="760" />
+                <ColumnDefinition Width="*" MaxWidth="700" />
+            </Grid.ColumnDefinitions>
+            <controls:DocumentTabs x:Name="DocumentTabs" VerticalAlignment="Stretch" />
+            <controls:DocumentTabs
+                x:Name="ReferenceTabs"
+                Grid.Column="1"
+                VerticalAlignment="Stretch" />
+        </Grid>
+
+        <Grid
+            x:Name="NarrowLayout"
+            MaxWidth="760"
+            HorizontalAlignment="Stretch">
+            <controls:DocumentTabs x:Name="NarrowTabs" VerticalAlignment="Stretch" />
+        </Grid>
+    </Grid>
+</UserControl>

@@ -28,24 +28,24 @@ public sealed class SottoMigrationTest : IDisposable
     private string Get(string relative) => File.ReadAllText(Path.Combine(_root, relative));
 
     [Fact]
-    public void NothingToMigrateIsNotAnError()
+    public void TheStoreMovesUnderItsNewNameWithItsJournalAndFoldersOnBothSidesMerge()
     {
-        Assert.False(SottoMigration.Run(Old, New));
+        Assert.False(SottoMigration.Run(Old, New), "nothing to migrate is not an error");
         Assert.False(Directory.Exists(New));
-    }
 
-    [Fact]
-    public void TheStoreMovesUnderItsNewNameWithItsJournal()
-    {
         Put(@"sotto\store\sotto.db", "db");
         Put(@"sotto\store\sotto.db-wal", "wal");
         Put(@"sotto\preferences.json", "{}");
+        Put(@"sotto\dumps\a.dmp", "a");
+        Put(@"ambient\dumps\b.dmp", "b");
 
         Assert.True(SottoMigration.Run(Old, New));
 
         Assert.Equal("db", Get(@"ambient\store\ambient.db"));
         Assert.Equal("wal", Get(@"ambient\store\ambient.db-wal"));
         Assert.Equal("{}", Get(@"ambient\preferences.json"));
+        Assert.Equal("a", Get(@"ambient\dumps\a.dmp"));
+        Assert.Equal("b", Get(@"ambient\dumps\b.dmp"));
         Assert.False(Directory.Exists(Old), "an emptied sotto folder is removed");
     }
 
@@ -61,17 +61,5 @@ public sealed class SottoMigrationTest : IDisposable
         Assert.Equal("a stray engine run", Get(@"ambient\store\ambient.db"));
         Assert.Equal("the consultations", Get(@"sotto\store\ambient.db"));
         Assert.Equal("print", Get(@"ambient\anchor.bin"));
-    }
-
-    [Fact]
-    public void FoldersPresentOnBothSidesMerge()
-    {
-        Put(@"sotto\dumps\a.dmp", "a");
-        Put(@"ambient\dumps\b.dmp", "b");
-
-        Assert.True(SottoMigration.Run(Old, New));
-
-        Assert.Equal("a", Get(@"ambient\dumps\a.dmp"));
-        Assert.Equal("b", Get(@"ambient\dumps\b.dmp"));
     }
 }

@@ -2,14 +2,18 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Ambient.App.Core.Features.Demo;
+using Ambient.App.Core.Preferences;
 
 namespace Ambient.App.Core.Features.Documents;
 
-/// <summary>A note option as the engine names it and as the combo shows it.</summary>
-public sealed record NoteOption(string Value, string Name);
-
 public sealed partial class NoteViewModel : ObservableObject
 {
+    public const string OriginalNoteTitle = "Original note";
+
+    private string _noteSnapshot = "";
+    private string _patientSnapshot = "";
+    private bool _suppressOptionsChanged;
+
     [ObservableProperty]
     public partial NotePipelineState PipelineState { get; private set; } = NotePipelineState.Pending;
 
@@ -26,21 +30,6 @@ public sealed partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     public partial string TranslationLanguage { get; set; } = "";
 
-    public string TranslationCaption =>
-        TranslationLanguage.Length > 0 ? $"{TranslationLanguage} translation" : "Translation";
-
-    partial void OnTranslationLanguageChanged(string value) =>
-        OnPropertyChanged(nameof(TranslationCaption));
-
-    /// <summary>Example cases, offered on a demo record in place of the note.</summary>
-    public IReadOnlyList<DemoCase> ExampleCases { get; set; } = [];
-
-    /// <summary>The picker's entries: the stored note first, then the cases.</summary>
-    public IReadOnlyList<string> ExampleCaseTitles =>
-        [OriginalNoteTitle, .. ExampleCases.Select(c => c.Title)];
-
-    public const string OriginalNoteTitle = "Original note";
-
     [ObservableProperty]
     public partial bool ExampleCasesVisible { get; set; }
 
@@ -48,101 +37,30 @@ public sealed partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     public partial int ExampleCaseIndex { get; set; } = -1;
 
-    partial void OnExampleCaseIndexChanged(int value)
-    {
-        if (value == 0)
-        {
-            OriginalNoteRequested?.Invoke();
-        }
-        else if (value > 0 && value <= ExampleCases.Count)
-        {
-            ExampleCaseRequested?.Invoke(ExampleCases[value - 1]);
-        }
-    }
-
-    /// <summary>Set by the consultation view model, which owns the engine.</summary>
-    public Action<DemoCase>? ExampleCaseRequested { get; set; }
-
-    public Action? OriginalNoteRequested { get; set; }
-
     /// <summary>Note options as the engine names them: "prose" or "soap".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StyleIndex))]
-    public partial string Style { get; set; } = "prose";
+    public partial string Style { get; set; } = NoteOptions.DefaultStyle.Value;
 
     /// <summary>"concise", "standard" or "detailed".</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DetailIndex))]
-    public partial string Detail { get; set; } = "standard";
-
-    public IReadOnlyList<NoteOption> StyleOptions { get; } =
-        [new("prose", "Prose"), new("soap", "SOAP")];
-
-    public IReadOnlyList<NoteOption> DetailOptions { get; } =
-        [new("concise", "Concise"), new("standard", "Standard"), new("detailed", "Detailed")];
-
-    // The combos select by index. An unknown stored value shows the first option
-    public int StyleIndex
-    {
-        get => Math.Max(0, IndexOf(StyleOptions, Style));
-        set => Style = value >= 0 && value < StyleOptions.Count ? StyleOptions[value].Value : Style;
-    }
-
-    public int DetailIndex
-    {
-        get => Math.Max(0, IndexOf(DetailOptions, Detail));
-        set => Detail = value >= 0 && value < DetailOptions.Count ? DetailOptions[value].Value : Detail;
-    }
-
-    private static int IndexOf(IReadOnlyList<NoteOption> options, string value)
-    {
-        for (var i = 0; i < options.Count; i++)
-        {
-            if (options[i].Value == value)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    public ObservableCollection<string> Languages { get; } = [];
+    public partial string Detail { get; set; } = NoteOptions.DefaultDetail.Value;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(TranslateCommand))]
     public partial string? SelectedLanguage { get; set; }
-
-    /// <summary>Set by the consultation view model, which owns the engine.</summary>
-    public Func<string, Task>? TranslateRequested { get; set; }
-
-    public Func<Task>? RegenerateRequested { get; set; }
-
-    /// <summary>The clinician overrides a refusal. The session view model wires it.</summary>
-    public Func<Task>? WriteAnywayRequested { get; set; }
 
     /// <summary>Why the model refused, in its words, empty unless refused.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NoteRefused))]
     public partial string RefusalReason { get; set; } = "";
 
-    public bool NoteRefused => PipelineState == NotePipelineState.NoteRefused;
-
     /// <summary>False when the recording was too short: insisting would make the model fabricate.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanWriteAnyway))]
     [NotifyCanExecuteChangedFor(nameof(WriteAnywayCommand))]
     public partial bool WriteAnywayAvailable { get; set; } = true;
-
-    public bool CanWriteAnyway => NoteRefused && WriteAnywayAvailable;
-
-    [RelayCommand(CanExecute = nameof(CanWriteAnyway))]
-    private Task WriteAnyway() => WriteAnywayRequested!();
-
-    public Func<Task>? RegeneratePatientRequested { get; set; }
-
-    /// <summary>Opens the appraisal reflection for the consultation on screen.</summary>
-    public Func<Task>? ReflectRequested { get; set; }
 
     /// <summary>False when the consultation will not be kept: a reflection needs its session.</summary>
     [ObservableProperty]
@@ -153,30 +71,6 @@ public sealed partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ReflectLabel))]
     public partial bool HasReflection { get; set; }
-
-    public string ReflectLabel => HasReflection ? "Open reflection" : "Create reflection";
-
-    [RelayCommand(CanExecute = nameof(CanReflect))]
-    private Task Reflect() => ReflectRequested!();
-
-    private bool CanReflect() => ReflectRequested is not null && ReflectAvailable && NoteDocumentReady;
-
-    /// <summary>The staleness hint's action: rewrite the sheet from the edited note.</summary>
-    [RelayCommand(CanExecute = nameof(CanRegeneratePatient))]
-    private Task RegeneratePatient() => RegeneratePatientRequested!();
-
-    private bool CanRegeneratePatient() =>
-        RegeneratePatientRequested is not null && PatientStale && !AnyEditing;
-
-    partial void OnPatientStaleChanged(bool value) =>
-        RegeneratePatientCommand.NotifyCanExecuteChanged();
-
-    public Func<Task>? SaveNoteRequested { get; set; }
-
-    public Func<Task>? SavePatientRequested { get; set; }
-
-    /// <summary>Raised when style or detail changes, for persistence.</summary>
-    public Action? OptionsChanged { get; set; }
 
     /// <summary>True from the request until translate/ready or translate/failed.</summary>
     [ObservableProperty]
@@ -199,9 +93,142 @@ public sealed partial class NoteViewModel : ObservableObject
     [ObservableProperty]
     public partial bool RegenerateWarningOpen { get; set; }
 
+    // The editing gate: a document mutates only between an explicit Edit and
+    // its Save. Discard restores the snapshot taken at Edit
+    [ObservableProperty]
+    public partial bool NoteEditing { get; private set; }
+
+    [ObservableProperty]
+    public partial bool PatientEditing { get; private set; }
+
+    public string TranslationCaption =>
+        TranslationLanguage.Length > 0 ? $"{TranslationLanguage} translation" : "Translation";
+
+    /// <summary>Example cases, offered on a demo record in place of the note.</summary>
+    public IReadOnlyList<DemoCase> ExampleCases { get; set; } = [];
+
+    /// <summary>The picker's entries: the stored note first, then the cases.</summary>
+    public IReadOnlyList<string> ExampleCaseTitles =>
+        [OriginalNoteTitle, .. ExampleCases.Select(c => c.Title)];
+
+    /// <summary>Set by the consultation view model, which owns the engine.</summary>
+    public Action<DemoCase>? ExampleCaseRequested { get; set; }
+
+    public Action? OriginalNoteRequested { get; set; }
+
+    public IReadOnlyList<NoteOption> StyleOptions { get; } = NoteOptions.Styles;
+
+    public IReadOnlyList<NoteOption> DetailOptions { get; } = NoteOptions.Details;
+
+    // The combos select by index. An unknown stored value shows the first option
+    public int StyleIndex
+    {
+        get => Math.Max(0, NoteOptions.IndexOf(StyleOptions, Style));
+        set => Style = value >= 0 && value < StyleOptions.Count ? StyleOptions[value].Value : Style;
+    }
+
+    public int DetailIndex
+    {
+        get => Math.Max(0, NoteOptions.IndexOf(DetailOptions, Detail));
+        set => Detail = value >= 0 && value < DetailOptions.Count ? DetailOptions[value].Value : Detail;
+    }
+
+    public ObservableCollection<string> Languages { get; } = [];
+
+    /// <summary>Set by the consultation view model, which owns the engine.</summary>
+    public Func<string, Task>? TranslateRequested { get; set; }
+
+    public Func<Task>? RegenerateRequested { get; set; }
+
+    /// <summary>The clinician overrides a refusal. The session view model wires it.</summary>
+    public Func<Task>? WriteAnywayRequested { get; set; }
+
+    public Func<Task>? RegeneratePatientRequested { get; set; }
+
+    /// <summary>Opens the appraisal reflection for the consultation on screen.</summary>
+    public Func<Task>? ReflectRequested { get; set; }
+
+    public Func<Task>? SaveNoteRequested { get; set; }
+
+    public Func<Task>? SavePatientRequested { get; set; }
+
+    /// <summary>Raised when style or detail changes, for persistence.</summary>
+    public Action? OptionsChanged { get; set; }
+
+    public bool NoteRefused => PipelineState == NotePipelineState.NoteRefused;
+
+    public bool CanWriteAnyway => NoteRefused && WriteAnywayAvailable;
+
+    public string ReflectLabel => HasReflection ? "Open reflection" : "Create reflection";
+
     public bool Edited => EditedStamp.Length > 0;
 
-    partial void OnEditedStampChanged(string value) => OnPropertyChanged(nameof(Edited));
+    public bool NoteViewing => !NoteEditing;
+
+    public bool PatientViewing => !PatientEditing;
+
+    public bool AnyEditing => NoteEditing || PatientEditing;
+
+    /// <summary>True once the document is sealed. Gates save and copy.</summary>
+    public bool NoteDocumentReady =>
+        PipelineState is NotePipelineState.AllReady or NotePipelineState.PatientFailed;
+
+    public bool PatientDocumentReady => PipelineState == NotePipelineState.AllReady;
+
+    // The panes show a quiet affordance while a document is being prepared
+    // and nothing has streamed yet. Computed here so it is testable
+    public bool NotePreparing =>
+        PipelineState == NotePipelineState.NoteWriting && ClinicalNoteText.Length == 0;
+
+    public bool PatientPreparing =>
+        PipelineState is NotePipelineState.NoteWriting or NotePipelineState.NoteReadyPatientWriting
+        && PatientInfoText.Length == 0;
+
+    public string NoteStateCaption => PipelineState switch
+    {
+        NotePipelineState.NoteWriting => "Writing the note",
+        NotePipelineState.NoteFailed => "The note could not be written - see the status bar",
+        NotePipelineState.NoteRefused => "No note: the recording was too short or did not contain enough clinical information",
+        _ => "",
+    };
+
+    public string PatientStateCaption => PipelineState switch
+    {
+        NotePipelineState.NoteWriting or NotePipelineState.NoteReadyPatientWriting =>
+            "The information sheet follows the note",
+        NotePipelineState.PatientFailed =>
+            "The information sheet could not be written - see the status bar",
+        _ => "",
+    };
+
+    public bool NoteCaptionVisible => NoteStateCaption.Length > 0;
+
+    public bool PatientCaptionVisible => PatientStateCaption.Length > 0;
+
+    // The output box shows only while translating or holding a result
+    public bool TranslationVisible => TranslationRunning || TranslationText.Length > 0;
+
+    /// <summary>What Copy and Export take: the sheet, with its translation once there is one.</summary>
+    public string PatientCopyTip =>
+        TranslationText.Length > 0 ? "Copies the sheet and its translation" : "Copies the sheet";
+
+    public string PatientExportTip =>
+        TranslationText.Length > 0 ? "Saves the sheet and its translation as a text file" : "Saves the sheet as a text file";
+
+    [RelayCommand(CanExecute = nameof(CanWriteAnyway))]
+    private Task WriteAnyway() => WriteAnywayRequested!();
+
+    [RelayCommand(CanExecute = nameof(CanReflect))]
+    private Task Reflect() => ReflectRequested!();
+
+    private bool CanReflect() => ReflectRequested is not null && ReflectAvailable && NoteDocumentReady;
+
+    /// <summary>The staleness hint's action: rewrite the sheet from the edited note.</summary>
+    [RelayCommand(CanExecute = nameof(CanRegeneratePatient))]
+    private Task RegeneratePatient() => RegeneratePatientRequested!();
+
+    private bool CanRegeneratePatient() =>
+        RegeneratePatientRequested is not null && PatientStale && !AnyEditing;
 
     [RelayCommand]
     private async Task ConfirmRegenerate()
@@ -248,23 +275,6 @@ public sealed partial class NoteViewModel : ObservableObject
         && PipelineState is NotePipelineState.AllReady or NotePipelineState.PatientFailed
         or NotePipelineState.NoteFailed;
 
-    // The editing gate: a document mutates only between an explicit Edit and
-    // its Save. Discard restores the snapshot taken at Edit
-    [ObservableProperty]
-    public partial bool NoteEditing { get; private set; }
-
-    [ObservableProperty]
-    public partial bool PatientEditing { get; private set; }
-
-    public bool NoteViewing => !NoteEditing;
-
-    public bool PatientViewing => !PatientEditing;
-
-    public bool AnyEditing => NoteEditing || PatientEditing;
-
-    private string _noteSnapshot = "";
-    private string _patientSnapshot = "";
-
     [RelayCommand(CanExecute = nameof(CanEditNote))]
     private void EditNote()
     {
@@ -297,24 +307,6 @@ public sealed partial class NoteViewModel : ObservableObject
         PatientEditing = false;
     }
 
-    partial void OnNoteEditingChanged(bool value) => EditingChanged();
-
-    partial void OnPatientEditingChanged(bool value) => EditingChanged();
-
-    // Regenerate, the sheet rewrite and translate all replace on-screen text,
-    // so none may run while a document is being edited
-    private void EditingChanged()
-    {
-        OnPropertyChanged(nameof(NoteViewing));
-        OnPropertyChanged(nameof(PatientViewing));
-        OnPropertyChanged(nameof(AnyEditing));
-        EditNoteCommand.NotifyCanExecuteChanged();
-        EditPatientCommand.NotifyCanExecuteChanged();
-        RegenerateCommand.NotifyCanExecuteChanged();
-        RegeneratePatientCommand.NotifyCanExecuteChanged();
-        TranslateCommand.NotifyCanExecuteChanged();
-    }
-
     [RelayCommand(CanExecute = nameof(CanSaveNote))]
     private Task SaveNote()
     {
@@ -333,28 +325,8 @@ public sealed partial class NoteViewModel : ObservableObject
 
     private bool CanSavePatient() => SavePatientRequested is not null && PatientDocumentReady;
 
-    /// <summary>True once the document is sealed. Gates save and copy.</summary>
-    public bool NoteDocumentReady =>
-        PipelineState is NotePipelineState.AllReady or NotePipelineState.PatientFailed;
-
-    public bool PatientDocumentReady => PipelineState == NotePipelineState.AllReady;
-
     /// <summary>The pane returns to its writing look for a rewrite.</summary>
-    public void BeginRegenerate()
-    {
-        NoteEditing = false;
-        PatientEditing = false;
-        RefusalReason = "";
-        PipelineState = NotePipelineState.NoteWriting;
-        ClinicalNoteText = "";
-        PatientInfoText = "";
-        TranslationText = "";
-        TranslationLanguage = "";
-        TranslationRunning = false;
-        EditedStamp = "";  // the rewrite replaces the edit
-        PatientStale = false;
-        ExampleCaseIndex = -1;
-    }
+    public void BeginRegenerate() => ClearDocuments(NotePipelineState.NoteWriting);
 
     /// <summary>
     /// A stored session's documents, ready for review. The options show the
@@ -395,93 +367,6 @@ public sealed partial class NoteViewModel : ObservableObject
         PipelineState = NotePipelineState.AllReady;
     }
 
-    private bool _suppressOptionsChanged;
-
-    partial void OnStyleChanged(string value)
-    {
-        if (!_suppressOptionsChanged)
-        {
-            OptionsChanged?.Invoke();
-        }
-    }
-
-    partial void OnDetailChanged(string value)
-    {
-        if (!_suppressOptionsChanged)
-        {
-            OptionsChanged?.Invoke();
-        }
-    }
-
-    // The panes show a quiet affordance while a document is being prepared
-    // and nothing has streamed yet. Computed here so it is testable
-    public bool NotePreparing =>
-        PipelineState == NotePipelineState.NoteWriting && ClinicalNoteText.Length == 0;
-
-    public bool PatientPreparing =>
-        PipelineState is NotePipelineState.NoteWriting or NotePipelineState.NoteReadyPatientWriting
-        && PatientInfoText.Length == 0;
-
-    public string NoteStateCaption => PipelineState switch
-    {
-        NotePipelineState.NoteWriting => "Writing the note",
-        NotePipelineState.NoteFailed => "The note could not be written - see the status bar",
-        NotePipelineState.NoteRefused => "No note: the recording was too short or did not contain enough clinical information",
-        _ => "",
-    };
-
-    public string PatientStateCaption => PipelineState switch
-    {
-        NotePipelineState.NoteWriting or NotePipelineState.NoteReadyPatientWriting =>
-            "The information sheet follows the note",
-        NotePipelineState.PatientFailed =>
-            "The information sheet could not be written - see the status bar",
-        _ => "",
-    };
-
-    public bool NoteCaptionVisible => NoteStateCaption.Length > 0;
-
-    public bool PatientCaptionVisible => PatientStateCaption.Length > 0;
-
-    // Translation appears only when it has a purpose: the row once the sheet
-    // is stored, the output only while translating or holding a result
-
-    public bool TranslationVisible => TranslationRunning || TranslationText.Length > 0;
-
-    partial void OnPipelineStateChanged(NotePipelineState value)
-    {
-        TranslateCommand.NotifyCanExecuteChanged();
-        RegenerateCommand.NotifyCanExecuteChanged();
-        SaveNoteCommand.NotifyCanExecuteChanged();
-        SavePatientCommand.NotifyCanExecuteChanged();
-        EditNoteCommand.NotifyCanExecuteChanged();
-        EditPatientCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(NoteDocumentReady));
-        OnPropertyChanged(nameof(PatientDocumentReady));
-        OnPropertyChanged(nameof(NotePreparing));
-        OnPropertyChanged(nameof(PatientPreparing));
-        OnPropertyChanged(nameof(NoteStateCaption));
-        OnPropertyChanged(nameof(NoteRefused));
-        OnPropertyChanged(nameof(CanWriteAnyway));
-        WriteAnywayCommand.NotifyCanExecuteChanged();
-        ReflectCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(PatientStateCaption));
-        OnPropertyChanged(nameof(NoteCaptionVisible));
-        OnPropertyChanged(nameof(PatientCaptionVisible));
-    }
-
-    partial void OnTranslationRunningChanged(bool value) =>
-        OnPropertyChanged(nameof(TranslationVisible));
-
-    partial void OnTranslationTextChanged(string value) =>
-        OnPropertyChanged(nameof(TranslationVisible));
-
-    partial void OnClinicalNoteTextChanged(string value) =>
-        OnPropertyChanged(nameof(NotePreparing));
-
-    partial void OnPatientInfoTextChanged(string value) =>
-        OnPropertyChanged(nameof(PatientPreparing));
-
     /// <summary>Applies an engine-reported event. Out-of-order events are refused.</summary>
     public bool Apply(NotePipelineEvent pipelineEvent)
     {
@@ -514,19 +399,113 @@ public sealed partial class NoteViewModel : ObservableObject
 
     public void Reset()
     {
-        RefusalReason = "";
         WriteAnywayAvailable = true;
+        RegenerateWarningOpen = false;
+        ClearDocuments(NotePipelineState.Pending);
+    }
+
+    partial void OnPipelineStateChanged(NotePipelineState value)
+    {
+        TranslateCommand.NotifyCanExecuteChanged();
+        RegenerateCommand.NotifyCanExecuteChanged();
+        SaveNoteCommand.NotifyCanExecuteChanged();
+        SavePatientCommand.NotifyCanExecuteChanged();
+        EditNoteCommand.NotifyCanExecuteChanged();
+        EditPatientCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(NoteDocumentReady));
+        OnPropertyChanged(nameof(PatientDocumentReady));
+        OnPropertyChanged(nameof(NotePreparing));
+        OnPropertyChanged(nameof(PatientPreparing));
+        OnPropertyChanged(nameof(NoteStateCaption));
+        OnPropertyChanged(nameof(NoteRefused));
+        OnPropertyChanged(nameof(CanWriteAnyway));
+        WriteAnywayCommand.NotifyCanExecuteChanged();
+        ReflectCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(PatientStateCaption));
+        OnPropertyChanged(nameof(NoteCaptionVisible));
+        OnPropertyChanged(nameof(PatientCaptionVisible));
+    }
+
+    partial void OnClinicalNoteTextChanged(string value) =>
+        OnPropertyChanged(nameof(NotePreparing));
+
+    partial void OnPatientInfoTextChanged(string value) =>
+        OnPropertyChanged(nameof(PatientPreparing));
+
+    partial void OnTranslationTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(TranslationVisible));
+        OnPropertyChanged(nameof(PatientCopyTip));
+        OnPropertyChanged(nameof(PatientExportTip));
+    }
+
+    partial void OnTranslationLanguageChanged(string value) =>
+        OnPropertyChanged(nameof(TranslationCaption));
+
+    partial void OnExampleCaseIndexChanged(int value)
+    {
+        if (value == 0)
+        {
+            OriginalNoteRequested?.Invoke();
+        }
+        else if (value > 0 && value <= ExampleCases.Count)
+        {
+            ExampleCaseRequested?.Invoke(ExampleCases[value - 1]);
+        }
+    }
+
+    partial void OnStyleChanged(string value) => OptionChanged();
+
+    partial void OnDetailChanged(string value) => OptionChanged();
+
+    partial void OnTranslationRunningChanged(bool value) =>
+        OnPropertyChanged(nameof(TranslationVisible));
+
+    partial void OnEditedStampChanged(string value) => OnPropertyChanged(nameof(Edited));
+
+    partial void OnPatientStaleChanged(bool value) =>
+        RegeneratePatientCommand.NotifyCanExecuteChanged();
+
+    partial void OnNoteEditingChanged(bool value) => EditingChanged();
+
+    partial void OnPatientEditingChanged(bool value) => EditingChanged();
+
+    // Regenerate, the sheet rewrite and translate all replace on-screen text,
+    // so none may run while a document is being edited
+    private void EditingChanged()
+    {
+        OnPropertyChanged(nameof(NoteViewing));
+        OnPropertyChanged(nameof(PatientViewing));
+        OnPropertyChanged(nameof(AnyEditing));
+        EditNoteCommand.NotifyCanExecuteChanged();
+        EditPatientCommand.NotifyCanExecuteChanged();
+        RegenerateCommand.NotifyCanExecuteChanged();
+        RegeneratePatientCommand.NotifyCanExecuteChanged();
+        TranslateCommand.NotifyCanExecuteChanged();
+    }
+
+    // Every document and stamp cleared, an edit included: the next text replaces them
+    private void ClearDocuments(NotePipelineState state)
+    {
         NoteEditing = false;
         PatientEditing = false;
-        PipelineState = NotePipelineState.Pending;
+        RefusalReason = "";
+        PipelineState = state;
         ClinicalNoteText = "";
         PatientInfoText = "";
         TranslationText = "";
         TranslationLanguage = "";
         TranslationRunning = false;
         EditedStamp = "";
-        RegenerateWarningOpen = false;
         PatientStale = false;
         ExampleCaseIndex = -1;
+    }
+
+    private void OptionChanged()
+    {
+        if (!_suppressOptionsChanged)
+        {
+            OptionsChanged?.Invoke();
+        }
     }
 }

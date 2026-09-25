@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Features.Demo;
-using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Metrics;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -8,17 +8,6 @@ using Ambient.App.Core.Shell;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Settings;
-
-/// <summary>One installed corpus, as Settings lists it.</summary>
-public sealed record CorpusRow(string Name, string Detail, string Attribution, bool Refused)
-{
-    /// <summary>A line above every row but the first.</summary>
-    public bool Divided { get; init; }
-
-    public bool AttributionVisible => Attribution.Length > 0;
-
-    public bool Loaded => !Refused;
-}
 
 /// <summary>
 /// The Settings page: four groups, each its own view model, and the engine events that
@@ -47,31 +36,18 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        client.ConnectedChanged += connected => Post(() =>
+        client.NotificationReceived += notification => _dispatcher.PostOrRun(() =>
         {
-            if (connected)
+            if (notification is NoteModelState model)
             {
-                Connected();
+                NoteModel.Apply(model);
+            }
+            else
+            {
+                Guidance.Apply(notification);
             }
         });
-        client.NotificationReceived += notification =>
-        {
-            switch (notification)
-            {
-                case NoteModelState model:
-                    Post(() => NoteModel.Apply(model));
-                    break;
-                case GuidanceModelChanged or GuidanceDocumentChanged or GuidanceProgress:
-                    Post(() => Guidance.Apply(notification));
-                    break;
-                default:
-                    break;
-            }
-        };
-        if (client.Connected)
-        {
-            Connected();
-        }
+        client.OnConnected(_dispatcher, Connected);
     }
 
     public NoteModelSettings NoteModel { get; }
@@ -90,17 +66,5 @@ public sealed partial class SettingsViewModel : ObservableObject
         NoteModel.Connected();
         Guidance.Connected();
         Privacy.Connected();
-    }
-
-    private void Post(Action action)
-    {
-        if (_dispatcher is null)
-        {
-            action();
-        }
-        else
-        {
-            _dispatcher.Post(action);
-        }
     }
 }

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 
@@ -17,11 +18,13 @@ public sealed partial class DocumentExportViewModel(
     private Task ExportNote() => ExportAsync("clinical-note.txt", note.ClinicalNoteText);
 
     [RelayCommand]
-    private Task CopyPatient() => clipboard.CopyAsync(status, note.PatientInfoText, "Patient note");
+    private Task CopyPatient() => clipboard.CopyAsync(status, PatientSheet(), "Patient note");
+
+    [RelayCommand]
+    private Task ExportPatient() => ExportAsync("patient-sheet.txt", PatientSheet());
 
     // The sheet and its translation travel together to the patient
-    [RelayCommand]
-    private Task ExportPatient()
+    private string PatientSheet()
     {
         var text = note.PatientInfoText;
         if (note.TranslationText.Length > 0)
@@ -29,19 +32,16 @@ public sealed partial class DocumentExportViewModel(
             text += "\n\n" + note.TranslationCaption + "\n\n" + note.TranslationText;
         }
 
-        return ExportAsync("patient-sheet.txt", text);
+        return text;
     }
 
     // Export is the one action that writes outside the encrypted store
     private async Task ExportAsync(string suggestedName, string text)
     {
-        var path = await picker.PickSaveAsync(suggestedName, "Text file", ".txt").ConfigureAwait(true);
-        if (path is null)
+        if (await picker.SaveTextAsync(suggestedName, "Text file", ".txt", DocumentExport.Marker + text)
+                .ConfigureAwait(true) is { } path)
         {
-            return;
+            status.Append($"Saved to {Path.GetFileName(path)} - outside the encrypted store");
         }
-
-        await File.WriteAllTextAsync(path, DocumentExport.Marker + text).ConfigureAwait(true);
-        status.Append($"Saved to {Path.GetFileName(path)} - outside the encrypted store");
     }
 }

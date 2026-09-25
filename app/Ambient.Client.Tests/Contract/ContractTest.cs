@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text.Json;
 using Ambient.Client;
+using Ambient.Client.Tests.Support;
 
 namespace Ambient.Client.Tests.Contract;
 
@@ -97,11 +98,7 @@ public class ContractTest
     {
         while (true)
         {
-            var header = new byte[Framing.HeaderBytes];
-            await raw.ReadExactlyAsync(header);
-            var body = new byte[Framing.ReadDeclaredLength(header)];
-            await raw.ReadExactlyAsync(body);
-            var frame = JsonDocument.Parse(body);
+            var frame = JsonDocument.Parse(await Framing.ReadFrameAsync(raw));
             if (frame.RootElement.TryGetProperty("id", out _))
             {
                 return frame;

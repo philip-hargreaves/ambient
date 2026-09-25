@@ -13,12 +13,7 @@ public static class PowerStateReader
 
     public static PowerState Read()
     {
-        var onMains = true;
-        var status = new SYSTEM_POWER_STATUS();
-        if (PInvoke.GetSystemPowerStatus(out status))
-        {
-            onMains = status.ACLineStatus != 0;
-        }
+        var onMains = !PInvoke.GetSystemPowerStatus(out var status) || status.ACLineStatus != 0;
 
         var overlay = "";
         try
@@ -29,6 +24,7 @@ public static class PowerStateReader
         }
         catch (Exception)
         {
+            // An unreadable key reads as the default overlay
         }
 
         return new PowerState(PowerState.ModeName(overlay), onMains);

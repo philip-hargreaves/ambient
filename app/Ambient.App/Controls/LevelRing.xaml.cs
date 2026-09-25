@@ -4,13 +4,13 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Ambient.App.Core.Shell;
+using Ambient.App.Themes;
 
 namespace Ambient.App.Controls;
 
 /// <summary>
 /// The presence behind a disc button: a soft accent glow that grows with the
 /// microphone level and one hairline ring that eases outward from the disc.
-/// Kept restrained so it reads as calm activity.
 /// </summary>
 public sealed partial class LevelRing : UserControl
 {
@@ -29,26 +29,13 @@ public sealed partial class LevelRing : UserControl
     public LevelRing()
     {
         InitializeComponent();
-        if (Application.Current.Resources.TryGetValue("ColorAccent", out var accent) && accent is Color colour)
-        {
-            _accent = colour;
-        }
-
         _glow.GradientStops.Add(new GradientStop { Offset = 0.0 });
         _glow.GradientStops.Add(new GradientStop { Offset = 0.55 });
-        _glow.GradientStops.Add(new GradientStop { Offset = 1.0, Color = Transparent() });
+        _glow.GradientStops.Add(new GradientStop { Offset = 1.0 });
         Glow.Fill = _glow;
         Ring.Stroke = _ring;
-        ActualThemeChanged += (_, _) =>
-        {
-            if (Application.Current.Resources.TryGetValue("ColorAccent", out var a) && a is Color c)
-            {
-                _accent = c;
-            }
-
-            Apply();
-        };
-        Apply();
+        ActualThemeChanged += (_, _) => ReadAccent();
+        ReadAccent();
     }
 
     /// <summary>Microphone level, 0 to 1.</summary>
@@ -65,7 +52,15 @@ public sealed partial class LevelRing : UserControl
         set => SetValue(DiameterProperty, value);
     }
 
-    private Color Transparent() => Color.FromArgb(0, _accent.R, _accent.G, _accent.B);
+    private void ReadAccent()
+    {
+        if (ThemedResources.Find("ColorAccent", ActualTheme) is Color colour)
+        {
+            _accent = colour;
+        }
+
+        Apply();
+    }
 
     private Color WithAlpha(double alpha) =>
         Color.FromArgb((byte)Math.Round(255 * Math.Clamp(alpha, 0.0, 1.0)), _accent.R, _accent.G, _accent.B);
@@ -79,7 +74,7 @@ public sealed partial class LevelRing : UserControl
         RingScale.ScaleX = RingScale.ScaleY = LevelCurve.RingScale(level);
         _glow.GradientStops[0].Color = WithAlpha(LevelCurve.GlowAlpha(level));
         _glow.GradientStops[1].Color = WithAlpha(LevelCurve.GlowAlpha(level) * 0.45);
-        _glow.GradientStops[2].Color = Transparent();
+        _glow.GradientStops[2].Color = WithAlpha(0);
         _ring.Color = WithAlpha(LevelCurve.RingAlpha(level));
     }
 }

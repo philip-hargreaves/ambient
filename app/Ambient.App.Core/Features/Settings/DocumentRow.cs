@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Common;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Settings;
@@ -106,11 +106,11 @@ public sealed partial class DocumentRow : ObservableObject
         var parts = new List<string>();
         if (document.Pages > 0)
         {
-            parts.Add(GuidanceCard.Count(document.Pages, "page"));
+            parts.Add(Words.Count(document.Pages, "page"));
         }
 
-        parts.Add(GuidanceCard.Count(document.Chunks, "passage"));
-        var added = GuidanceCard.ShortDate(document.AddedAt ?? "");
+        parts.Add(Words.Count(document.Chunks, "passage"));
+        var added = Words.ShortDate(document.AddedAt ?? "");
         if (added.Length > 0)
         {
             parts.Add($"added {added}");

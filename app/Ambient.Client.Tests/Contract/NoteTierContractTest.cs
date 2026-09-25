@@ -1,4 +1,5 @@
 using Ambient.Client;
+using Ambient.Client.Tests.Support;
 
 namespace Ambient.Client.Tests.Contract;
 

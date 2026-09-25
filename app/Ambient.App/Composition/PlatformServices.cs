@@ -22,6 +22,7 @@ internal static class PlatformServices
         services.AddSingleton<IThemeService, WinUiThemeService>();
         services.AddSingleton<IDialogService, WinUiDialogService>();
         services.AddSingleton<IMachineInfoProvider, WmiMachineInfoProvider>();
+        services.AddSingleton<IAppInfo, AppInfo>();
         services.AddSingleton<IProcessMetrics, ProcessMetrics>();
         return services;
     }

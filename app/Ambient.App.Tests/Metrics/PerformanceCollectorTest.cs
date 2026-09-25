@@ -27,10 +27,17 @@ public class PerformanceCollectorTest : IDisposable
         new(new EngineApi(engine), () => enabled, () => null, _path);
 
     [Fact]
-    public async Task AFinishedSessionAppendsOneLine()
+    public async Task OnlyAFinishedSessionWithCollectionOnAppendsALine()
     {
-        var engine = new FakeEngineClient();
-        var collector = NewCollector(engine);
+        var disabled = NewCollector(new FakeEngineClient(), enabled: false);
+        disabled.SessionStarted("mic", 0, null);
+        disabled.StopRequested();
+        await disabled.SessionFinishedAsync(null, 100);
+        Assert.False(File.Exists(_path));
+
+        var collector = NewCollector(new FakeEngineClient());
+        await collector.SessionFinishedAsync(null, 5);  // no stop was requested
+        Assert.False(File.Exists(_path));
 
         collector.NoteModel("Qwen3.5 9B", "default", 24.1);
         collector.SessionStarted("replay", 1.0, "Elbow swelling");
@@ -66,22 +73,9 @@ public class PerformanceCollectorTest : IDisposable
     }
 
     [Fact]
-    public async Task DisabledCollectionWritesNothing()
+    public async Task FailuresAndRefusalsNameTheirOutcome()
     {
-        var collector = NewCollector(new FakeEngineClient(), enabled: false);
-
-        collector.SessionStarted("mic", 0, null);
-        collector.StopRequested();
-        await collector.SessionFinishedAsync(null, 100);
-
-        Assert.False(File.Exists(_path));
-    }
-
-    [Fact]
-    public async Task AFailedNoteIsRecordedWithItsReason()
-    {
-        var engine = new FakeEngineClient();
-        var collector = NewCollector(engine);
+        var collector = NewCollector(new FakeEngineClient());
 
         collector.SessionStarted("mic", 0, null);
         collector.StopRequested();
@@ -89,23 +83,6 @@ public class PerformanceCollectorTest : IDisposable
         collector.SessionStarted("mic", 0, null);
         collector.StopRequested();
         await collector.SessionFinishedAsync(null, 42);
-
-        var lines = File.ReadAllLines(_path);
-        Assert.Equal(2, lines.Length);
-        using var failed = JsonDocument.Parse(lines[0]);
-        Assert.Equal("clinical note failed", failed.RootElement.GetProperty("outcome").GetString());
-        Assert.False(failed.RootElement.TryGetProperty("patient", out _));
-        Assert.Equal("the transcript is empty",
-            failed.RootElement.GetProperty("note").GetProperty("failed").GetString());
-        using var fine = JsonDocument.Parse(lines[1]);
-        Assert.False(fine.RootElement.GetProperty("note").TryGetProperty("failed", out _));
-    }
-
-    [Fact]
-    public async Task RefusalsAndPatientNoteFailuresNameTheirOutcome()
-    {
-        var collector = NewCollector(new FakeEngineClient());
-
         collector.SessionStarted("mic", 0, null);
         collector.StopRequested();
         await collector.SessionFinishedAsync("refused: not a consultation", 0);
@@ -116,20 +93,20 @@ public class PerformanceCollectorTest : IDisposable
         await collector.SessionFinishedAsync(null, 300, "failed");
 
         var lines = File.ReadAllLines(_path);
-        using var refused = JsonDocument.Parse(lines[0]);
+        Assert.Equal(4, lines.Length);
+        using var failed = JsonDocument.Parse(lines[0]);
+        Assert.Equal("clinical note failed", failed.RootElement.GetProperty("outcome").GetString());
+        Assert.False(failed.RootElement.TryGetProperty("patient", out _));
+        Assert.Equal("the transcript is empty",
+            failed.RootElement.GetProperty("note").GetProperty("failed").GetString());
+        using var fine = JsonDocument.Parse(lines[1]);
+        Assert.False(fine.RootElement.GetProperty("note").TryGetProperty("failed", out _));
+        using var refused = JsonDocument.Parse(lines[2]);
         Assert.Equal("refused", refused.RootElement.GetProperty("outcome").GetString());
-        using var patientFailed = JsonDocument.Parse(lines[1]);
+        using var patientFailed = JsonDocument.Parse(lines[3]);
         Assert.Equal("patient note failed", patientFailed.RootElement.GetProperty("outcome").GetString());
         var patient = patientFailed.RootElement.GetProperty("patient");
         Assert.Equal("failed", patient.GetProperty("failed").GetString());
         Assert.False(patient.TryGetProperty("readyAfterNoteSeconds", out _));
-    }
-
-    [Fact]
-    public async Task AFinishWithoutAStopIsIgnored()
-    {
-        var collector = NewCollector(new FakeEngineClient());
-        await collector.SessionFinishedAsync(null, 5);
-        Assert.False(File.Exists(_path));
     }
 }

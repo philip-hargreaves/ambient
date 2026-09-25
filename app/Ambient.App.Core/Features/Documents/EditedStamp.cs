@@ -1,4 +1,5 @@
 using System.Globalization;
+using Ambient.App.Core.Common;
 
 namespace Ambient.App.Core.Features.Documents;
 
@@ -10,15 +11,12 @@ public static class EditedStamp
 {
     public static string Label(string sessionDayAt, string editedAt)
     {
-        if (!DateTimeOffset.TryParse(editedAt, CultureInfo.InvariantCulture, out var edited))
+        if (Words.LocalTime(editedAt) is not { } local)
         {
             return "";
         }
 
-        var local = edited.ToLocalTime();
-        var sameDay =
-            DateTimeOffset.TryParse(sessionDayAt, CultureInfo.InvariantCulture, out var day)
-            && day.ToLocalTime().Date == local.Date;
+        var sameDay = Words.LocalTime(sessionDayAt) is { } day && day.Date == local.Date;
         return "Edited " + (sameDay
             ? local.ToString("HH:mm", CultureInfo.CurrentCulture)
             : local.ToString("d MMM", CultureInfo.CurrentCulture));

@@ -20,8 +20,13 @@ public class CreditsViewModelTest : IDisposable
         File.WriteAllText(Path.Combine(_directory, name), content);
 
     [Fact]
-    public void MarksLoadInManifestOrderWithDarkFallback()
+    public void MarksLoadInManifestOrderAndWhatIsMissingIsSkipped()
     {
+        // No manifest, then a broken one: an empty row either way
+        Assert.Empty(new CreditsViewModel(_directory).Marks);
+        Write("credits.json", "{ not json");
+        Assert.Empty(new CreditsViewModel(_directory).Marks);
+
         Write("a.png");
         Write("a-dark.png");
         Write("b.svg");
@@ -40,36 +45,10 @@ public class CreditsViewModelTest : IDisposable
         Assert.Equal(18, credits.Marks[0].Height);
         Assert.Equal(credits.Marks[1].LightPath, credits.Marks[1].DarkPath);
         Assert.Equal(16, credits.Marks[1].Height);
-    }
 
-    [Fact]
-    public void AMissingFileSkipsItsMarkOnly()
-    {
-        Write("b.svg");
-        Write("credits.json", """
-            { "marks": [
-                { "name": "A", "light": "gone.png" },
-                { "name": "B", "light": "b.svg" }
-            ] }
-            """);
-
-        var credits = new CreditsViewModel(_directory);
-
-        var mark = Assert.Single(credits.Marks);
+        // A missing image skips its mark only
+        File.Delete(Path.Combine(_directory, "a.png"));
+        var mark = Assert.Single(new CreditsViewModel(_directory).Marks);
         Assert.Equal("B", mark.Name);
-    }
-
-    [Fact]
-    public void ABrokenManifestYieldsAnEmptyRow()
-    {
-        Write("credits.json", "{ not json");
-
-        Assert.Empty(new CreditsViewModel(_directory).Marks);
-    }
-
-    [Fact]
-    public void NoManifestYieldsAnEmptyRow()
-    {
-        Assert.Empty(new CreditsViewModel(_directory).Marks);
     }
 }

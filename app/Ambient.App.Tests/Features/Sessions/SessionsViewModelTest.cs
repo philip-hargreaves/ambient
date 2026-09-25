@@ -1,5 +1,4 @@
 using Ambient.App.Core.Features.Consultation;
-using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Sessions;
 using Ambient.App.Core.Preferences;
 using Ambient.App.Core.Shell;
@@ -13,15 +12,12 @@ namespace Ambient.App.Tests.Features.Sessions;
 public class SessionsViewModelTest
 {
     private static (SessionsViewModel Sessions, ConsultationViewModel Consultation,
-        FakeEngineClient Engine, StatusBarViewModel Status) Create()
+        FakeEngineClient Engine, StatusBarViewModel Status) Create(AppPreferences? preferences = null)
     {
-        var engine = new FakeEngineClient(autoNotify: false);
-        var note = new NoteViewModel();
-        var status = new StatusBarViewModel();
-        var consultation = new ConsultationViewModel(
-            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), note, status,
-            new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
-        return (new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService()), consultation, engine, status);
+        var (consultation, engine, _) = TestSession.Create(preferences);
+        var sessions = new SessionsViewModel(
+            new EngineApi(engine), consultation.Status, consultation, new FakeDialogService(), preferences);
+        return (sessions, consultation, engine, consultation.Status);
     }
 
     private static void ScriptOneSession(FakeEngineClient engine)
@@ -68,7 +64,7 @@ public class SessionsViewModelTest
     }
 
     [Fact]
-    public async Task RefreshListsSessionsWithLabelAndEditStamp()
+    public async Task RefreshListsSessionsWithLabelAndEditStampAndAMissingLabelFallsBackToTheDateAndTime()
     {
         var (vm, _, engine, _) = Create();
         ScriptOneSession(engine);
@@ -85,12 +81,7 @@ public class SessionsViewModelTest
         Assert.Equal("Elbow swelling", row.Heading);
         Assert.Equal($"{row.Started} · 9 min", row.Meta);
         Assert.True(row.MetaVisible);
-    }
 
-    [Fact]
-    public async Task AMissingLabelFallsBackToTheDateAndTime()
-    {
-        var (vm, _, engine, _) = Create();
         engine.Responses["session/list"] = new
         {
             sessions = new[]
@@ -109,10 +100,9 @@ public class SessionsViewModelTest
                 },
             },
         };
-
         await vm.RefreshAsync();
 
-        var row = Assert.Single(vm.Sessions);
+        row = Assert.Single(vm.Sessions);
         Assert.Equal(row.Started, row.Title);
         Assert.False(row.Edited);
         Assert.True(row.Demo);
@@ -123,7 +113,7 @@ public class SessionsViewModelTest
     }
 
     [Fact]
-    public async Task SelectingOpensTheSessionIntoTheSharedPanes()
+    public async Task SelectingOpensTheSessionRenamingKeepsItOpenLeavingSavesEditsAndDeleteClosesFirst()
     {
         var (vm, consultation, engine, _) = Create();
         ScriptOneSession(engine);
@@ -139,12 +129,47 @@ public class SessionsViewModelTest
         Assert.Equal("the sheet", consultation.Note.PatientInfoText);
         Assert.Equal("arkusz", consultation.Note.TranslationText);
         Assert.Equal("pl", consultation.Note.TranslationLanguage);
-        Assert.Equal("pl translation", consultation.Note.TranslationCaption);
         Assert.Equal("soap", consultation.Note.Style);
         Assert.True(consultation.Note.Edited);
         Assert.Single(consultation.Transcript.Turns);
         Assert.Equal("Elbow swelling", vm.DetailTitle);
         Assert.Contains("SOAP, concise", vm.DetailMeta);
+
+        // A rewrite in another style is named under the title
+        consultation.Note.Style = "prose";
+        consultation.Note.Detail = "detailed";
+        Assert.Contains("Prose, detailed", vm.DetailMeta);
+
+        vm.DetailTitle = "Left elbow bursitis";
+        await vm.RenameAsync();
+
+        Assert.Contains(engine.Requests, c => c.Method == "session/label"
+            && c.Params.Contains("Left elbow bursitis"));
+        Assert.Equal("Left elbow bursitis", vm.Sessions[0].Title);
+        Assert.Same(vm.Sessions[0], vm.Selected);
+        Assert.True(vm.DetailOpen, "renaming must not close the open session");
+        Assert.Equal(1, engine.Requests.Count(c => c.Method == "session/open"));
+
+        consultation.Note.ClinicalNoteText = "the note, corrected";
+        await vm.LeaveAsync();
+
+        Assert.Contains(engine.Requests, c => c.Method == "note/update"
+            && c.Params.Contains("the note, corrected"));
+        Assert.Contains(engine.Requests, c => c.Method == "session/close");
+        Assert.Equal(SessionState.Idle, consultation.State);
+        Assert.False(vm.DetailOpen);
+
+        // Delete closes the review it reopened before removing, then refreshes
+        vm.Selected = vm.Sessions[0];
+        await WaitUntilAsync(() => vm.DetailOpen);
+        var lists = engine.Requests.Count(c => c.Method == "session/list");
+
+        await vm.DeleteCommand.ExecuteAsync(vm.Selected);
+
+        var close = engine.Requests.FindLastIndex(c => c.Method == "session/close");
+        var delete = engine.Requests.FindIndex(c => c.Method == "session/delete");
+        Assert.True(close >= 0 && delete > close, "close precedes delete");
+        Assert.Equal(lists + 1, engine.Requests.Count(c => c.Method == "session/list"));
     }
 
     [Fact]
@@ -163,63 +188,7 @@ public class SessionsViewModelTest
     }
 
     [Fact]
-    public async Task RenamingSendsTheLabelAndUpdatesTheRow()
-    {
-        var (vm, _, engine, _) = Create();
-        ScriptOneSession(engine);
-        await vm.RefreshAsync();
-        vm.Selected = vm.Sessions[0];
-        await WaitUntilAsync(() => vm.DetailOpen);
-
-        vm.DetailTitle = "Left elbow bursitis";
-        await vm.RenameAsync();
-
-        Assert.Contains(engine.Requests, c => c.Method == "session/label"
-            && c.Params.Contains("Left elbow bursitis"));
-        Assert.Equal("Left elbow bursitis", vm.Sessions[0].Title);
-        Assert.Same(vm.Sessions[0], vm.Selected);
-        Assert.True(vm.DetailOpen, "renaming must not close the open session");
-        Assert.Equal(1, engine.Requests.Count(c => c.Method == "session/open"));
-    }
-
-    [Fact]
-    public async Task LeavingClosesTheReviewAndSavesEdits()
-    {
-        var (vm, consultation, engine, _) = Create();
-        ScriptOneSession(engine);
-        await vm.RefreshAsync();
-        vm.Selected = vm.Sessions[0];
-        await WaitUntilAsync(() => vm.DetailOpen);
-
-        consultation.Note.ClinicalNoteText = "the note, corrected";
-        await vm.LeaveAsync();
-
-        Assert.Contains(engine.Requests, c => c.Method == "note/update"
-            && c.Params.Contains("the note, corrected"));
-        Assert.Contains(engine.Requests, c => c.Method == "session/close");
-        Assert.Equal(SessionState.Idle, consultation.State);
-        Assert.False(vm.DetailOpen);
-    }
-
-    [Fact]
-    public async Task DeleteClosesTheReviewFirstAndRefreshes()
-    {
-        var (vm, _, engine, _) = Create();
-        ScriptOneSession(engine);
-        await vm.RefreshAsync();
-        vm.Selected = vm.Sessions[0];
-        await WaitUntilAsync(() => vm.DetailOpen);
-
-        await vm.DeleteCommand.ExecuteAsync(vm.Selected);
-
-        var close = engine.Requests.FindIndex(c => c.Method == "session/close");
-        var delete = engine.Requests.FindIndex(c => c.Method == "session/delete");
-        Assert.True(close >= 0 && delete > close, "close precedes delete");
-        Assert.Equal(2, engine.Requests.Count(c => c.Method == "session/list"));
-    }
-
-    [Fact]
-    public async Task EngineErrorsLandInTheStatusLogNotAsCrashes()
+    public async Task EngineErrorsLandInTheStatusLogAndAnEmptyStoreIsAnEmptyListNotAnError()
     {
         var (vm, _, engine, status) = Create();
         engine.Failing.Add("session/list");
@@ -227,15 +196,10 @@ public class SessionsViewModelTest
         await vm.RefreshAsync();
 
         Assert.Empty(vm.Sessions);
-        Assert.Contains(status.LogEntries, line => line.Contains("could not list sessions"));
-    }
+        Assert.Contains("could not list sessions", status.LatestActivity);
 
-    [Fact]
-    public async Task AnEmptyStoreIsAnEmptyListNotAnError()
-    {
-        var (vm, _, engine, _) = Create();
+        engine.Failing.Remove("session/list");
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
-
         await vm.RefreshAsync();
 
         Assert.Empty(vm.Sessions);
@@ -245,14 +209,8 @@ public class SessionsViewModelTest
     [Fact]
     public async Task AnEmptyListExplainsItselfWhenRetentionIsOff()
     {
-        var preferences = new AppPreferences(
-            Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
-        var engine = new FakeEngineClient(autoNotify: false);
-        var status = new StatusBarViewModel();
-        var consultation = new ConsultationViewModel(
-            new EngineApi(engine), new InlineDispatcher(), new TranscriptViewModel(), new NoteViewModel(),
-            status, new FakeDialogService(), TestSession.Page(engine, status), TestSession.Guidance(status));
-        var vm = new SessionsViewModel(new EngineApi(engine), status, consultation, new FakeDialogService(), preferences);
+        var (vm, _, engine, _) = Create(new AppPreferences(
+            Path.Combine(Path.GetTempPath(), Path.GetRandomFileName())));
         engine.Responses["session/list"] = new { sessions = Array.Empty<object>() };
 
         await vm.RefreshAsync();
@@ -265,21 +223,7 @@ public class SessionsViewModelTest
     }
 
     [Fact]
-    public async Task EnteringOpensTheMostRecentConsultation()
-    {
-        var (vm, consultation, engine, _) = Create();
-        ScriptOneSession(engine);
-
-        await vm.EnterAsync();
-        await WaitUntilAsync(() => vm.DetailOpen);
-
-        Assert.Same(vm.Sessions[0], vm.Selected);
-        Assert.Contains(engine.Requests, c => c.Method == "session/open" && c.Params.Contains("abc"));
-        Assert.True(consultation.ReviewingStored);
-    }
-
-    [Fact]
-    public async Task GoingToRecordEndsAStoredReviewOnly()
+    public async Task EnteringOpensTheMostRecentConsultationAndGoingToRecordEndsAStoredReviewOnly()
     {
         var (vm, consultation, engine, _) = Create();
         ScriptOneSession(engine);
@@ -289,6 +233,10 @@ public class SessionsViewModelTest
 
         await vm.EnterAsync();
         await WaitUntilAsync(() => vm.DetailOpen);
+        Assert.Same(vm.Sessions[0], vm.Selected);
+        Assert.Contains(engine.Requests, c => c.Method == "session/open" && c.Params.Contains("abc"));
+        Assert.True(consultation.ReviewingStored);
+
         await vm.CloseStoredReviewAsync();
 
         Assert.Contains(engine.Requests, c => c.Method == "session/close");
@@ -296,6 +244,36 @@ public class SessionsViewModelTest
         Assert.False(vm.DetailOpen);
         Assert.False(consultation.ReviewingStored);
         Assert.Equal(SessionState.Idle, consultation.State);
+    }
+
+    [Fact]
+    public async Task EnteringDuringTheLiveReviewShowsItWithoutReopeningAndGoingBackKeepsIt()
+    {
+        var (vm, consultation, engine, _) = Create();
+        await consultation.StartRecordingAsync();
+        await consultation.StopRecordingAsync();
+        engine.RaiseNotification("note/ready");
+        engine.RaiseNotification("patient/ready");
+        Assert.Equal(SessionState.Review, consultation.State);
+        engine.Responses["session/list"] = new
+        {
+            sessions = new[]
+            {
+                new { id = "s1", startedAt = "2026-09-25T14:09:00Z", endedAt = "2026-09-25T14:18:00Z", state = "finalised", sampleRate = 16000, label = "Left elbow swelling", editedAt = "", audioSeconds = 540.0 },
+                new { id = "abc", startedAt = "2026-08-17T10:15:00Z", endedAt = "2026-08-17T10:23:41Z", state = "finalised", sampleRate = 16000, label = "Elbow swelling", editedAt = "", audioSeconds = 542.0 },
+            },
+        };
+
+        await vm.EnterAsync();
+
+        Assert.Equal("s1", vm.Selected?.Id);
+        Assert.True(vm.DetailOpen);
+        Assert.DoesNotContain(engine.Requests, c => c.Method == "session/open");
+        Assert.False(consultation.ReviewingStored);
+
+        await vm.CloseStoredReviewAsync();
+        Assert.DoesNotContain(engine.Requests, c => c.Method == "session/close");
+        Assert.Equal(SessionState.Review, consultation.State);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Text;
+using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Appraisal;
 
@@ -6,13 +7,11 @@ namespace Ambient.App.Core.Features.Appraisal;
 public sealed record ReflectionEntry(
     string Title, string Month, string Summary, string Happened, string Learned, string Next)
 {
-    public bool IsEmpty =>
-        Happened.Trim().Length == 0 && Learned.Trim().Length == 0 && Next.Trim().Length == 0;
+    /// <summary>The guidance the clinician ticked as referred to.</summary>
+    public IReadOnlyList<ReflectionReference> References { get; init; } = [];
 }
 
-/// <summary>
-/// Plain text for appraisal portfolios, which all take free text.
-/// </summary>
+/// <summary>Plain text for appraisal portfolios, which all take free text.</summary>
 public static class ReflectionExport
 {
     public const string Declaration =
@@ -30,6 +29,21 @@ public static class ReflectionExport
             text.Append("Case study\n").Append(entry.Summary.Trim()).Append("\n\n");
         }
 
+        if (entry.References.Count > 0)
+        {
+            text.Append("Guidance referred to\n");
+            foreach (var reference in entry.References)
+            {
+                text.Append(Line(reference)).Append('\n');
+                if (reference.Link.Length > 0)
+                {
+                    text.Append(reference.Link).Append('\n');
+                }
+            }
+
+            text.Append('\n');
+        }
+
         Section(text, "What stood out?", entry.Happened);
         Section(text, "What did I learn?", entry.Learned);
         Section(text, "Would I do anything differently?", entry.Next);
@@ -39,6 +53,15 @@ public static class ReflectionExport
         }
 
         return text.ToString().TrimEnd() + "\n";
+    }
+
+    // "NG100 Rheumatoid arthritis in adults (NICE)"
+    private static string Line(ReflectionReference reference)
+    {
+        var name = reference.Title.Length > 0 && reference.Title != reference.Reference
+            ? $"{reference.Reference} {reference.Title}".Trim()
+            : reference.Reference.Length > 0 ? reference.Reference : reference.Title;
+        return reference.Source.Length > 0 ? $"{name} ({reference.Source})" : name;
     }
 
     private static void Section(StringBuilder text, string question, string answer)

@@ -1,17 +1,19 @@
 using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Shell;
 using Ambient.App.Tests.Support;
+using Ambient.App.Tests.TestDoubles;
 
 namespace Ambient.App.Tests.Shell;
 
 public class EngineStatusInShellTest
 {
     [Fact]
-    public void LabelsFollowTheEngineStatusAndReadiness()
+    public void TheStatusBarThroughAnEngineLifetime()
     {
-        var bar = new StatusBarViewModel();
+        var log = new ListLogger();
+        var bar = new StatusBarViewModel(log);
 
-        bar.SetEngineState(EngineStatus.Running, null);
+        bar.SetEngineState(EngineStatus.Running);
         Assert.Equal("Starting up", bar.EngineStateLabel);
         Assert.True(bar.EngineStarting);
 
@@ -20,33 +22,15 @@ public class EngineStatusInShellTest
         Assert.False(bar.EngineStarting);
 
         bar.SetEngineReady(false);
-        bar.SetEngineState(EngineStatus.Restarting, null);
+        bar.SetEngineState(EngineStatus.Restarting);
         Assert.Equal("Recovering", bar.EngineStateLabel);
 
-        bar.SetEngineState(EngineStatus.Stopped, null);
+        bar.SetEngineState(EngineStatus.Stopped);
         Assert.Equal("Not running", bar.EngineStateLabel);
-    }
+        Assert.Empty(log.Lines);  // only faults reach the log
 
-    [Fact]
-    public void FaultsAreLabelledByKindAndLogged()
-    {
-        var bar = new StatusBarViewModel();
-
-        bar.SetEngineState(EngineStatus.Faulted, new EngineFault(EngineFaultKind.CrashLoop, -1));
-        Assert.Equal("Recording is unavailable - please restart the app", bar.EngineStateLabel);
-        Assert.Equal("Recording is unavailable - please restart the app", bar.LatestActivity);
-
-        bar.SetEngineState(EngineStatus.Faulted, new EngineFault(EngineFaultKind.LaunchFailed));
-        Assert.Equal("Recording is unavailable - please restart the app", bar.EngineStateLabel);
-
-        Assert.Equal(2, bar.LogEntries.Count);
-    }
-
-    [Fact]
-    public void OneStatusReplacedWithTheRingMeaningInProgress()
-    {
-        var bar = new StatusBarViewModel();
-        bar.SetEngineState(EngineStatus.Running, null);
+        // Back up: one status, replaced by activity; the ring means in progress
+        bar.SetEngineState(EngineStatus.Running);
         bar.SetEngineReady(true);
         Assert.Equal("Ready", bar.DisplayLabel);
         Assert.False(bar.Busy);
@@ -61,21 +45,19 @@ public class EngineStatusInShellTest
 
         // Abnormal readiness outranks whatever activity was showing
         bar.SetEngineReady(false);
-        bar.SetEngineState(EngineStatus.Restarting, null);
+        bar.SetEngineState(EngineStatus.Restarting);
         Assert.Equal("Recovering", bar.DisplayLabel);
         Assert.True(bar.Busy);
-    }
 
-    [Fact]
-    public void SilentTransitionsStayOutOfTheActivityLog()
-    {
-        var bar = new StatusBarViewModel();
+        // Every fault is logged
+        var logged = log.Lines.Count;
+        bar.SetEngineState(EngineStatus.Faulted);
+        Assert.Equal("Recording is unavailable - please restart the app", bar.EngineStateLabel);
+        Assert.Equal("Recording is unavailable - please restart the app", bar.LatestActivity);
 
-        bar.SetEngineState(EngineStatus.Running, null);
-        bar.SetEngineState(EngineStatus.Restarting, null);
-        bar.SetEngineState(EngineStatus.Running, null);
-
-        Assert.Empty(bar.LogEntries);
+        bar.SetEngineState(EngineStatus.Faulted);
+        Assert.Equal("Recording is unavailable - please restart the app", bar.EngineStateLabel);
+        Assert.Equal(logged + 2, log.Lines.Count);
     }
 
     [Fact]

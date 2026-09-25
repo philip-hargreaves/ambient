@@ -1,3 +1,5 @@
+using Ambient.App.Core.Ports;
+
 namespace Ambient.App.Core.Hosting;
 
 /// <summary>
@@ -125,9 +127,9 @@ public sealed class EngineSupervisor(
         var exitCode = process.ExitCode;
         process.Dispose();
 
-        // Exit 0 is the engine leaving on request, so it is a stop.
-        // Counting it would burn restart budget and race a settings-driven
-        // Shutdown/Start with a spurious supervisor relaunch
+        // Exit 0 is the engine leaving on request. Counting it as a crash would
+        // burn restart budget and race a settings-driven Shutdown/Start with a
+        // spurious relaunch
         if (exitCode == 0)
         {
             SetStatusLocked(EngineStatus.Stopped, changes);
@@ -162,7 +164,7 @@ public sealed class EngineSupervisor(
         _relaunch = clock.CreateTimer(_ => Relaunch(), null, wait, Timeout.InfiniteTimeSpan);
     }
 
-    // The backoff elapsed. A Start or a Shutdown meanwhile has already settled it
+    // The backoff elapsed; a Start or Shutdown in the meantime has already settled it
     private void Relaunch()
     {
         var changes = new List<EngineStatus>();

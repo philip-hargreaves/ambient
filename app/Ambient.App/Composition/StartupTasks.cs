@@ -21,6 +21,7 @@ internal static class StartupTasks
         services.AddSingleton<IStartupTask, ApplyTheme>();
         services.AddSingleton<IStartupTask, StartEngine>();
         services.AddSingleton<IStartupTask, RequestMicrophoneAccess>();
+        services.AddSingleton<StartupRunner>();
         return services;
     }
 
@@ -38,12 +39,8 @@ internal static class StartupTasks
                 logger.SottoDataMoved(paths.LocalState);
             }
 
-            foreach (var exe in new[] { "sotto_engine.exe", "sotto_note_host.exe" })
-            {
-                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(
-                    @"SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\" + exe,
-                    throwOnMissingSubKey: false);
-            }
+            CrashDumps.Unregister(
+                Microsoft.Win32.Registry.CurrentUser, "sotto_engine.exe", "sotto_note_host.exe");
         }
     }
 
@@ -96,7 +93,7 @@ internal static class StartupTasks
 
         public void Run()
         {
-            host.StatusChanged += _ => dispatcher.Post(() => status.SetEngineState(host.Status, host.Fault));
+            host.StatusChanged += _ => dispatcher.Post(() => status.SetEngineState(host.Status));
             host.Start();
         }
     }

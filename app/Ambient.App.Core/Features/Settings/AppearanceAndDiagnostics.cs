@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Features.Demo;
-using Ambient.App.Core.Hosting;
 using Ambient.App.Core.Metrics;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Preferences;
@@ -44,8 +44,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         _theme = theme;
         _exportDirectory = exportDirectory
             ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        // Restoring saved values is not the clinician changing them: the
-        // handlers (persist, apply, engine restart) must not fire here
+        // Restoring saved values is not the clinician changing them
         _initialising = true;
         DemoTrayEnabled = preferences?.DemoTrayEnabled ?? false;
         DemoModeEnabled = demo?.Enabled ?? false;
@@ -69,11 +68,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
         }
 
         _theme?.Apply(value);
-        if (_preferences is not null)
-        {
-            _preferences.Theme = value;
-            _preferences.Save();
-        }
+        _preferences.Update(p => p.Theme = value);
     }
 
     public IReadOnlyList<string> ThemeOptions { get; } = ["System default", "Light", "Dark"];
@@ -106,12 +101,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
             return;
         }
 
-        if (_preferences is not null)
-        {
-            _preferences.NpuTranscription = value;
-            _preferences.Save();
-        }
-
+        _preferences.Update(p => p.NpuTranscription = value);
         if (_engine is not null)
         {
             _status?.Append(value
@@ -134,10 +124,9 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
 
     partial void OnDemoTrayEnabledChanged(bool value)
     {
-        if (!_initialising && _preferences is not null)
+        if (!_initialising)
         {
-            _preferences.DemoTrayEnabled = value;
-            _preferences.Save();
+            _preferences.Update(p => p.DemoTrayEnabled = value);
         }
     }
 
@@ -193,11 +182,7 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
             _status.MetricsVisible = value;
         }
 
-        if (_preferences is not null)
-        {
-            _preferences.ShowPerformanceMetrics = value;
-            _preferences.Save();
-        }
+        _preferences.Update(p => p.ShowPerformanceMetrics = value);
     }
 
     /// <summary>Local performance collection: numbers and device names only.</summary>
@@ -206,10 +191,9 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
 
     partial void OnCollectPerformanceDataChanged(bool value)
     {
-        if (!_initialising && _preferences is not null)
+        if (!_initialising)
         {
-            _preferences.CollectPerformanceData = value;
-            _preferences.Save();
+            _preferences.Update(p => p.CollectPerformanceData = value);
         }
     }
 
@@ -236,15 +220,18 @@ public sealed partial class AppearanceAndDiagnostics : ObservableObject
             var html = ReportBuilder.Build(
                 _machine.Describe(), File.ReadAllLines(_metrics.Path), DateTimeOffset.UtcNow);
             var suggested = $"ambient-perf-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}.html";
-            var path = _picker is not null
-                ? await _picker.PickSaveAsync(suggested, "HTML report", ".html").ConfigureAwait(true)
-                : Path.Combine(_exportDirectory, suggested);
-            if (path is null)
+            string? path;
+            if (_picker is null)
+            {
+                path = Path.Combine(_exportDirectory, suggested);
+                File.WriteAllText(path, html);
+            }
+            else if ((path = await _picker.SaveTextAsync(suggested, "HTML report", ".html", html)
+                         .ConfigureAwait(true)) is null)
             {
                 return;  // cancelled: no file, no caption
             }
 
-            File.WriteAllText(path, html);
             ExportResult = $"saved {path}";
         }
         catch (Exception e)

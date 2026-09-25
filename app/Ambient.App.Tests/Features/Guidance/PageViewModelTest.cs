@@ -1,6 +1,6 @@
-using System.Text.Json;
 using Ambient.App.Core.Features.Guidance;
 using Ambient.App.Core.Shell;
+using Ambient.App.Tests.Support;
 using Ambient.App.Tests.TestDoubles;
 using Ambient.Client;
 
@@ -9,26 +9,7 @@ namespace Ambient.App.Tests.Features.Guidance;
 public class PageViewModelTest
 {
     private static GuidanceRecommendation Found(int page = 1, int pages = 5) =>
-        GuidanceRecommendation.From(Protocol.Parse<GuidanceResult>(JsonSerializer.SerializeToElement(new
-        {
-            corpus = "upload:7",
-            chunkId = "upload:7-4",
-            code = "",
-            number = "1.2",
-            title = "BSR PMR guidelines 2009",
-            section = "",
-            text = "Start prednisolone 15 mg daily.",
-            url = "",
-            lastUpdated = "2026-09-15T09:12:44Z",
-            updateTag = "",
-            source = "upload",
-            citation = "BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)",
-            score = 0.9,
-            trigger = "",
-            document = 7L,
-            page,
-            pages,
-        }))!, "", true);
+        GuidanceRecords.Found(GuidanceRecords.DocumentResult(page, pages, document: 7), "", false);
 
     private static object Box(int page, double left, double top, double right, double bottom) =>
         new { page, left, top, right, bottom };
@@ -48,36 +29,35 @@ public class PageViewModelTest
     }
 
     [Fact]
-    public async Task ThePageViewClosesOnceItsPassageIsNoLongerACard()
+    public async Task EveryShowIsAnnouncedAndThePaneClosesByCommandOrWhenItsCardGoes()
     {
-        var (view, _) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));
-        await view.ShowAsync(Found());
+        var clipboard = new FakeClipboard();
+        var (view, _) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)), new FakeLauncher(), clipboard);
+        var shown = 0;
+        view.Shown += () => shown++;
 
+        await view.ShowAsync(Found());
+        await view.ShowAsync(Found());  // announced even while the page is already open
+        Assert.True(view.Visible);
+        Assert.Equal(2, shown);
+
+        await view.CopyCitationCommand.ExecuteAsync(null);
+        view.CloseCommand.Execute(null);
+        Assert.Equal(["BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)"], clipboard.Copied);
+        Assert.False(view.Visible);
+
+        await view.ShowAsync(Found());
         view.KeepOnlyFor([new GuidanceCard([Found()])]);
         Assert.True(view.Visible);
-
         view.KeepOnlyFor([]);
         Assert.False(view.Visible);
     }
 
     [Fact]
-    public async Task EveryShowIsAnnouncedEvenWhileAPageIsAlreadyOpen()
+    public async Task ShowingAPassageAsksForItsPageScalesTheBoxesAndThePagesTurnOneAtATime()
     {
-        var (view, _) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));
-        var shown = 0;
-        view.Shown += () => shown++;
-
-        await view.ShowAsync(Found());
-        await view.ShowAsync(Found());
-
-        Assert.True(view.Visible);
-        Assert.Equal(2, shown);
-    }
-
-    [Fact]
-    public async Task ShowingAPassageAsksForItsPageAndScalesTheBoxes()
-    {
-        var (view, engine) = Create(Reply(Box(1, 0.1, 0.2, 0.6, 0.3)));
+        var (view, engine) =
+            Create(Reply(Box(1, 0.1, 0.8, 0.9, 0.95), Box(2, 0.1, 0.05, 0.9, 0.2)));
 
         await view.ShowAsync(Found());
 
@@ -91,30 +71,18 @@ public class PageViewModelTest
         Assert.Equal(1400, view.Height);
         var box = Assert.Single(view.Boxes);
         Assert.Equal(100, box.Left, 3);
-        Assert.Equal(280, box.Top, 3);
-        Assert.Equal(500, box.Width, 3);
-        Assert.Equal(140, box.Height, 3);
+        Assert.Equal(0.8 * 1400, box.Top, 3);
+        Assert.Equal(800, box.Width, 3);
+        Assert.Equal(0.15 * 1400, box.Height, 3);
         Assert.NotNull(view.Focus);
         Assert.Equal(100, view.Focus.Left, 3);
-        Assert.Equal(500, view.Focus.Width, 3);
+        Assert.Equal(800, view.Focus.Width, 3);
         Assert.True(view.CanGoBack);
         Assert.True(view.CanGoForward);
         Assert.False(view.OffPassage);
         Assert.Equal("Page 2 of BSR PMR guidelines 2009, 1.2 highlighted", view.ImageName);
         var request = Assert.Single(engine.Requests, r => r.Method == "guidance/page");
         Assert.Equal("{\"id\":7,\"page\":1,\"chunkId\":\"upload:7-4\"}", request.Params);
-    }
-
-    [Fact]
-    public async Task ThePagesTurnOneAtATimeAndTheMarksFollowThePassage()
-    {
-        var (view, engine) =
-            Create(Reply(Box(1, 0.1, 0.8, 0.9, 0.95), Box(2, 0.1, 0.05, 0.9, 0.2)));
-
-        await view.ShowAsync(Found());
-
-        Assert.Equal("Page 2 of 5", view.PageLabel);
-        Assert.Equal(0.8 * 1400, Assert.Single(view.Boxes).Top, 3);
 
         await view.NextPageCommand.ExecuteAsync(null);
 
@@ -142,12 +110,6 @@ public class PageViewModelTest
         Assert.Equal("Page 2 of 5", view.PageLabel);
         Assert.False(view.OffPassage);
         Assert.Single(view.Boxes);
-    }
-
-    [Fact]
-    public async Task TheFirstPageHasNoPrevious()
-    {
-        var (view, _) = Create(Reply(Box(0, 0.1, 0.2, 0.6, 0.3)));
 
         await view.ShowAsync(Found(page: 0));
 
@@ -189,19 +151,5 @@ public class PageViewModelTest
         Assert.Equal([@"C:\scratch\7.pdf"], launcher.Files);
         var request = Assert.Single(engine.Requests, r => r.Method == "guidance/documents/open");
         Assert.Equal("{\"id\":7}", request.Params);
-    }
-
-    [Fact]
-    public async Task CloseHidesThePaneAndCopyHandsTheCitationOn()
-    {
-        var clipboard = new FakeClipboard();
-        var (view, _) = Create(Reply(), new FakeLauncher(), clipboard);
-        await view.ShowAsync(Found());
-
-        await view.CopyCitationCommand.ExecuteAsync(null);
-        view.CloseCommand.Execute(null);
-
-        Assert.Equal(["BSR PMR guidelines 2009, page 2, 1.2 (added 15 Sep 2026)"], clipboard.Copied);
-        Assert.False(view.Visible);
     }
 }

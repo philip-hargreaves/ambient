@@ -20,14 +20,13 @@ public class AppraisalsViewModelTest
     }
 
     [Fact]
-    public async Task TheJournalShowsTheLatestYearNewestFirstWithMonthHeadings()
+    public async Task TheJournalShowsTheLatestYearNewestFirstAMonthNarrowsItAndEarlierYearsAreAStepAway()
     {
         var (page, _) = Create();
 
         await page.RefreshAsync();
 
         Assert.Equal(2026, page.Year);
-        Assert.Equal("3 reflections", page.CountLabel);
         Assert.False(page.Empty);
         Assert.Equal(["a", "b", "c"], page.Cards.Select(c => c.Id));
         Assert.Equal([true, false, true], page.Cards.Select(c => c.StartsMonth));
@@ -43,19 +42,12 @@ public class AppraisalsViewModelTest
         Assert.False(page.Months[0].Filled);
         Assert.Equal("Sep", page.Months[8].Name);
         Assert.Equal(DateTimeOffset.Now.Year == 2026 ? 1 : 0, page.Months.Count(m => m.Current));
-    }
 
-    [Fact]
-    public async Task PressingAMonthNarrowsTheYearToItAndAgainWidensIt()
-    {
-        var (page, _) = Create();
-        await page.RefreshAsync();
-
+        // Pressing a month narrows the year to it, again widens it
         page.ToggleMonth(9);
         Assert.Equal(9, page.MonthFilter);
         Assert.Equal(["a", "b"], page.Cards.Select(c => c.Id));
         Assert.True(page.Months[8].Selected);
-        Assert.Equal("3 reflections", page.CountLabel);  // the count covers the whole year
 
         page.ToggleMonth(6);
         Assert.Equal(["c"], page.Cards.Select(c => c.Id));
@@ -75,20 +67,12 @@ public class AppraisalsViewModelTest
         page.Search = "smok";
         Assert.Equal(["b"], page.Cards.Select(c => c.Id));  // search within the month
         page.Search = "";
-        await page.PreviousYearCommand.ExecuteAsync(null);
-        Assert.Equal(0, page.MonthFilter);  // a new year starts wide
-    }
 
-    [Fact]
-    public async Task EarlierYearsAreAStepAwayAndUntitledEntriesShowTheirDay()
-    {
-        var (page, _) = Create();
-        await page.RefreshAsync();
-
+        // Earlier years, where an untitled entry shows its day; a new year starts wide
         Assert.True(page.PreviousYearCommand.CanExecute(null));
         Assert.False(page.NextYearCommand.CanExecute(null));
         await page.PreviousYearCommand.ExecuteAsync(null);
-
+        Assert.Equal(0, page.MonthFilter);
         Assert.Equal(2025, page.Year);
         var card = Assert.Single(page.Cards);
         Assert.Equal("3 November", card.Title);
@@ -96,9 +80,11 @@ public class AppraisalsViewModelTest
     }
 
     [Fact]
-    public async Task SearchFiltersTitleAndWords()
+    public async Task SearchFiltersTitleWordsAndCaseStudyAndOpeningACardEditsSavesAndMakesItsAnswersSearchable()
     {
-        var (page, _) = Create();
+        var (page, engine) = Create();
+        engine.ReflectionAnswers = ("the line kept dropping", "check the temperature", "book a video review");
+        engine.ReflectionSummary = "A patient in their forties.";
         await page.RefreshAsync();
 
         page.Search = "smok";
@@ -111,33 +97,9 @@ public class AppraisalsViewModelTest
         Assert.Equal(["a", "c"], page.Cards.Select(c => c.Id));
         page.Search = "";
         Assert.Equal(3, page.Cards.Count);
-    }
 
-    [Fact]
-    public async Task SearchReachesEveryAnswerOnceACardHasBeenOpened()
-    {
-        var (page, engine) = Create();
-        engine.ReflectionAnswers = ("the line kept dropping", "l", "book a video review");
-        engine.ReflectionSummary = "A patient in their forties.";
-        await page.RefreshAsync();
-
-        await page.ToggleAsync(page.Cards[0]);
-        await page.ToggleAsync(page.Cards[0]);
-        page.Search = "video review";
-        Assert.Equal(["a"], page.Cards.Select(c => c.Id));
-        page.Search = "dropping";
-        Assert.Equal(["a"], page.Cards.Select(c => c.Id));
-    }
-
-    [Fact]
-    public async Task OpeningACardLoadsItsEditorAndClosingSavesAndRefreshesTheLine()
-    {
-        var (page, engine) = Create();
-        engine.ReflectionAnswers = ("h", "check the temperature", "n");
-        engine.ReflectionSummary = "A patient in their forties.";
-        await page.RefreshAsync();
+        // Opening loads the editor; closing saves and refreshes the line
         var card = page.Cards[0];
-
         await page.ToggleAsync(card);
         Assert.True(card.Expanded);
         Assert.NotNull(card.Editor);
@@ -145,18 +107,30 @@ public class AppraisalsViewModelTest
 
         card.Editor.Learned = "check the temperature and the pulse";
         card.Editor.Summary = "A patient in their forties with a hot elbow.";
-        await page.ToggleAsync(page.Cards[1]);
+        await page.ToggleAsync(card);
 
         Assert.False(card.Expanded);
         Assert.Null(card.Editor);
         Assert.Equal("check the temperature and the pulse", card.Learned);
         Assert.Equal("A patient in their forties with a hot elbow.", card.Line);
         Assert.Contains(engine.Requests, r => r.Method == "reflection/update" && r.Params.Contains("pulse"));
-        Assert.True(page.Cards[1].Expanded);
+
+        // Every answer of an opened card is reachable
+        page.Search = "video review";
+        Assert.Equal(["a"], page.Cards.Select(c => c.Id));
+        page.Search = "dropping";
+        Assert.Equal(["a"], page.Cards.Select(c => c.Id));
+        page.Search = "";
+
+        // Opening another card closes the open one
+        await page.ToggleAsync(page.Cards[1]);
+        await page.ToggleAsync(page.Cards[2]);
+        Assert.False(page.Cards[1].Expanded);
+        Assert.True(page.Cards[2].Expanded);
     }
 
     [Fact]
-    public async Task ARetitleRenamesTheConsultationAndAnEmptySheetKeepsItsCard()
+    public async Task ARetitleRenamesTheConsultationAnEmptySheetKeepsItsCardAndRemovingDropsIt()
     {
         var (page, engine) = Create();
         await page.RefreshAsync();
@@ -171,19 +145,11 @@ public class AppraisalsViewModelTest
         Assert.Equal("Back pain, missed red flags", card.Title);
         Assert.Equal(3, page.Cards.Count);
         Assert.Contains(card, page.Cards);
-    }
-
-    [Fact]
-    public async Task RemovingACardTellsTheEngineAndDropsIt()
-    {
-        var (page, engine) = Create();
-        await page.RefreshAsync();
 
         await page.DeleteAsync(page.Cards[0]);
 
         Assert.Contains(engine.Requests, r => r.Method == "reflection/delete" && r.Params.Contains("\"a\""));
         Assert.Equal(["b", "c"], page.Cards.Select(c => c.Id));
-        Assert.Equal("2 reflections", page.CountLabel);
     }
 
     [Fact]

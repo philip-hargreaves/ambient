@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using Ambient.App.Core.Metrics;
+using Ambient.App.Core.Ports;
 
 namespace Ambient.App.Platform;
 
@@ -57,6 +58,7 @@ public sealed class WmiMachineInfoProvider : IMachineInfoProvider
         }
         catch (Exception)
         {
+            // WMI can be broken or slow on a managed machine; the rest still describes it
         }
 
         return new MachineInfo(cpu.Trim(), ramGb, os, gpus, npu);

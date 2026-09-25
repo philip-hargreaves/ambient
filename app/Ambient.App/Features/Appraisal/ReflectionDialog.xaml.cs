@@ -28,12 +28,10 @@ public sealed partial class ReflectionDialog : ContentDialog
     {
         try
         {
-            await ViewModel.SaveAsync();
-            await ViewModel.SaveTitleAsync();
+            await ViewModel.CloseAsync();
         }
         finally
         {
-            ViewModel.Dispose();
             deferral.Complete();
         }
     }

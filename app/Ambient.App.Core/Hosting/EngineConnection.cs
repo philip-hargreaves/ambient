@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Ambient.App.Core.Ports;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Hosting;
@@ -14,8 +15,8 @@ public sealed class EngineConnection : IEngineTransport
     private const string ShellName = "ambient-shell";
     private const string ShellVersion = "0.1.0";
 
-    // Generous: the engine binds its pipe before model verification and
-    // compilation, and answers the buffered hello only once that finishes
+    // The engine binds its pipe before model verification and compilation, and
+    // answers the buffered hello only once those finish
     private static readonly TimeSpan HelloTimeout = TimeSpan.FromSeconds(120);
 
     private static readonly TimeSpan RedialDelay = TimeSpan.FromMilliseconds(500);
@@ -30,6 +31,20 @@ public sealed class EngineConnection : IEngineTransport
     private int _generation;
     private volatile string? _methodInFlight;
     private int _disposed;
+
+    public EngineConnection(
+        IEngineHost host, Func<uint, CancellationToken, Task<IEngineTransport>> connect,
+        ILogger? logger = null)
+    {
+        _host = host;
+        _connect = connect;
+        _logger = logger;
+        host.StatusChanged += OnEngineStatusChanged;
+        if (host.Status == EngineStatus.Running)
+        {
+            OnEngineStatusChanged(EngineStatus.Running);
+        }
+    }
 
     public event Action<string, JsonElement>? NotificationReceived;
 
@@ -46,22 +61,8 @@ public sealed class EngineConnection : IEngineTransport
         }
     }
 
-    // The last request started, for the crash report
+    /// <summary>The request outstanding right now, for the crash report.</summary>
     public string? MethodInFlight => _methodInFlight;
-
-    public EngineConnection(
-        IEngineHost host, Func<uint, CancellationToken, Task<IEngineTransport>> connect,
-        ILogger? logger = null)
-    {
-        _host = host;
-        _connect = connect;
-        _logger = logger;
-        host.StatusChanged += OnEngineStatusChanged;
-        if (host.Status == EngineStatus.Running)
-        {
-            OnEngineStatusChanged(EngineStatus.Running);
-        }
-    }
 
     public async Task<JsonElement> RequestAsync(
         string method, object? parameters, TimeSpan timeout,
@@ -148,8 +149,8 @@ public sealed class EngineConnection : IEngineTransport
 
     private async Task ConnectAsync(int generation)
     {
-        // Redial until installed or superseded. Giving up here would leave
-        // the connection dead for good
+        // Redial until installed or superseded; giving up would leave the
+        // connection dead for good
         while (Volatile.Read(ref _disposed) == 0 && !_disposal.IsCancellationRequested)
         {
             lock (_gate)
@@ -215,7 +216,7 @@ public sealed class EngineConnection : IEngineTransport
             transport.NotificationReceived += OnInnerNotification;
             lock (_gate)
             {
-                // A newer status event owns the connection now, so stand down
+                // A newer status event may own the connection by now
                 if (_generation == generation && _disposed == 0)
                 {
                     _transport = transport;
@@ -243,7 +244,7 @@ public sealed class EngineConnection : IEngineTransport
     private void OnInnerNotification(string method, JsonElement parameters) =>
         NotificationReceived?.Invoke(method, parameters);
 
-    // Fire-and-forget work still reports a failure somewhere
+    // Fire-and-forget work still reports a failure
     private void Observe(Task task, string what) =>
         _ = task.ContinueWith(
             t => _logger?.StepFailed(what, t.Exception?.GetBaseException().Message ?? "faulted"),

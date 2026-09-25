@@ -9,40 +9,27 @@ namespace Ambient.App.Tests.Shell;
 /// <summary>The live numbers behind the status bar's model chips.</summary>
 public class StatusBarMetricsTest
 {
-    private static (StatusBarViewModel Status, FakeEngineClient Engine) Create()
+    private static (StatusBarViewModel Status, FakeEngineClient Engine) Create(Func<double>? memoryGb = null)
     {
         var engine = new FakeEngineClient(autoNotify: false);
-        return (new StatusBarViewModel(new EngineApi(engine), new InlineDispatcher()), engine);
+        return (new StatusBarViewModel(new EngineApi(engine), new InlineDispatcher(), memoryGb: memoryGb), engine);
     }
 
     [Fact]
-    public void PartialsFromAnyLaneDriveTheMeter()
-    {
-        var (status, engine) = Create();
-        Assert.False(status.TokensStreaming);
-
-        engine.RaiseNotification("note/partial", Params(new { text = "The" }));
-        Assert.True(status.TokensStreaming);
-
-        engine.RaiseNotification("note/ready");
-        Assert.False(status.TokensStreaming, "the stream ended; the value holds");
-
-        engine.RaiseNotification("translate/partial", Params(new { text = "Twoja" }));
-        Assert.True(status.TokensStreaming, "a translation meters the same way");
-        engine.RaiseNotification("translate/failed");
-        Assert.False(status.TokensStreaming);
-    }
-
-    [Fact]
-    public async Task TheEngineMeasuredRateBeatsTheArrivalCount()
+    public async Task TheNoteChipThroughAGeneration()
     {
         var (status, engine) = Create();
         await WaitUntilAsync(() => status.NoteChip.Length > 0);
+        Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
+        Assert.False(status.TokensStreaming);
+        Assert.False(status.NoteActive);
 
         // The engine meters at the source, before its 12 Hz throttle, and the
         // shell shows that figure
         engine.RaiseNotification("note/partial",
             Params(new { text = "The", tokensPerSecond = 15.3 }));
+        Assert.True(status.TokensStreaming);
+        Assert.True(status.NoteActive);
         Assert.Equal(15.3, status.TokensPerSecond);
         Assert.Contains("15.3 tok/s", status.NoteChip);
 
@@ -51,62 +38,29 @@ public class StatusBarMetricsTest
         engine.RaiseNotification("note/ready",
             Params(new { text = "The note.", tokensPerSecond = 14.2 }));
         Assert.Equal(14.2, status.TokensPerSecond);
-        Assert.False(status.TokensStreaming);
+        Assert.False(status.TokensStreaming, "the stream ended; the value holds");
+        Assert.False(status.NoteActive);
         Assert.Contains("Averaged 14.2 tok/s", status.NoteChip);
-    }
 
-    [Fact]
-    public void WithoutTheEngineFigureTheArrivalMeterFallsBack()
-    {
-        var (status, engine) = Create();
-
+        // A failure ends the stream too, and a translation meters the same way
         engine.RaiseNotification("note/partial", Params(new { text = "The" }));
         Assert.True(status.TokensStreaming);
         engine.RaiseNotification("note/failed");
         Assert.False(status.TokensStreaming);
-    }
 
-    [Fact]
-    public void ResetClearsTheMeterForANewConsultation()
-    {
-        var (status, engine) = Create();
-        engine.RaiseNotification("note/partial", Params(new { text = "The" }));
-        engine.RaiseNotification("note/ready");
+        engine.RaiseNotification("translate/partial", Params(new { text = "Twoja" }));
+        Assert.True(status.TokensStreaming);
+        engine.RaiseNotification("translate/failed");
+        Assert.False(status.TokensStreaming);
 
+        // A new consultation clears the frozen value
         status.ResetThroughput();
-
+        Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
         Assert.False(status.TokensStreaming);
         Assert.Equal(0, status.TokensPerSecond);
-    }
 
-    [Fact]
-    public async Task PollingReadsTheRealtimeFactor()
-    {
-        var (status, engine) = Create();
-
-        await status.PollMetricsOnceAsync();
-
-        Assert.Equal(33.4, status.RealtimeFactor);  // FakeEngineClient's figure
-        Assert.False(status.RealtimeLow, "not recording: no warning");
-    }
-
-    [Fact]
-    public void FriendlyNamesDropPrecisionAndKeepSize()
-    {
-        Assert.Equal("Whisper Turbo", StatusBarViewModel.FriendlyModelName("whisper-turbo-int8"));
-        Assert.Equal("Qwen3.5 9B", StatusBarViewModel.FriendlyModelName("qwen3.5-9b-int4"));
-        Assert.Equal("Whisper Large V3",
-            StatusBarViewModel.FriendlyModelName("whisper-large-v3-int8"));
-    }
-
-    [Fact]
-    public async Task ATierSwitchRenamesTheNoteChipEvenWhenTheStoreCallFails()
-    {
-        var (status, engine) = Create();
-        await WaitUntilAsync(() => status.NoteChip.Length > 0);
-        Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
-
-        // The engine is busy right after a load and the store call times out
+        // A tier switch renames the chip even when the engine is too busy to
+        // answer the store call
         engine.Failing.Add("engine/models");
         engine.RaiseNotification("note/model", Params(new
         {
@@ -116,116 +70,56 @@ public class StatusBarMetricsTest
             name = "Qwen3.6 35B",
             seconds = 62.0,
         }));
-
         Assert.Equal("Qwen3.6 35B · GPU", status.NoteChip);
     }
 
     [Fact]
-    public async Task ChipsNameTheModelsAndCarryTheirLiveFigures()
+    public async Task TheAsrAndMemoryChipsThroughAConsultation()
     {
-        var (status, engine) = Create();
+        var reading = 5.06;
+        var (status, engine) = Create(memoryGb: () => reading);
         await WaitUntilAsync(() => status.AsrChip.Length > 0);  // the connect-time model fetch
-
         Assert.Equal("Whisper Large v3 Turbo · GPU", status.AsrChip);
         Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
+        Assert.False(status.AsrActive);
 
-        // Recording: the realtime factor joins Whisper's chip
+        // Idle: the poll reads the engine's figure but a low one would not warn
+        await status.PollMetricsOnceAsync();
+        Assert.Equal(33.4, status.RealtimeFactor);  // FakeEngineClient's figure
+        Assert.False(status.RealtimeLow, "not recording: no warning");
+        Assert.Equal("Memory · 5.1 GB", status.MemoryChip);
+
+        // Recording: the realtime factor joins Whisper's chip and the dot lights
         status.SetMicVisible(true);
+        Assert.True(status.AsrActive);
         await status.PollMetricsOnceAsync();
         Assert.Equal("Whisper Large v3 Turbo · GPU · 33× RT", status.AsrChip);
+        Assert.False(status.RealtimeLow, "33x is healthy");
 
-        // A slow factor keeps a decimal
+        // A slow factor keeps a decimal and warns
         engine.MetricsRealtimeFactor = 1.4;
         await status.PollMetricsOnceAsync();
         Assert.Equal("Whisper Large v3 Turbo · GPU · 1.4× RT", status.AsrChip);
+        Assert.True(status.RealtimeLow);
 
         // Stopped but still decoding the tail (the NPU's longest stage):
-        // the figure stays until the transcript seals
+        // the figure, the warning and the dot stay until the transcript seals
         status.SetMicVisible(false);
         status.SetDecodeActive(true);
+        Assert.True(status.AsrActive);
         Assert.Equal("Whisper Large v3 Turbo · GPU · 1.4× RT", status.AsrChip);
         Assert.True(status.RealtimeLow);
 
         // Sealed: the session's average holds, labelled as what it is
         status.SetDecodeActive(false);
+        Assert.False(status.AsrActive, "sealed: the dot rests while Averaged shows");
         Assert.Equal("Whisper Large v3 Turbo · GPU · Averaged 1.4× RT", status.AsrChip);
-        Assert.False(status.RealtimeLow);
+        Assert.False(status.RealtimeLow, "the warning is a transcribing-time signal");
 
         status.ResetThroughput();  // the next consultation starts clean
         Assert.Equal("Whisper Large v3 Turbo · GPU", status.AsrChip);
-    }
 
-    [Fact]
-    public async Task TheNoteChipMetersTheStream()
-    {
-        var (status, engine) = Create();
-        await WaitUntilAsync(() => status.NoteChip.Length > 0);
-        Assert.DoesNotContain("tok/s", status.NoteChip);
-
-        engine.RaiseNotification("note/partial", Params(new { text = "The" }));
-        engine.RaiseNotification("note/partial", Params(new { text = "The patient" }));
-        engine.RaiseNotification("note/ready");
-
-        // The frozen value survives the stream's end. A new consultation clears it
-        var frozen = status.NoteChip;
-        status.ResetThroughput();
-        Assert.Equal("Qwen3.5 9B · GPU", status.NoteChip);
-        Assert.NotNull(frozen);
-    }
-
-    [Fact]
-    public async Task ALowFactorWarnsOnlyWhileRecording()
-    {
-        var (status, engine) = Create();
-        await status.PollMetricsOnceAsync();
-
-        status.SetMicVisible(true);
-        Assert.False(status.RealtimeLow, "33x is healthy");
-
-        // The next poll finds transcription barely keeping up
-        engine.MetricsRealtimeFactor = 1.4;
-        await status.PollMetricsOnceAsync();
-        Assert.True(status.RealtimeLow);
-
-        status.SetMicVisible(false);
-        Assert.False(status.RealtimeLow, "the warning is a recording-time signal");
-    }
-
-    [Fact]
-    public void ChipDotsFollowTheWorkNotTheSession()
-    {
-        var (status, engine) = Create();
-        Assert.False(status.AsrActive);
-        Assert.False(status.NoteActive);
-
-        status.SetMicVisible(true);
-        Assert.True(status.AsrActive);
-
-        // Stop: the mic is gone but the finalise tail still decodes
-        status.SetMicVisible(false);
-        status.SetDecodeActive(true);
-        Assert.True(status.AsrActive);
-        status.SetDecodeActive(false);
-        Assert.False(status.AsrActive, "sealed: the dot rests while Averaged shows");
-
-        engine.RaiseNotification("note/partial", Params(new { text = "The" }));
-        Assert.True(status.NoteActive);
-        engine.RaiseNotification("note/ready");
-        Assert.False(status.NoteActive);
-    }
-
-    [Fact]
-    public async Task MemoryChipShowsTheFootprintAndHidesWhenUnreadable()
-    {
-        var engine = new FakeEngineClient(autoNotify: false);
-        var reading = 5.06;
-        var status = new StatusBarViewModel(
-            new EngineApi(engine), new InlineDispatcher(), memoryGb: () => reading);
-
-        await status.PollMetricsOnceAsync();
-        Assert.Equal("Memory · 5.1 GB", status.MemoryChip);
-
-        reading = 0;  // the provider failed, so no figure shows
+        reading = 0;  // the memory provider failed, so no figure shows
         await status.PollMetricsOnceAsync();
         Assert.Equal("", status.MemoryChip);
     }

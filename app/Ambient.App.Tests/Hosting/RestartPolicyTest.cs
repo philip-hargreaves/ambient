@@ -9,55 +9,27 @@ public class RestartPolicyTest
     private static DateTimeOffset[] CrashesAt(params TimeSpan[] agos) =>
         [.. agos.Select(ago => Now - ago)];
 
-    [Fact]
-    public void MidConsultationRestartsSoTheSessionCanResume()
-    {
-        var storm = CrashesAt(Enumerable.Repeat(TimeSpan.Zero, 10).ToArray());
+    private static DateTimeOffset[] RecentCrashes(int count) =>
+        CrashesAt(Enumerable.Repeat(TimeSpan.FromSeconds(10), count).ToArray());
 
+    [Fact]
+    public void TheStormLimitWithinTheWindowIsTheLineAndRelaunchesBackOff()
+    {
         Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide([], Now));
-        Assert.Equal(RecoveryAction.GiveUp, RestartPolicy.Decide(storm, Now));
-    }
+        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(RecentCrashes(1), Now));
+        Assert.Equal(RecoveryAction.Restart,
+            RestartPolicy.Decide(RecentCrashes(RestartPolicy.StormLimit - 1), Now));
+        Assert.Equal(RecoveryAction.GiveUp,
+            RestartPolicy.Decide(RecentCrashes(RestartPolicy.StormLimit), Now));
 
-    [Fact]
-    public void IdleCrashRestarts()
-    {
-        var crashes = CrashesAt(TimeSpan.Zero);
-
-        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(crashes, Now));
-    }
-
-    [Fact]
-    public void ReachingTheStormLimitGivesUp()
-    {
-        var crashes = CrashesAt(
-            Enumerable.Repeat(TimeSpan.FromSeconds(10), RestartPolicy.StormLimit).ToArray());
-
-        Assert.Equal(RecoveryAction.GiveUp, RestartPolicy.Decide(crashes, Now));
-    }
-
-    [Fact]
-    public void JustUnderTheStormLimitRestarts()
-    {
-        var crashes = CrashesAt(
-            Enumerable.Repeat(TimeSpan.FromSeconds(10), RestartPolicy.StormLimit - 1).ToArray());
-
-        Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(crashes, Now));
-    }
-
-    [Fact]
-    public void CrashesOutsideTheWindowDoNotCount()
-    {
+        // Crashes outside the window do not count
         var agos = Enumerable
             .Repeat(RestartPolicy.StormWindow + TimeSpan.FromSeconds(1), RestartPolicy.StormLimit - 1)
             .Append(TimeSpan.Zero)
             .ToArray();
-
         Assert.Equal(RecoveryAction.Restart, RestartPolicy.Decide(CrashesAt(agos), Now));
-    }
 
-    [Fact]
-    public void TheFirstRelaunchIsImmediateAndTheNextOnesWaitLonger()
-    {
+        // The first relaunch is immediate and the next ones wait longer
         Assert.Equal(TimeSpan.Zero, RestartPolicy.Backoff(1));
         Assert.Equal(TimeSpan.FromSeconds(1), RestartPolicy.Backoff(2));
         Assert.Equal(TimeSpan.FromSeconds(2), RestartPolicy.Backoff(3));

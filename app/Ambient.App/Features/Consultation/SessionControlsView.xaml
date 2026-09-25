@@ -5,23 +5,64 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Ambient.App.Controls">
 
+    <UserControl.Resources>
+        <!-- Swells and fades behind the disc while recording can start -->
+        <Storyboard x:Name="Breathing" RepeatBehavior="Forever">
+            <DoubleAnimation
+                EnableDependentAnimation="True"
+                Storyboard.TargetName="RingScale"
+                Storyboard.TargetProperty="ScaleX"
+                From="1"
+                To="1.6"
+                Duration="0:0:2.8" />
+            <DoubleAnimation
+                EnableDependentAnimation="True"
+                Storyboard.TargetName="RingScale"
+                Storyboard.TargetProperty="ScaleY"
+                From="1"
+                To="1.6"
+                Duration="0:0:2.8" />
+            <DoubleAnimation
+                Storyboard.TargetName="Ring"
+                Storyboard.TargetProperty="Opacity"
+                From="0.35"
+                To="0"
+                Duration="0:0:2.8" />
+        </Storyboard>
+    </UserControl.Resources>
+
     <!-- The centre holds the one action -->
     <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
         <StackPanel
             HorizontalAlignment="Center"
             Spacing="14"
             Visibility="{x:Bind ViewModel.IdleVisible, Mode=OneWay}">
-            <Button
-                AutomationProperties.Name="Start recording"
-                Command="{x:Bind ViewModel.StartRecordingCommand}"
-                Style="{StaticResource RecordDisc}">
-                <FontIcon FontSize="32" Glyph="&#xE720;" />
-            </Button>
-            <!-- The one action on screen carries the one large label -->
+            <Grid>
+                <Ellipse
+                    x:Name="Ring"
+                    Width="88"
+                    Height="88"
+                    Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                    IsHitTestVisible="False"
+                    Opacity="0"
+                    RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform x:Name="RingScale" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Button
+                    x:Name="StartButton"
+                    AutomationProperties.Name="Start recording"
+                    Command="{x:Bind ViewModel.StartRecordingCommand}"
+                    Style="{StaticResource RecordDisc}">
+                    <FontIcon FontSize="32" Glyph="&#xE720;" />
+                </Button>
+            </Grid>
+            <!-- The one action on screen carries the one large label: the wait, then the invitation -->
             <TextBlock
                 HorizontalAlignment="Center"
                 Style="{StaticResource SubtitleTextBlockStyle}"
-                Text="Start recording" />
+                Text="{x:Bind ViewModel.StartLabel, Mode=OneWay}" />
         </StackPanel>
 
         <StackPanel
@@ -42,8 +83,6 @@
                 HorizontalAlignment="Center"
                 Style="{StaticResource ClockText}"
                 Text="{x:Bind ViewModel.ElapsedLabel, Mode=OneWay}" />
-
-
             <Button
                 HorizontalAlignment="Center"
                 Command="{x:Bind ViewModel.CancelRecordingCommand}"

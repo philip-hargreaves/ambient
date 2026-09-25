@@ -8,22 +8,19 @@ namespace Ambient.App.Tests.Features.Consultation;
 public class LiveLevelTest
 {
     [Fact]
-    public void LevelNotificationsReachTheStatusBar()
-    {
-        var (session, engine, _) = TestSession.Create();
-
-        engine.RaiseNotification("audio.level", Params(new { level = 0.5, clipped = true }));
-
-        Assert.Equal(0.5, session.Status.MicLevel);
-        Assert.True(session.Status.MicClipped);
-    }
-
-    [Fact]
-    public async Task InterruptionMidRecordingTellsTheClinicianAndResets()
+    public async Task LevelsReachTheStatusBarAndAnInterruptionMidRecordingTellsTheClinicianAndResets()
     {
         var (session, engine, note) = TestSession.Create();
+
+        // A stray interruption while idle is ignored
+        engine.RaiseNotification(
+            "session/interrupted", Params(new { reason = "failed", detail = "stray" }));
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.Equal("", session.Status.LatestActivity);
+
         await session.StartRecordingAsync();
-        engine.RaiseNotification("audio.level", Params(new { level = 0.8, clipped = false }));
+        engine.RaiseNotification("audio.level", Params(new { level = 0.8, clipped = true }));
+        Assert.Equal(0.8, session.Status.MicLevel);
 
         engine.RaiseNotification(
             "session/interrupted", Params(new { reason = "deviceLost", detail = "unplugged" }));
@@ -46,17 +43,5 @@ public class LiveLevelTest
 
         Assert.Equal(SessionState.Idle, session.State);
         Assert.Equal(NotePipelineState.Pending, note.PipelineState);
-    }
-
-    [Fact]
-    public void InterruptionWhileIdleIsIgnored()
-    {
-        var (session, engine, _) = TestSession.Create();
-
-        engine.RaiseNotification(
-            "session/interrupted", Params(new { reason = "failed", detail = "stray" }));
-
-        Assert.Equal(SessionState.Idle, session.State);
-        Assert.Equal("", session.Status.LatestActivity);
     }
 }

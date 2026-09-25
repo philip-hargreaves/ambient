@@ -38,6 +38,44 @@ public static class Protocol
     }
 }
 
+/// <summary>Reading a reply without trusting its shape.</summary>
+public static class JsonElements
+{
+    /// <summary>The named property when the element is an object and the property is of that kind.</summary>
+    public static bool TryProperty(this JsonElement element, string name, JsonValueKind kind, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value)
+            && value.ValueKind == kind)
+        {
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>The element down a path of object keys, null where the path breaks.</summary>
+    public static JsonElement? Find(this JsonElement root, params string[] path)
+    {
+        var current = root;
+        foreach (var key in path)
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(key, out current))
+            {
+                return null;
+            }
+        }
+
+        return current;
+    }
+
+    public static double? Number(this JsonElement root, params string[] path) =>
+        root.Find(path) is { ValueKind: JsonValueKind.Number } n ? n.GetDouble() : null;
+
+    public static string? Text(this JsonElement root, params string[] path) =>
+        root.Find(path) is { ValueKind: JsonValueKind.String } s ? s.GetString() : null;
+}
+
 /// <summary>A JSON-RPC error response from the engine.</summary>
 public sealed class EngineErrorException(int code, string message, JsonElement? data)
     : Exception(message)

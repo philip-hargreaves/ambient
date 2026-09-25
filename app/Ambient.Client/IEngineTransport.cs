@@ -2,10 +2,7 @@ using System.Text.Json;
 
 namespace Ambient.Client;
 
-/// <summary>
-/// The raw JSON-RPC link to the engine. PipeTransport is the production
-/// implementation and tests use a fake. The shell speaks through IEngineApi.
-/// </summary>
+/// <summary>The raw JSON-RPC link to the engine. The shell speaks through IEngineApi.</summary>
 public interface IEngineTransport : IAsyncDisposable
 {
     event Action<string, JsonElement>? NotificationReceived;

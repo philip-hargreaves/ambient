@@ -1,105 +1,71 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Ambient.App.Controls;
 using Ambient.App.Core.Features.Consultation;
-using Ambient.App.Core.Features.Guidance;
-using Ambient.App.Core.Features.Settings;
+using Ambient.App.Core.Features.Demo;
 using Ambient.App.Features.Demo;
 using Ambient.App.Features.Documents;
-using Ambient.App.Features.Guidance;
 
 namespace Ambient.App.Features.Consultation;
 
 public sealed partial class ConsultationView : UserControl
 {
     public ConsultationView(
-        SessionControlsView controls, TranscriptPaneView transcript,
-        NotePaneView note, DemoTrayView demoTray, SettingsViewModel settings,
-        MicViewModel mic, ConsultationViewModel consultation, PageView page)
+        SessionControlsView controls, ReviewSurfaceView surface, DemoTrayView demoTray,
+        MicViewModel mic, ConsultationHeaderViewModel header)
     {
         Controls = controls.ViewModel;
+        DemoTray = demoTray.ViewModel;
         Mic = mic;
+        Header = header;
         InitializeComponent();
-        // Refreshed as the flyout opens: a just-plugged headset must appear
-        MicFlyout.Opening += async (_, _) =>
-        {
-            await Mic.RefreshAsync();
-            BuildMicFlyout();
-        };
-
         ControlsHost.Content = controls;
-        TranscriptHost.Content = transcript;
-        NoteHost.Content = note;
-        PageHost.Content = page;
+        SurfaceHost.Content = surface;
         DemoTrayHost.Content = demoTray;
 
-        void PlacePage()
+        // The review appears as the note streams: on the note, with the transcript as
+        // the reference, since the guidance follows the note
+        Controls.PropertyChanged += (_, e) =>
         {
-            var open = consultation.PageView.Visible;
-            var wide = new GridLength(1.15, GridUnitType.Star);
-            TranscriptColumn.Width = open ? new GridLength(0) : wide;
-            PageColumn.Width = open ? wide : new GridLength(0);
-            TranscriptHost.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-            PageHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        }
-        PlacePage();
-        consultation.PageView.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(PageViewModel.Visible))
+            if (e.PropertyName == nameof(SessionControlsViewModel.PanesVisible) && Controls.PanesVisible)
             {
-                PlacePage();
-            }
-        };
-
-        // The tray exists only while the settings toggle says so
-        void Apply() => DemoTrayHost.Visibility =
-            settings.Appearance.DemoTrayEnabled ? Visibility.Visible : Visibility.Collapsed;
-        Apply();
-        settings.Appearance.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(AppearanceAndDiagnostics.DemoTrayEnabled))
-            {
-                Apply();
+                surface.Open(preferGuidelines: false);
             }
         };
     }
 
-
     public SessionControlsViewModel Controls { get; }
 
+    public DemoTrayViewModel DemoTray { get; }
+
     public MicViewModel Mic { get; }
+
+    public ConsultationHeaderViewModel Header { get; }
+
+    // Refreshed as the flyout opens: a just-plugged headset must appear
+    private async void OnMicFlyoutOpening(object sender, object e)
+    {
+        await Mic.RefreshCommand.ExecuteAsync(null);
+        BuildMicFlyout();
+    }
+
+    // The box binds on every keystroke, so the view model is current by LostFocus
 
     private void BuildMicFlyout()
     {
         MicFlyout.Items.Clear();
         if (!Mic.HasDevices)
         {
-            MicFlyout.Items.Add(new MenuFlyoutItem
-            {
-                Text = "No microphone found - connect one to record",
-                IsEnabled = false,
-            });
+            MicFlyout.Items.Add(MenuItems.Caption(Mic.NoDevicesText));
             return;
         }
 
-        foreach (var device in Mic.Devices)
+        foreach (var row in Mic.Rows)
         {
-            var item = new RadioMenuFlyoutItem
+            MicFlyout.Items.Add(MenuItems.Radio(row.Label, "mic", row.IsChecked, Mic.SelectCommand, row.Id));
+            if (row.NoteVisible)
             {
-                Text = device.IsDefault ? $"{device.Name}  (default)" : device.Name,
-                GroupName = "mic",
-                IsChecked = device.Id == Mic.MicId,
-            };
-            var id = device.Id;
-            item.Click += (_, _) => Mic.Select(id);
-            MicFlyout.Items.Add(item);
-            if (device.Bluetooth)
-            {
-                // Quality warning next to the choice it concerns
-                MicFlyout.Items.Add(new MenuFlyoutItem
-                {
-                    Text = "    Bluetooth call mode - reduced recording quality",
-                    IsEnabled = false,
-                });
+                MicFlyout.Items.Add(MenuItems.Caption(row.Note));
             }
         }
     }

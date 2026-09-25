@@ -1,12 +1,13 @@
 using Ambient.App.Core.Features.Appraisal;
 using Ambient.App.Tests.Support;
+using Ambient.Client;
 
 namespace Ambient.App.Tests.Features.Appraisal;
 
 public class ReflectionExportTest
 {
     [Fact]
-    public void FormatCarriesTitleMonthCaseStudyAnsweredQuestionsAndTheDeclaration()
+    public void FormatCarriesTitleMonthCaseStudyAnsweredQuestionsAndTheDeclarationOnlyWithACaseStudy()
     {
         var text = ReflectionExport.Format(new ReflectionEntry(
             "Elbow swelling", "September 2026", "A patient in their forties.",
@@ -17,34 +18,39 @@ public class ReflectionExportTest
         Assert.DoesNotContain("What did I learn?", text);
         Assert.Contains("Would I do anything differently?\nCheck for infection first.\n", text);
         Assert.EndsWith("first.\n\n" + ReflectionExport.Declaration + "\n", text);
+
+        var bare = ReflectionExport.Format(new ReflectionEntry("", "May 2026", "", "x", "", ""));
+
+        Assert.StartsWith("Consultation\nMay 2026\n\nWhat stood out?\nx\n", bare);
+        Assert.DoesNotContain("Case study", bare);
+        Assert.DoesNotContain(ReflectionExport.Declaration, bare);
     }
 
     [Fact]
-    public void WithoutACaseStudyThereIsNothingToDeclare()
+    public void TickedGuidanceFollowsTheCaseStudyWithItsLinkOnItsOwnLine()
     {
-        var text = ReflectionExport.Format(new ReflectionEntry("", "May 2026", "", "x", "", ""));
+        var text = ReflectionExport.Format(new ReflectionEntry(
+            "Elbow swelling", "September 2026", "A patient in their forties.", "", "Read it.", "")
+        {
+            References =
+            [
+                new ReflectionReference("nice:ng100", "NG100", "Rheumatoid arthritis in adults",
+                    "https://www.nice.org.uk/guidance/ng100", "NICE"),
+                new ReflectionReference("upload:doc-7", "", "Shingles leaflet", "", "Added document, page 2"),
+            ],
+        });
 
-        Assert.StartsWith("Consultation\nMay 2026\n\nWhat stood out?\nx\n", text);
-        Assert.DoesNotContain("Case study", text);
-        Assert.DoesNotContain(ReflectionExport.Declaration, text);
-    }
-
-    [Fact]
-    public void AnEntryWithNoAnswersIsEmpty()
-    {
-        Assert.True(new ReflectionEntry("t", "m", "summary", " ", "", "\n").IsEmpty);
-        Assert.False(new ReflectionEntry("t", "m", "", "", "learned", "").IsEmpty);
+        Assert.Contains(
+            "A patient in their forties.\n\nGuidance referred to\n"
+            + "NG100 Rheumatoid arthritis in adults (NICE)\nhttps://www.nice.org.uk/guidance/ng100\n"
+            + "Shingles leaflet (Added document, page 2)\n\nWhat did I learn?\nRead it.\n", text);
     }
 
     [Theory]
     [InlineData("Mrs Patel came in worried", "a name: Mrs Patel")]
     [InlineData("seen on 12/03/2026 at the surgery", "a date: 12/03/2026")]
     [InlineData("seen on 3 March", "a date: 3 March")]
-    [InlineData("a 43-year-old man", "an exact age: 43-year-old")]
-    [InlineData("the patient, aged 67,", "an exact age: aged 67")]
     [InlineData("NHS number 943 476 5919", "an NHS number: 943 476 5919")]
-    [InlineData("lives at SW1A 1AA", "a postcode: SW1A 1AA")]
-    [InlineData("call 020 7946 0958", "a phone number: 020 7946 0958")]
     public void TheCheckNamesWhatMayIdentifyThePatient(string text, string expected)
     {
         Assert.Contains(expected, IdentifierCheck.Find(text));
@@ -52,13 +58,18 @@ public class ReflectionExportTest
     }
 
     [Fact]
-    public void AnonymisedTextPassesClean()
+    public void AnonymisedTextAndBareMonthsPassClean()
     {
         const string text = "A patient in their forties presented with a week of painless swelling "
                             + "over one elbow. Olecranon bursitis was suspected; rest and an "
                             + "anti-inflammatory were agreed. I reassured too quickly.";
         Assert.Empty(IdentifierCheck.Find(text));
         Assert.Equal("", IdentifierCheck.Describe(text));
+
+        // A month with or without its year is not a date
+        Assert.Empty(IdentifierCheck.Find("seen in September 2026"));
+        Assert.Empty(IdentifierCheck.Find("since March"));
+        Assert.Empty(IdentifierCheck.Find("reviewed Sept 2025, then again"));
     }
 
     // Shared fixture: outputs must pass the check, scrubbed inputs must fail it

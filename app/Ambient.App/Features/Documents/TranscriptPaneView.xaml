@@ -50,15 +50,14 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Rectangle
-                            Fill="{x:Bind views:SpeakerPalette.Stripe(Speaker)}"
                             RadiusX="1.5"
-                            RadiusY="1.5" />
+                            RadiusY="1.5"
+                            Style="{x:Bind views:SpeakerPalette.Stripe(Speaker)}" />
                         <StackPanel Grid.Column="1" Margin="13,10,0,10">
                             <TextBlock
                                 FontWeight="SemiBold"
-                                Foreground="{x:Bind views:SpeakerPalette.Stripe(Speaker)}"
-                                Style="{StaticResource CaptionText}"
-                                Text="{x:Bind views:SpeakerPalette.Label(Speaker)}" />
+                                Style="{x:Bind views:SpeakerPalette.Name(Speaker)}"
+                                Text="{x:Bind SpeakerLabel}" />
                             <TextBlock
                                 Margin="0,1,0,0"
                                 Style="{StaticResource MicroText}"

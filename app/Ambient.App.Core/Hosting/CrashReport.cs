@@ -1,9 +1,9 @@
 namespace Ambient.App.Core.Hosting;
 
 /// <summary>
-/// What is recorded about one engine death: metadata only, with no process
-/// memory. MethodInFlight is filled in once the transport is wired up.
-/// SessionPhase says what the consultation was doing when the engine died.
+/// One engine death, metadata only: no process memory, so the log can go in a
+/// support bundle. MethodInFlight is the request outstanding at the time and
+/// SessionPhase what the consultation was doing.
 /// </summary>
 public sealed record CrashReport(
     DateTimeOffset Timestamp,

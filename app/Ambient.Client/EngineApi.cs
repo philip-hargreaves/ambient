@@ -57,7 +57,7 @@ public sealed class EngineApi : IEngineApi
         StartAsync(new { retain, micId }, StartTimeout);
 
     public Task<string> StartReplayAsync(bool retain, ReplayRequest replay) =>
-        StartAsync(new { retain, replay = Replay(replay) }, StartTimeout);
+        StartAsync(new { retain, replay }, StartTimeout);
 
     public Task<string> StartPlaybackAsync(string sessionId) =>
         StartAsync(new { playback = new { id = sessionId } }, StartTimeout);
@@ -66,7 +66,7 @@ public sealed class EngineApi : IEngineApi
         StartAsync(
             replay is null
                 ? new { resume = sessionId, retain }
-                : new { resume = sessionId, retain, replay = Replay(replay) },
+                : new { resume = sessionId, retain, replay },
             ResumeTimeout);
 
     public async Task<string> StopSessionAsync() =>
@@ -96,7 +96,7 @@ public sealed class EngineApi : IEngineApi
     public async Task<GuidanceRecord?> StoredGuidanceAsync(string id)
     {
         var reply = await CallAsync("session/guidance", new { id }).ConfigureAwait(false);
-        return reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty("guidance", out var record)
+        return reply.TryProperty("guidance", JsonValueKind.Object, out var record)
             ? Protocol.Parse<GuidanceRecord>(record)
             : null;
     }
@@ -175,8 +175,10 @@ public sealed class EngineApi : IEngineApi
 
     public Task SummariseReflectionAsync(string id) => CallAsync("reflection/summary", new { id });
 
-    public Task UpdateReflectionAsync(string id, string happened, string learned, string nextTime) =>
-        CallAsync("reflection/update", new { id, happened, learned, next = nextTime });
+    public Task UpdateReflectionAsync(
+        string id, string happened, string learned, string nextTime,
+        IReadOnlyList<ReflectionReference> references) =>
+        CallAsync("reflection/update", new { id, happened, learned, next = nextTime, references });
 
     public Task UpdateReflectionSummaryAsync(string id, string summary) =>
         CallAsync("reflection/update", new { id, summary });
@@ -188,9 +190,6 @@ public sealed class EngineApi : IEngineApi
 
     public async Task<int> ClearDemoAsync() =>
         Int(await CallAsync("demo/clear", null, LongTimeout).ConfigureAwait(false), "removed");
-
-    private static object Replay(ReplayRequest replay) =>
-        new { path = replay.Path, speed = replay.Speed, monitor = replay.Monitor };
 
     private async Task<string> StartAsync(object parameters, TimeSpan timeout) =>
         Text(await CallAsync("session/start", parameters, timeout).ConfigureAwait(false), "sessionId");
@@ -205,8 +204,7 @@ public sealed class EngineApi : IEngineApi
     private async Task<IReadOnlyList<T>> ListAsync<T>(string method, string property, object? parameters = null)
     {
         var reply = await CallAsync(method, parameters).ConfigureAwait(false);
-        if (reply.ValueKind != JsonValueKind.Object || !reply.TryGetProperty(property, out var list)
-            || list.ValueKind != JsonValueKind.Array)
+        if (!reply.TryProperty(property, JsonValueKind.Array, out var list))
         {
             throw new InvalidOperationException($"{method}: no {property} in the reply");
         }
@@ -227,15 +225,8 @@ public sealed class EngineApi : IEngineApi
         }
     }
 
-    private static string Text(JsonElement reply, string property) =>
-        reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
+    private static string Text(JsonElement reply, string property) => reply.Text(property) ?? "";
 
     private static int Int(JsonElement reply, string property) =>
-        reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.Number
-            ? value.GetInt32()
-            : 0;
+        reply.TryProperty(property, JsonValueKind.Number, out var value) ? value.GetInt32() : 0;
 }

@@ -1,11 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Ambient.App.Core.Common;
 
 namespace Ambient.App.Core.Features.Documents;
-
-/// <summary>One transcript row. Live turns carry no speaker until the seal.</summary>
-public sealed record TranscriptTurnItem(string Speaker, string TimeLabel, string Text);
 
 public sealed partial class TranscriptViewModel : ObservableObject
 {
@@ -14,11 +11,7 @@ public sealed partial class TranscriptViewModel : ObservableObject
     public ObservableCollection<TranscriptTurnItem> Turns { get; } = [];
 
     public void Add(string speaker, ulong firstFrame, string text) =>
-        Turns.Add(new TranscriptTurnItem(speaker, TimeLabel(firstFrame), text));
+        Turns.Add(new TranscriptTurnItem(speaker, Words.Position(firstFrame / (double)SampleRate), text));
 
     public void Clear() => Turns.Clear();
-
-    private static string TimeLabel(ulong firstFrame) =>
-        TimeSpan.FromSeconds(firstFrame / (double)SampleRate)
-            .ToString(@"mm\:ss", CultureInfo.InvariantCulture);
 }

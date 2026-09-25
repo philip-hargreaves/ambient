@@ -28,8 +28,12 @@ Ambient.App/                      Ambient.App.Core/
     Sessions/      stored consults     Sessions/
     Appraisal/     reflections         Appraisal/
     Settings/                          Settings/
+    Help/          guide and About
     Demo/          replay tray         Demo/
-  Controls/    reusable, no VM       Ports/       interfaces implemented outside Core
+  Controls/    reusable, no VM       Ports/       interfaces only, implemented outside Core
+               (page header, tabs,   Common/      helpers every feature shares: engine
+               icon label, busy                   call, words, session text, clipboard
+               caption, stale notice)
   Platform/    WinUI adapters        Hosting/     the engine process: launch, supervise, connect
   Themes/      tokens and styles     Metrics/  Preferences/
 ```
@@ -42,3 +46,7 @@ The fast filter is `Requires!=Engine&Requires!=EngineSlow&Requires!=CrashBattery
 
 The presentation pattern and its rules are in ADR-0014 (`docs/production/adr/` in the research
 repository).
+
+The settings page is built on the Community Toolkit's settings controls
+(`CommunityToolkit.WinUI.Controls.SettingsControls`), the one third-party UI dependency; every
+other control is the platform's.

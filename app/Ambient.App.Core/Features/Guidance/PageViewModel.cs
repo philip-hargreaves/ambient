@@ -1,14 +1,12 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 using Ambient.Client;
 
 namespace Ambient.App.Core.Features.Guidance;
-
-/// <summary>One line of the passage on the drawn page, in pixels of the bitmap.</summary>
-public sealed record PageBox(double Left, double Top, double Width, double Height);
 
 /// <summary>
 /// The page view beside the note: a page of an added document, opened on the cited
@@ -23,7 +21,6 @@ public sealed partial class PageViewModel(
     private GuidanceRecommendation? _shown;
     private int _page;
     private int _pages;
-    private List<(int Page, double Left, double Top, double Right, double Bottom)> _boxes = [];
     private int _load;
 
     [ObservableProperty]
@@ -62,11 +59,14 @@ public sealed partial class PageViewModel(
     [NotifyCanExecuteChangedFor(nameof(BackToPassageCommand))]
     public partial bool OffPassage { get; private set; }
 
-    public ObservableCollection<PageBox> Boxes { get; } = [];
-
     /// <summary>The page's marks as one region, for the view to scroll to.</summary>
     [ObservableProperty]
     public partial PageBox? Focus { get; private set; }
+
+    /// <summary>Raised on every show, since a page already open reports no change.</summary>
+    public event Action? Shown;
+
+    public ObservableCollection<PageBox> Boxes { get; } = [];
 
     public bool SheetVisible => !Loading && !Failed;
 
@@ -77,14 +77,42 @@ public sealed partial class PageViewModel(
         : $"Page {_page + 1} of {DocumentName}, "
           + $"{(_shown.Number.Length > 0 ? _shown.Number : "the passage")} highlighted";
 
-    public string Citation => _shown?.Citation ?? "";
-
     public bool CanGoBack => _page > 0;
 
     public bool CanGoForward => _page < _pages - 1;
 
-    /// <summary>Raised on every show, since a page already open reports no change.</summary>
-    public event Action? Shown;
+    [RelayCommand]
+    private void Close() => Hide();
+
+    [RelayCommand]
+    private Task TryAgain() => LoadAsync();
+
+    [RelayCommand(CanExecute = nameof(CanGoBack))]
+    private Task PreviousPage()
+    {
+        _page--;
+        return LoadAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanGoForward))]
+    private Task NextPage()
+    {
+        _page++;
+        return LoadAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(OffPassage))]
+    private Task BackToPassage()
+    {
+        _page = _shown?.Page ?? _page;
+        return LoadAsync();
+    }
+
+    [RelayCommand]
+    private Task OpenDocument() => _shown is null ? Task.CompletedTask : OpenAsync(_shown);
+
+    [RelayCommand]
+    private Task CopyCitation() => clipboard.CopyAsync(status, _shown?.Citation ?? "", "Citation");
 
     /// <summary>Opens on the passage's page and asks the engine to draw it.</summary>
     public async Task ShowAsync(GuidanceRecommendation found)
@@ -131,11 +159,9 @@ public sealed partial class PageViewModel(
         _load++;
     }
 
-    /// <summary>
-    /// guidance/page: the bitmap, its size and the passage's boxes. The boxes come whole
-    /// each time, so a page without any is a page the passage is not on.
-    /// </summary>
-    public void Apply(GuidancePage reply)
+    // guidance/page: the bitmap, its size and the passage's boxes. The boxes come whole
+    // each time, so a page without any is a page the passage is not on
+    private void Apply(GuidancePage reply)
     {
         Width = reply.Width;
         Height = reply.Height;
@@ -145,14 +171,8 @@ public sealed partial class PageViewModel(
             _pages = reply.Pages;
         }
 
-        _boxes = [];
-        foreach (var box in reply.Boxes)
-        {
-            _boxes.Add((box.Page, box.Left, box.Top, box.Right, box.Bottom));
-        }
-
         Boxes.Clear();
-        var onPage = _boxes.Where(b => b.Page == _page).ToList();
+        var onPage = reply.Boxes.Where(b => b.Page == _page).ToList();
         foreach (var box in onPage)
         {
             Boxes.Add(new PageBox(box.Left * Width, box.Top * Height,
@@ -164,11 +184,14 @@ public sealed partial class PageViewModel(
             (onPage.Max(b => b.Right) - onPage.Min(b => b.Left)) * Width,
             (onPage.Max(b => b.Bottom) - onPage.Min(b => b.Top)) * Height);
 
-        PageLabel = _pages > 0 ? $"Page {_page + 1} of {_pages}" : $"Page {_page + 1}";
+        UpdatePageLabel();
         Loading = false;
         Slow = false;
         OnPropertyChanged(nameof(ImageName));
     }
+
+    private void UpdatePageLabel() =>
+        PageLabel = _pages > 0 ? $"Page {_page + 1} of {_pages}" : $"Page {_page + 1}";
 
     private async Task LoadAsync()
     {
@@ -184,7 +207,7 @@ public sealed partial class PageViewModel(
         Boxes.Clear();
         Focus = null;
         ImagePath = "";
-        PageLabel = _pages > 0 ? $"Page {_page + 1} of {_pages}" : $"Page {_page + 1}";
+        UpdatePageLabel();
         OffPassage = _page != _shown.Page;
         PreviousPageCommand.NotifyCanExecuteChanged();
         NextPageCommand.NotifyCanExecuteChanged();
@@ -218,37 +241,4 @@ public sealed partial class PageViewModel(
             Slow = true;
         }
     }
-
-    [RelayCommand]
-    private void Close() => Hide();
-
-    [RelayCommand]
-    private Task TryAgain() => LoadAsync();
-
-    [RelayCommand(CanExecute = nameof(CanGoBack))]
-    private Task PreviousPage()
-    {
-        _page--;
-        return LoadAsync();
-    }
-
-    [RelayCommand(CanExecute = nameof(CanGoForward))]
-    private Task NextPage()
-    {
-        _page++;
-        return LoadAsync();
-    }
-
-    [RelayCommand(CanExecute = nameof(OffPassage))]
-    private Task BackToPassage()
-    {
-        _page = _shown?.Page ?? _page;
-        return LoadAsync();
-    }
-
-    [RelayCommand]
-    private Task OpenDocument() => _shown is null ? Task.CompletedTask : OpenAsync(_shown);
-
-    [RelayCommand]
-    private Task CopyCitation() => clipboard.CopyAsync(status, Citation, "Citation");
 }

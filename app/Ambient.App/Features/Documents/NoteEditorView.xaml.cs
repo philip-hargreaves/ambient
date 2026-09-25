@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Ambient.App.Controls;
 using Ambient.App.Core.Features.Documents;
 using Ambient.App.Core.Features.Guidance;
+using Ambient.App.Core.Preferences;
 using Ambient.App.Features.Guidance;
 
 namespace Ambient.App.Features.Documents;
@@ -10,7 +11,6 @@ namespace Ambient.App.Features.Documents;
 public sealed partial class NoteEditorView : UserControl
 {
     private readonly TabFit _fit;
-    private readonly GuidanceSectionView _guidance;
     private bool _guidanceBelow = true;
 
     public NoteEditorView(
@@ -18,7 +18,7 @@ public sealed partial class NoteEditorView : UserControl
     {
         ViewModel = viewModel;
         Export = export;
-        _guidance = guidance;
+        Guidance = guidance;
         InitializeComponent();
         GuidanceHost.Content = guidance;
         _fit = new TabFit(NoteBox, 0.5);
@@ -43,54 +43,17 @@ public sealed partial class NoteEditorView : UserControl
         BuildOptionsMenu();
     }
 
-    // Two radio groups, style then detail, applied on the next Regenerate
-    private void BuildOptionsMenu()
-    {
-        foreach (var option in ViewModel.StyleOptions)
-        {
-            OptionsMenu.Items.Add(OptionItem("style", option, value => ViewModel.Style = value));
-        }
-        OptionsMenu.Items.Add(new MenuFlyoutSeparator());
-        foreach (var option in ViewModel.DetailOptions)
-        {
-            OptionsMenu.Items.Add(OptionItem("detail", option, value => ViewModel.Detail = value));
-        }
-        OptionsMenu.Opening += (_, _) => CheckOptions();
-        CheckOptions();
-    }
-
-    private static RadioMenuFlyoutItem OptionItem(string group, NoteOption option, Action<string> choose)
-    {
-        var item = new RadioMenuFlyoutItem { Text = option.Name, GroupName = group, Tag = option.Value };
-        item.Click += (_, _) => choose(option.Value);
-        return item;
-    }
-
-    // The chosen item in each group is checked; the group unchecks the rest. Rechecked as the
-    // menu opens, since an item checked before it has ever shown may not draw its mark
-    private void CheckOptions()
-    {
-        foreach (var entry in OptionsMenu.Items)
-        {
-            if (entry is RadioMenuFlyoutItem item
-                && item.Tag as string == (item.GroupName == "style" ? ViewModel.Style : ViewModel.Detail))
-            {
-                item.IsChecked = true;
-            }
-        }
-    }
-
     public NoteViewModel ViewModel { get; }
 
     public DocumentExportViewModel Export { get; }
 
     /// <summary>The Guidelines section, for a host that shows it beside the note.</summary>
-    public GuidanceSectionView Guidance => _guidance;
+    public GuidanceSectionView Guidance { get; }
 
     public void PlaceGuidance(bool below)
     {
         _guidanceBelow = below;
-        GuidanceHost.Content = below ? _guidance : null;
+        GuidanceHost.Content = below ? Guidance : null;
     }
 
     // Guidance below: the note keeps at most half of the area and guidance gets the
@@ -108,6 +71,39 @@ public sealed partial class NoteEditorView : UserControl
         _fit.FitWithin(area, chrome);
     }
 
+    // Two radio groups, style then detail, applied on the next Regenerate
+    private void BuildOptionsMenu()
+    {
+        foreach (var option in ViewModel.StyleOptions)
+        {
+            OptionsMenu.Items.Add(OptionItem("style", option, value => ViewModel.Style = value));
+        }
+        OptionsMenu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var option in ViewModel.DetailOptions)
+        {
+            OptionsMenu.Items.Add(OptionItem("detail", option, value => ViewModel.Detail = value));
+        }
+        OptionsMenu.Opening += (_, _) => CheckOptions();
+        CheckOptions();
+    }
+
+    private static RadioMenuFlyoutItem OptionItem(string group, NoteOption option, Action<string> choose) =>
+        MenuItems.Radio(option.Name, group, isChecked: false, () => choose(option.Value), tag: option.Value);
+
+    // The chosen item in each group is checked; the group unchecks the rest. Rechecked as the
+    // menu opens, since an item checked before it has ever shown may not draw its mark
+    private void CheckOptions()
+    {
+        foreach (var entry in OptionsMenu.Items)
+        {
+            if (entry is RadioMenuFlyoutItem item
+                && item.Tag as string == (item.GroupName == "style" ? ViewModel.Style : ViewModel.Detail))
+            {
+                item.IsChecked = true;
+            }
+        }
+    }
+
     // The hovered card's sentence, lit in the read-only note. An editor in
     // use keeps its own selection
     private void LightSentence(string sentence)
@@ -122,5 +118,4 @@ public sealed partial class NoteEditorView : UserControl
             : -1;
         NoteBox.Select(Math.Max(at, 0), at < 0 ? 0 : sentence.Length);
     }
-
 }

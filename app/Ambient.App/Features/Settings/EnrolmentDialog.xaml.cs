@@ -17,27 +17,13 @@ public sealed partial class EnrolmentDialog : ContentDialog
 
     public EnrolmentViewModel ViewModel { get; }
 
+    // Done closes; every other press keeps the dialog open for the next step
     private async void OnPrimary(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        if (ViewModel.State == EnrolmentState.Succeeded)
-        {
-            return;  // Done: the dialog closes
-        }
-
-        args.Cancel = true;  // Start, Finish and Try again keep the dialog open
-        if (ViewModel.State == EnrolmentState.Recording)
-        {
-            await ViewModel.FinishCommand.ExecuteAsync(null);
-        }
-        else
-        {
-            await ViewModel.StartCommand.ExecuteAsync(null);
-        }
+        args.Cancel = ViewModel.KeepsOpen;
+        await ViewModel.PrimaryCommand.ExecuteAsync(null);
     }
 
     // Closing covers the close button, Escape and a click outside
-    private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args)
-    {
-        ViewModel.Dismiss();
-    }
+    private void OnClosing(ContentDialog sender, ContentDialogClosingEventArgs args) => ViewModel.Dismiss();
 }

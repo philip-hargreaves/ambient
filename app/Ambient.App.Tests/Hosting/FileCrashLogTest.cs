@@ -10,8 +10,10 @@ public class FileCrashLogTest
         RecoveryAction.Restart);
 
     [Fact]
-    public void AppendsOneParseableLinePerReport()
+    public void AppendsOneParseableLinePerReportAndNeverThrowsOnAWriteFailure()
     {
+        new FileCrashLog("\0not-a-path").Record(Report);
+
         var directory = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         var path = Path.Combine(directory, "crashes.jsonl");
         try
@@ -35,13 +37,5 @@ public class FileCrashLogTest
                 Directory.Delete(directory, recursive: true);
             }
         }
-    }
-
-    [Fact]
-    public void WriteFailuresNeverThrow()
-    {
-        var log = new FileCrashLog("\0not-a-path");
-
-        log.Record(Report);
     }
 }

@@ -1,12 +1,13 @@
 using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Ambient.App.Core.Features.Appraisal;
 
 namespace Ambient.App.Features.Appraisal;
 
 /// <summary>
-/// The case study and the three questions, used by the sheet and the journal cards.
+/// The case study, the guidance ticks and the three questions, used by the sheet and the journal cards.
 /// </summary>
 public sealed partial class ReflectionEditorView : UserControl
 {
@@ -29,10 +30,22 @@ public sealed partial class ReflectionEditorView : UserControl
 
     public bool HasRemove => RemoveCommand is not null;
 
-    // The boxes bind as the text changes, so the view model is current when focus leaves
+    // The boxes bind on every keystroke, so the view model is current by LostFocus
     private async void OnAnswerCommitted(object sender, RoutedEventArgs e) => await ViewModel.SaveAsync();
 
     private async void OnTitleCommitted(object sender, RoutedEventArgs e) => await ViewModel.SaveTitleAsync();
 
     private async void OnSummaryCommitted(object sender, RoutedEventArgs e) => await ViewModel.SaveSummaryAsync();
+
+    // Enter turns the typed line into an entry; leaving the box with text in it does the same
+    private async void OnDraftKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            e.Handled = true;
+            await ViewModel.AddDraftCommand.ExecuteAsync(null);
+        }
+    }
+
+    private async void OnDraftLeft(object sender, RoutedEventArgs e) => await ViewModel.AddDraftCommand.ExecuteAsync(null);
 }

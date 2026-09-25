@@ -1,59 +1,23 @@
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 
 namespace Ambient.App.Features.Documents;
 
-/// <summary>Speaker roles to brushes and labels, resolved by the theme in
-/// effect, since a plain resource lookup follows only the OS theme.
-/// The consuming view keeps <see cref="Theme"/> current.</summary>
+/// <summary>
+/// Speaker roles to the styles that carry their colour. Each style's brush is a theme
+/// resource, so the element it lands on resolves it for the theme in effect.
+/// </summary>
 public static class SpeakerPalette
 {
-    public static ElementTheme Theme { get; set; } = ElementTheme.Dark;
+    public static Style Stripe(string speaker) => Find(Role(speaker) + "SpeakerStripe");
 
-    public static Brush Stripe(string speaker) => Themed(speaker switch
-    {
-        "doctor" => "DoctorBrush",
-        "patient" => "PatientBrush",
-        _ => "UnknownSpeakerBrush",
-    });
+    public static Style Name(string speaker) => Find(Role(speaker) + "SpeakerName");
 
-    public static string Label(string speaker) => speaker switch
+    private static string Role(string speaker) => speaker switch
     {
         "doctor" => "Doctor",
         "patient" => "Patient",
-        "" => "…",
-        _ => speaker,
+        _ => "Unknown",
     };
 
-    private static Brush Themed(string key)
-    {
-        // Dark is keyed "Default" in the dictionaries, as WinUI expects
-        var theme = Theme == ElementTheme.Light ? "Light" : "Default";
-        if (Find(Application.Current.Resources, theme, key) is Brush brush)
-        {
-            return brush;
-        }
-
-        return (Brush)Application.Current.Resources[key];  // high contrast et al
-    }
-
-    private static object? Find(ResourceDictionary dictionary, string theme, string key)
-    {
-        if (dictionary.ThemeDictionaries.TryGetValue(theme, out var themed)
-            && themed is ResourceDictionary resolved
-            && resolved.TryGetValue(key, out var direct))
-        {
-            return direct;
-        }
-
-        foreach (var merged in dictionary.MergedDictionaries)
-        {
-            if (Find(merged, theme, key) is { } inherited)
-            {
-                return inherited;
-            }
-        }
-
-        return null;
-    }
+    private static Style Find(string key) => (Style)Application.Current.Resources[key];
 }

@@ -1,16 +1,16 @@
+using Ambient.App.Core.Common;
 using Ambient.App.Core.Ports;
 using Ambient.App.Core.Shell;
 
 namespace Ambient.App.Core.Features.Appraisal;
 
-/// <summary>Saves one reflection as text, warning about identifiers first.</summary>
+/// <summary>Saves one reflection as text, showing the identifier warning first.</summary>
 public static class ReflectionFile
 {
     public static async Task SaveAsync(
         IDialogService dialogs, IFilePicker picker, StatusBarViewModel status, string text,
-        string title)
+        string title, string warning)
     {
-        var warning = IdentifierCheck.Describe(text);
         if (warning.Length > 0 && !await dialogs.ConfirmAsync("Check before saving",
                 warning + "\n\nChange the wording, or save as it is.", "Save anyway", "Go back")
             .ConfigureAwait(true))
@@ -18,14 +18,11 @@ public static class ReflectionFile
             return;
         }
 
-        var path = await picker.PickSaveAsync(FileName(title), "Plain text", ".txt").ConfigureAwait(true);
-        if (path is null)
+        if (await picker.SaveTextAsync(FileName(title), "Plain text", ".txt", text).ConfigureAwait(true)
+            is { } path)
         {
-            return;
+            status.Append($"Reflection saved to {Path.GetFileName(path)}");
         }
-
-        await File.WriteAllTextAsync(path, text).ConfigureAwait(true);
-        status.Append($"Reflection saved to {Path.GetFileName(path)}");
     }
 
     /// <summary>"reflection - {title}" with the characters a file name cannot hold blanked.</summary>
