@@ -130,8 +130,21 @@ std::variant<json, Error> HandleSessionDelete(ambient::store::ISessionStore& ses
 namespace {
 
 constexpr const char* kAnswers[] = {"happened", "learned", "next"};
+constexpr const char* kReferenceFields[] = {"key", "reference", "title", "link", "source"};
 
-// The answers are one sealed JSON text. Unparseable text reads as empty
+// A guideline or document the clinician ticked: its own copy of the words, so it still
+// reads after the document or the search result is gone
+json ReferenceFrom(const json& given) {
+    json reference = json::object();
+    for (const char* field : kReferenceFields) {
+        reference[field] = given.is_object() && given.contains(field) && given[field].is_string()
+                               ? given[field]
+                               : json("");
+    }
+    return reference;
+}
+
+// The answers and ticked references are one sealed JSON text. Unparseable text reads as empty
 json AnswersFrom(const std::string& text) {
     json answers = json::object();
     const json parsed = json::parse(text, nullptr, false);
@@ -139,6 +152,12 @@ json AnswersFrom(const std::string& text) {
         answers[key] = parsed.is_object() && parsed.contains(key) && parsed[key].is_string()
                            ? parsed[key]
                            : json("");
+    }
+    answers["references"] = json::array();
+    if (parsed.is_object() && parsed.contains("references") && parsed["references"].is_array()) {
+        for (const auto& given : parsed["references"]) {
+            answers["references"].push_back(ReferenceFrom(given));
+        }
     }
     return answers;
 }
@@ -176,7 +195,8 @@ std::variant<json, Error> HandleReflectionGet(ambient::store::ISessionStore& ses
     }
 }
 
-// Given answers replace stored ones and omitted ones stay. Only reflection/delete removes one
+// Given answers and references replace stored ones and omitted ones stay. Only
+// reflection/delete removes one
 std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& sessions,
                                                  const json& params) {
     using ambient::store::DocumentKind;
@@ -190,6 +210,13 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
     if (params.contains("summary") && !params["summary"].is_string()) {
         return InvalidParams("summary must be a string");
     }
+    if (params.contains("references")) {
+        const auto& references = params["references"];
+        const bool objects = references.is_array() &&
+                             std::all_of(references.begin(), references.end(),
+                                         [](const json& r) { return r.is_object(); });
+        if (!objects) return InvalidParams("references must be an array of objects");
+    }
     try {
         const auto& session = std::get<std::string>(id);
         if (params.contains("summary")) {
@@ -201,6 +228,12 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
         json answers = AnswersFrom(stored.text);
         for (const char* key : kAnswers) {
             if (params.contains(key)) answers[key] = params[key];
+        }
+        if (params.contains("references")) {
+            answers["references"] = json::array();
+            for (const auto& given : params["references"]) {
+                answers["references"].push_back(ReferenceFrom(given));
+            }
         }
         if (stored.text.empty()) {
             ambient::store::Document document;

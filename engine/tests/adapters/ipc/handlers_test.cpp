@@ -412,6 +412,30 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
         EXPECT_TRUE(got["reflection"].contains(key)) << key;
     }
 
+    // Ticked references keep their own words and replace as a set; answers stay
+    EXPECT_TRUE(got["reflection"]["references"].is_array());
+    EXPECT_TRUE(got["reflection"]["references"].empty());
+    ASSERT_TRUE(std::holds_alternative<json>(HandleReflectionUpdate(
+        *fixture.store,
+        json{{"id", id},
+             {"references", json::array({{{"key", "nice:ng100"},
+                                          {"reference", "NG100"},
+                                          {"title", "Rheumatoid arthritis in adults"},
+                                          {"link", "https://www.nice.org.uk/guidance/ng100"},
+                                          {"source", "NICE"}},
+                                         {{"key", "upload:doc-7"}, {"title", "Leaflet"}}})}})));
+    got = std::get<json>(HandleReflectionGet(*fixture.store, json{{"id", id}}));
+    ASSERT_EQ(got["reflection"]["references"].size(), 2u);
+    EXPECT_EQ(got["reflection"]["references"][0]["reference"], "NG100");
+    EXPECT_EQ(got["reflection"]["references"][1]["link"], "") << "missing fields read empty";
+    EXPECT_EQ(got["reflection"]["learned"], "check the temperature");
+    ASSERT_TRUE(std::holds_alternative<json>(
+        HandleReflectionUpdate(*fixture.store, json{{"id", id}, {"references", json::array()}})));
+    got = std::get<json>(HandleReflectionGet(*fixture.store, json{{"id", id}}));
+    EXPECT_TRUE(got["reflection"]["references"].empty());
+    EXPECT_TRUE(std::holds_alternative<Error>(HandleReflectionUpdate(
+        *fixture.store, json{{"id", id}, {"references", json::array({"NG100"})}})));
+
     // The summary rides on the same update when the clinician corrects it
     ASSERT_TRUE(std::holds_alternative<json>(HandleReflectionUpdate(
         *fixture.store, json{{"id", id}, {"summary", "A patient in their forties."}})));
