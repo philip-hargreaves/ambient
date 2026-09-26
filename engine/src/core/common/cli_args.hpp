@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient {
+namespace clinicavt {
 
 // Removes "--name value" from args and returns the value, or "" if absent
 inline std::string TakeFlag(std::vector<std::string>& args, const std::string& name) {
@@ -28,4 +28,4 @@ inline bool TakeSwitch(std::vector<std::string>& args, const std::string& name) 
     return false;
 }
 
-}  // namespace ambient
+}  // namespace clinicavt

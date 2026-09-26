@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // text/plain, text/markdown or application/pdf by extension, else empty
 std::string Mime(const std::filesystem::path& path);
@@ -36,4 +36,4 @@ FolderListing ListFolder(const std::filesystem::path& folder, int max_depth,
                          const std::function<bool(const std::string& mime)>& supported,
                          const std::string& skip);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

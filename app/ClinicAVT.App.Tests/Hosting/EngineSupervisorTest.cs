@@ -1,0 +1,243 @@
+using ClinicAVT.App.Core.Hosting;
+using ClinicAVT.App.Core.Ports;
+using ClinicAVT.App.Tests.TestDoubles;
+
+namespace ClinicAVT.App.Tests.Hosting;
+
+public class EngineSupervisorTest
+{
+    private sealed class FakeProcess(bool stillborn = false) : IEngineProcess
+    {
+        public event Action? Exited;
+
+        public int Id => 1234;
+
+        public bool HasExited { get; private set; } = stillborn;
+
+        // A process dead at launch crashed. Only a requested exit is 0
+        public int ExitCode { get; private set; } = stillborn ? 1 : 0;
+
+        public bool Killed { get; private set; }
+
+        public void Kill()
+        {
+            Killed = true;
+            Crash(1);
+        }
+
+        public void Crash(int exitCode)
+        {
+            HasExited = true;
+            ExitCode = exitCode;
+            Exited?.Invoke();
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class FakeLauncher : IEngineLauncher
+    {
+        public List<FakeProcess> Launched { get; } = [];
+
+        public bool FailNext { get; set; }
+
+        public bool NextIsStillborn { get; set; }
+
+        public IEngineProcess Launch()
+        {
+            if (FailNext)
+            {
+                FailNext = false;
+                throw new InvalidOperationException("no engine");
+            }
+
+            var process = new FakeProcess(NextIsStillborn);
+            NextIsStillborn = false;
+            Launched.Add(process);
+            return process;
+        }
+    }
+
+    private sealed class FakeCrashLog : ICrashLog
+    {
+        public List<CrashReport> Reports { get; } = [];
+
+        public void Record(CrashReport report) => Reports.Add(report);
+    }
+
+    private sealed class Harness
+    {
+        public FakeLauncher Launcher { get; } = new();
+
+        public FakeSession Session { get; } = new();
+
+        public FakeTimeProvider Clock { get; } = new();
+
+        public FakeCrashLog Log { get; } = new();
+
+        public List<EngineStatus> Statuses { get; } = [];
+
+        public string? InFlight { get; set; }
+
+        public EngineSupervisor Host { get; }
+
+        public Harness()
+        {
+            Host = new EngineSupervisor(Launcher, Session, Clock, Log, () => InFlight);
+            Host.StatusChanged += Statuses.Add;
+        }
+
+        public FakeProcess Current => Launcher.Launched[^1];
+
+        // Crashes and waits out the policy's delay before the relaunch
+        public void CrashAndWait(int exitCode)
+        {
+            var count = Launcher.Launched.Count;
+            Current.Crash(exitCode);
+            Clock.Advance(RestartPolicy.Backoff(count));
+        }
+    }
+
+    [Fact]
+    public void ACrashRestartsSilentlyIsLoggedAndTheNextOneWaits()
+    {
+        var h = new Harness();
+
+        h.Host.Start();
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Single(h.Launcher.Launched);
+        Assert.Equal(new[] { EngineStatus.Running }, h.Statuses);
+        Assert.Equal(1234, h.Host.EnginePid);
+
+        // A first crash after 90 s relaunches at once, and the report says what was going on
+        h.Clock.Now += TimeSpan.FromSeconds(90);
+        h.InFlight = "session/stop";
+        h.Session.SessionPhase = "Finalising:Note";
+        h.Current.Crash(-7);
+
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Null(h.Host.Fault);
+        Assert.Equal(2, h.Launcher.Launched.Count);
+        Assert.Equal(
+            new[] { EngineStatus.Running, EngineStatus.Restarting, EngineStatus.Running },
+            h.Statuses);
+        var report = Assert.Single(h.Log.Reports);
+        Assert.Equal(-7, report.ExitCode);
+        Assert.Equal(TimeSpan.FromSeconds(90), report.Uptime);
+        Assert.Equal(1, report.CrashCount);
+        Assert.Equal(RecoveryAction.Restart, report.Action);
+        Assert.Equal(h.Clock.Now, report.Timestamp);
+        Assert.Equal("session/stop", report.MethodInFlight);
+        Assert.Equal("Finalising:Note", report.SessionPhase);
+
+        // A second crash in the window waits before relaunching
+        h.Current.Crash(-1);
+        Assert.Equal(EngineStatus.Restarting, h.Host.Status);
+        Assert.Equal(2, h.Launcher.Launched.Count);
+        h.Clock.Advance(RestartPolicy.Backoff(2));
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Equal(3, h.Launcher.Launched.Count);
+
+        // Shutdown during the wait cancels the relaunch
+        h.Current.Crash(-1);
+        Assert.Equal(EngineStatus.Restarting, h.Host.Status);
+        h.Host.Shutdown();
+        h.Clock.Advance(RestartPolicy.MaxBackoff);
+        Assert.Equal(EngineStatus.Stopped, h.Host.Status);
+        Assert.Equal(3, h.Launcher.Launched.Count);
+    }
+
+    [Fact]
+    public void ACrashStormGivesUpAndStartRecovers()
+    {
+        var h = new Harness();
+        h.Host.Start();
+
+        for (var i = 0; i < RestartPolicy.StormLimit; i++)
+        {
+            h.CrashAndWait(-1);
+        }
+
+        Assert.Equal(EngineStatus.Faulted, h.Host.Status);
+        Assert.Equal(EngineFaultKind.CrashLoop, h.Host.Fault!.Kind);
+        Assert.Equal(RestartPolicy.StormLimit, h.Launcher.Launched.Count);
+        Assert.Equal(RestartPolicy.StormLimit, h.Log.Reports.Count);
+        Assert.Equal(RecoveryAction.GiveUp, h.Log.Reports[^1].Action);
+
+        h.Host.Start();
+
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Null(h.Host.Fault);
+        h.Current.Crash(-1);
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+    }
+
+    [Fact]
+    public void SpacedCrashesNeverTripTheStorm()
+    {
+        var h = new Harness();
+        h.Host.Start();
+
+        for (var i = 0; i < RestartPolicy.StormLimit + 3; i++)
+        {
+            h.Current.Crash(-1);
+            h.Clock.Now += RestartPolicy.StormWindow + TimeSpan.FromSeconds(1);
+        }
+
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Null(h.Host.Fault);
+    }
+
+    [Fact]
+    public void ShutdownAndACleanExitAreStopsNotCrashes()
+    {
+        var h = new Harness();
+        h.Host.Start();
+
+        h.Host.Shutdown();
+
+        Assert.Equal(EngineStatus.Stopped, h.Host.Status);
+        Assert.True(h.Current.Killed);
+        Assert.Single(h.Launcher.Launched);
+        Assert.Null(h.Host.Fault);
+        Assert.Null(h.Host.EnginePid);
+        Assert.Empty(h.Log.Reports);
+
+        h.Host.Start();
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        h.Current.Crash(0);
+
+        Assert.Equal(EngineStatus.Stopped, h.Host.Status);
+        Assert.Null(h.Host.Fault);
+        Assert.Equal(2, h.Launcher.Launched.Count);
+        Assert.Empty(h.Log.Reports);
+        h.Host.Start();
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+    }
+
+    [Fact]
+    public void LaunchFailureIsAFault()
+    {
+        var h = new Harness();
+        h.Launcher.FailNext = true;
+
+        h.Host.Start();
+
+        Assert.Equal(EngineStatus.Faulted, h.Host.Status);
+        Assert.Equal(new EngineFault(EngineFaultKind.LaunchFailed), h.Host.Fault);
+    }
+
+    [Fact]
+    public void DeathBeforeTheHandlerAttachesIsStillHandled()
+    {
+        var h = new Harness();
+        h.Launcher.NextIsStillborn = true;
+
+        h.Host.Start();
+
+        Assert.Equal(EngineStatus.Running, h.Host.Status);
+        Assert.Equal(2, h.Launcher.Launched.Count);
+    }
+}

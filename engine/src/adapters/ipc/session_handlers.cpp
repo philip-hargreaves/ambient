@@ -1,25 +1,16 @@
 #include <algorithm>
-#include <cctype>
-#include <cstddef>
+#include <chrono>
 #include <cstdio>
-#include <memory>
-#include <openvino/core/version.hpp>
 #include <optional>
-#include <set>
 #include <stdexcept>
 
 #include "adapters/demo/sample_year.hpp"
-#include "adapters/guidance/guidance_record.hpp"
 #include "adapters/ipc/handlers.hpp"
-#include "adapters/models/ov_runtime.hpp"
-#include "adapters/system/power_throttling.hpp"
 #include "adapters/translate/translate_lane.hpp"
-#include "core/common/version.hpp"
 #include "core/note/summary_scrub.hpp"
-#include "ports/store_error.hpp"
 
-namespace ambient::ipc {
-json HandleSessionList(ambient::store::ISessionStore& sessions) {
+namespace clinicavt::ipc {
+json HandleSessionList(clinicavt::store::ISessionStore& sessions) {
     json list = json::array();
     for (const auto& session : sessions.ListSessions()) {
         list.push_back({{"id", session.id},
@@ -36,29 +27,29 @@ json HandleSessionList(ambient::store::ISessionStore& sessions) {
     return json{{"sessions", std::move(list)}};
 }
 
-std::variant<json, Error> HandleDemoSeed(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleDemoSeed(clinicavt::store::ISessionStore& sessions,
                                          const std::filesystem::path& demo_dir) {
     try {
         // Already seeded is a no-op
-        if (ambient::demo::HasSamples(sessions)) {
+        if (clinicavt::demo::HasSamples(sessions)) {
             return json{{"added", 0}};
         }
-        const auto samples = ambient::demo::LoadSampleYear(demo_dir);
+        const auto samples = clinicavt::demo::LoadSampleYear(demo_dir);
         if (samples.empty()) {
             return SessionError("no sample content beside the engine");
         }
         const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
-        return json{{"added", ambient::demo::SeedSampleYear(sessions, samples, now)}};
+        return json{{"added", clinicavt::demo::SeedSampleYear(sessions, samples, now)}};
     } catch (const std::exception& e) {
         return SessionError(e.what());
     }
 }
 
-json HandleDemoClear(ambient::store::ISessionStore& sessions) {
+json HandleDemoClear(clinicavt::store::ISessionStore& sessions) {
     return json{{"removed", sessions.ClearDemo()}};
 }
 
-std::variant<json, Error> HandleSessionTranscript(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleSessionTranscript(clinicavt::store::ISessionStore& sessions,
                                                   const json& params) {
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
@@ -73,13 +64,13 @@ std::variant<json, Error> HandleSessionTranscript(ambient::store::ISessionStore&
     }
 }
 
-std::variant<json, Error> HandleSessionNote(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleSessionNote(clinicavt::store::ISessionStore& sessions,
                                             const json& params) {
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     try {
         const auto note =
-            sessions.ReadDocument(std::get<std::string>(id), ambient::store::DocumentKind::kNote);
+            sessions.ReadDocument(std::get<std::string>(id), clinicavt::store::DocumentKind::kNote);
         return json{{"text", note.text},
                     {"style", note.style},
                     {"detail", note.detail},
@@ -90,12 +81,12 @@ std::variant<json, Error> HandleSessionNote(ambient::store::ISessionStore& sessi
     }
 }
 
-std::variant<json, Error> HandleSessionPatient(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleSessionPatient(clinicavt::store::ISessionStore& sessions,
                                                const json& params) {
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     try {
-        using ambient::store::DocumentKind;
+        using clinicavt::store::DocumentKind;
         const auto patient =
             sessions.ReadDocument(std::get<std::string>(id), DocumentKind::kPatient);
         const auto translation =
@@ -115,7 +106,7 @@ std::variant<json, Error> HandleSessionPatient(ambient::store::ISessionStore& se
     }
 }
 
-std::variant<json, Error> HandleSessionDelete(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleSessionDelete(clinicavt::store::ISessionStore& sessions,
                                               const json& params) {
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
@@ -132,8 +123,8 @@ namespace {
 constexpr const char* kAnswers[] = {"happened", "learned", "next"};
 constexpr const char* kReferenceFields[] = {"key", "reference", "title", "link", "source"};
 
-// A guideline or document the clinician ticked: its own copy of the words, so it still
-// reads after the document or the search result is gone
+// A guideline or document the clinician ticked. It keeps its own copy of the words so it
+// still reads after the document or the search result is gone
 json ReferenceFrom(const json& given) {
     json reference = json::object();
     for (const char* field : kReferenceFields) {
@@ -164,9 +155,9 @@ json AnswersFrom(const std::string& text) {
 
 }  // namespace
 
-std::variant<json, Error> HandleReflectionGet(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleReflectionGet(clinicavt::store::ISessionStore& sessions,
                                               const json& params) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     try {
@@ -175,10 +166,10 @@ std::variant<json, Error> HandleReflectionGet(ambient::store::ISessionStore& ses
                     {"label", sessions.ReadDocument(session, DocumentKind::kLabel).text},
                     {"summary", nullptr},
                     {"reflection", nullptr}};
-        // Scrubbed on read: stored text may predate the scrub or be hand-edited
+        // Scrub on read because stored text may predate the scrub or be hand-edited
         const auto summary = sessions.ReadDocument(session, DocumentKind::kSummary);
         if (!summary.text.empty()) {
-            result["summary"] = {{"text", ambient::note::ScrubSummary(summary.text)},
+            result["summary"] = {{"text", clinicavt::note::ScrubSummary(summary.text)},
                                  {"generatedAt", NullWhenEmpty(summary.generated_at)},
                                  {"editedAt", NullWhenEmpty(summary.edited_at)}};
         }
@@ -197,9 +188,9 @@ std::variant<json, Error> HandleReflectionGet(ambient::store::ISessionStore& ses
 
 // Given answers and references replace stored ones and omitted ones stay. Only
 // reflection/delete removes one
-std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleReflectionUpdate(clinicavt::store::ISessionStore& sessions,
                                                  const json& params) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     for (const char* key : kAnswers) {
@@ -212,9 +203,9 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
     }
     if (params.contains("references")) {
         const auto& references = params["references"];
-        const bool objects = references.is_array() &&
-                             std::all_of(references.begin(), references.end(),
-                                         [](const json& r) { return r.is_object(); });
+        const bool objects =
+            references.is_array() && std::all_of(references.begin(), references.end(),
+                                                 [](const json& r) { return r.is_object(); });
         if (!objects) return InvalidParams("references must be an array of objects");
     }
     try {
@@ -222,7 +213,7 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
         if (params.contains("summary")) {
             sessions.EditDocument(
                 session, DocumentKind::kSummary,
-                ambient::note::ScrubSummary(params["summary"].get<std::string>()));
+                clinicavt::note::ScrubSummary(params["summary"].get<std::string>()));
         }
         const auto stored = sessions.ReadDocument(session, DocumentKind::kReflection);
         json answers = AnswersFrom(stored.text);
@@ -236,7 +227,7 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
             }
         }
         if (stored.text.empty()) {
-            ambient::store::Document document;
+            clinicavt::store::Document document;
             document.text = answers.dump();
             sessions.SaveDocument(session, DocumentKind::kReflection, document);
         } else {
@@ -248,9 +239,9 @@ std::variant<json, Error> HandleReflectionUpdate(ambient::store::ISessionStore& 
     }
 }
 
-std::variant<json, Error> HandleReflectionDelete(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleReflectionDelete(clinicavt::store::ISessionStore& sessions,
                                                  const json& params) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     try {
@@ -263,8 +254,8 @@ std::variant<json, Error> HandleReflectionDelete(ambient::store::ISessionStore& 
 }
 
 // Every session with an appraisal entry, newest first
-json HandleReflectionList(ambient::store::ISessionStore& sessions) {
-    using ambient::store::DocumentKind;
+json HandleReflectionList(clinicavt::store::ISessionStore& sessions) {
+    using clinicavt::store::DocumentKind;
     json list = json::array();
     for (const auto& session : sessions.ListSessions()) {
         if (!session.has_reflection) continue;
@@ -278,7 +269,7 @@ json HandleReflectionList(ambient::store::ISessionStore& sessions) {
                             {"happened", answers["happened"]},
                             {"learned", answers["learned"]},
                             {"next", answers["next"]},
-                            {"summary", ambient::note::ScrubSummary(summary.text)},
+                            {"summary", clinicavt::note::ScrubSummary(summary.text)},
                             {"createdAt", NullWhenEmpty(reflection.generated_at.empty()
                                                             ? summary.generated_at
                                                             : reflection.generated_at)},
@@ -294,7 +285,7 @@ json HandleReflectionList(ambient::store::ISessionStore& sessions) {
 namespace {
 
 // The handler for a text edit of one stored document
-auto EditDocument(ambient::store::ISessionStore& sessions, ambient::store::DocumentKind kind) {
+auto EditDocument(clinicavt::store::ISessionStore& sessions, clinicavt::store::DocumentKind kind) {
     return [&sessions, kind](const json& params) -> std::variant<json, Error> {
         const auto id = IdFrom(params);
         if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
@@ -311,16 +302,16 @@ auto EditDocument(ambient::store::ISessionStore& sessions, ambient::store::Docum
     };
 }
 
-// style and detail as the shell sends them, checked. confirmed says the
+// Checks style and detail as the shell sends them. confirmed says the
 // clinician insists it was a consultation
-std::variant<ambient::note::NoteOptions, Error> NoteOptionsFrom(const json& params) {
+std::variant<clinicavt::note::NoteOptions, Error> NoteOptionsFrom(const json& params) {
     const std::string style = params.value("style", "prose");
     const std::string detail = params.value("detail", "standard");
     if (style != "prose" && style != "soap") return InvalidParams("unknown style: " + style);
     if (detail != "concise" && detail != "standard" && detail != "detailed") {
         return InvalidParams("unknown detail: " + detail);
     }
-    ambient::note::NoteOptions options{style, detail};
+    clinicavt::note::NoteOptions options{style, detail};
     options.confirmed = params.value("confirmed", false);
     return options;
 }
@@ -348,7 +339,7 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
     // A typed label outlives regenerations. The note's own first sentence
     // fills in until then
     server.RegisterMethod("session/label",
-                          EditDocument(sessions, ambient::store::DocumentKind::kLabel));
+                          EditDocument(sessions, clinicavt::store::DocumentKind::kLabel));
     if (translator != nullptr && translate_lane != nullptr) {
         server.RegisterMethod("translate/languages", [translator](const json&) {
             return json{{"languages", translator->Languages()}};
@@ -366,7 +357,7 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
                 try {
                     const auto text = sessions
                                           .ReadDocument(std::get<std::string>(id),
-                                                        ambient::store::DocumentKind::kPatient)
+                                                        clinicavt::store::DocumentKind::kPatient)
                                           .text;
                     if (text.empty()) {
                         return SessionError("no patient information to translate");
@@ -377,11 +368,11 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
                     const auto on_ready = [&sessions, session_id](const std::string& translated,
                                                                   const std::string& language) {
                         try {
-                            ambient::store::Document document;
+                            clinicavt::store::Document document;
                             document.text = translated;
                             document.language = language;
                             sessions.SaveDocument(
-                                session_id, ambient::store::DocumentKind::kTranslation, document);
+                                session_id, clinicavt::store::DocumentKind::kTranslation, document);
                         } catch (...) {  // NOLINT(bugprone-empty-catch)
                         }
                     };
@@ -452,24 +443,24 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
             }
             // An optional replay block plays a file through the same
             // pipeline. Absent means microphone
-            std::optional<ambient::session::ReplaySpec> replay;
+            std::optional<clinicavt::session::ReplaySpec> replay;
             if (params.contains("replay")) {
                 const auto& r = params["replay"];
                 if (!r.contains("path") || !r["path"].is_string()) {
                     return Error{kInvalidParams, "replay.path is required", {}};
                 }
-                replay = ambient::session::ReplaySpec{
+                replay = clinicavt::session::ReplaySpec{
                     r["path"].get<std::string>(), r.value("speed", 1.0), r.value("monitor", false)};
             }
             // micId pins the picker's choice. One that has gone falls back
             // to the default, logged, and the snapshot records the fallback
-            ambient::session::MicSelection mic;
+            clinicavt::session::MicSelection mic;
             if (!replay.has_value()) {
                 const std::string requested = params.value("micId", "");
-                const auto device = ambient::audio::ResolveMicrophone(
-                    ambient::audio::ListCaptureDevices(), requested);
+                const auto device = clinicavt::audio::ResolveMicrophone(
+                    clinicavt::audio::ListCaptureDevices(), requested);
                 if (!requested.empty() && device.id != requested) {
-                    std::fprintf(stderr, "ambient-engine: chosen microphone gone, using %s\n",
+                    std::fprintf(stderr, "clinicavt-engine: chosen microphone gone, using %s\n",
                                  device.name.empty() ? "the default" : device.name.c_str());
                 }
                 mic = {device.id, device.name};
@@ -488,19 +479,19 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
         "note/options", [&controller](const json& params) -> std::variant<json, Error> {
             const auto options = NoteOptionsFrom(params);
             if (std::holds_alternative<Error>(options)) return std::get<Error>(options);
-            controller.SetNoteOptions(std::get<ambient::note::NoteOptions>(options));
+            controller.SetNoteOptions(std::get<clinicavt::note::NoteOptions>(options));
             return json::object();
         });
     server.RegisterMethod(
         "note/regenerate", [&controller](const json& params) -> std::variant<json, Error> {
             const auto options = NoteOptionsFrom(params);
             if (std::holds_alternative<Error>(options)) return std::get<Error>(options);
-            if (!controller.RegenerateNote(std::get<ambient::note::NoteOptions>(options))) {
+            if (!controller.RegenerateNote(std::get<clinicavt::note::NoteOptions>(options))) {
                 return SessionError("no finalised session, or a note is already being written");
             }
             return json::object();
         });
-    // The sheet from the stored note, edits included. Streams as usual
+    // Rewrites the sheet from the stored note, edits included, and streams as usual
     server.RegisterMethod(
         "patient/regenerate", [&controller](const json&) -> std::variant<json, Error> {
             if (!controller.RegeneratePatient()) {
@@ -509,9 +500,9 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
             return json::object();
         });
     server.RegisterMethod("note/update",
-                          EditDocument(sessions, ambient::store::DocumentKind::kNote));
+                          EditDocument(sessions, clinicavt::store::DocumentKind::kNote));
     server.RegisterMethod("patient/update",
-                          EditDocument(sessions, ambient::store::DocumentKind::kPatient));
+                          EditDocument(sessions, clinicavt::store::DocumentKind::kPatient));
     server.RegisterMethod("session/pause", [&controller, playback](const json& params) {
         if (playback != nullptr && playback->Listening()) {
             playback->SetPaused(params.value("paused", true));
@@ -532,9 +523,9 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
         }
         return json::object();
     });
-    // A past session under review: regenerate and translate act on it as
-    // on a fresh seal. Record closes the review. A stored sheet preloads
-    // the translator
+    // Regenerate and translate act on a past session under review as on a
+    // fresh seal. Record closes the review. A stored sheet preloads the
+    // translator
     server.RegisterMethod(
         "session/open",
         [&controller, &sessions, translator](const json& params) -> std::variant<json, Error> {
@@ -546,7 +537,7 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
             if (translator != nullptr) {
                 try {
                     const auto sheet = sessions.ReadDocument(
-                        std::get<std::string>(id), ambient::store::DocumentKind::kPatient);
+                        std::get<std::string>(id), clinicavt::store::DocumentKind::kPatient);
                     if (!sheet.text.empty()) translator->Prepare();
                 } catch (...) {  // NOLINT(bugprone-empty-catch) Translate loads it anyway
                 }
@@ -573,4 +564,4 @@ void RegisterSessionMethods(PipeServer& server, const EngineServices& services) 
     });
 }
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

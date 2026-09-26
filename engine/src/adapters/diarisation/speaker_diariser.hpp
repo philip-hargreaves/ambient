@@ -15,7 +15,7 @@
 #include "core/diarisation/embeddings.hpp"
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // The batch chain: VAD -> segmentation -> slices -> embeddings -> clusters,
 // with long overlap spans emitted as second turns. Owns its own VAD
@@ -109,4 +109,4 @@ class SpeakerDiariser : public IDiariser {
     std::vector<std::vector<float>> voiceprints_;  // per cluster, from AnchorSimilarities
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

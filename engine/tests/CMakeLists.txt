@@ -89,53 +89,53 @@ add_executable(engine_tests
     adapters/audio/wav_source_test.cpp
     adapters/transcription/whisper_worker_test.cpp)
 target_compile_definitions(engine_tests PRIVATE
-    AMBIENT_CMAKE_VERSION="${ambient_VERSION}"
-    AMBIENT_FIXTURE_DIR="${ambient_SOURCE_DIR}/schema/fixtures"
-    AMBIENT_GUIDANCE_FIXTURE_DIR="${ambient_SOURCE_DIR}/engine/tests/fixtures/guidance"
-    AMBIENT_DEMO_DIR="${ambient_SOURCE_DIR}/demo/reflections"
-    AMBIENT_CRASH_HELPER="$<TARGET_FILE:store_crash_helper>")
+    CLINICAVT_CMAKE_VERSION="${clinicavt_VERSION}"
+    CLINICAVT_FIXTURE_DIR="${clinicavt_SOURCE_DIR}/schema/fixtures"
+    CLINICAVT_GUIDANCE_FIXTURE_DIR="${clinicavt_SOURCE_DIR}/engine/tests/fixtures/guidance"
+    CLINICAVT_DEMO_DIR="${clinicavt_SOURCE_DIR}/demo/reflections"
+    CLINICAVT_CRASH_HELPER="$<TARGET_FILE:store_crash_helper>")
 
 # The recovery test's kill victim
 add_executable(store_crash_helper
     support/store_crash_helper.cpp)
-target_link_libraries(store_crash_helper PRIVATE ambient_storage ambient_warnings)
+target_link_libraries(store_crash_helper PRIVATE clinicavt_storage clinicavt_warnings)
 add_dependencies(engine_tests store_crash_helper)
 
 # The note lane's stand-in host: the protocol without the model
 add_executable(fake_note_host
     support/fake_note_host.cpp)
-target_link_libraries(fake_note_host PRIVATE ambient_ipc ambient_models ambient_warnings)
+target_link_libraries(fake_note_host PRIVATE clinicavt_ipc clinicavt_models clinicavt_warnings)
 add_dependencies(engine_tests fake_note_host)
 target_compile_definitions(engine_tests PRIVATE
-    AMBIENT_FAKE_NOTE_HOST="$<TARGET_FILE:fake_note_host>")
+    CLINICAVT_FAKE_NOTE_HOST="$<TARGET_FILE:fake_note_host>")
 
 # The ingest host's stand-in: canned pages, a chosen exit, a stall or garbage,
 # picked by the bytes it is given
 add_executable(fake_ingest_host
     support/fake_ingest_host.cpp)
-target_link_libraries(fake_ingest_host PRIVATE ambient_warnings)
-add_dependencies(engine_tests fake_ingest_host ambient_ingest_host)
+target_link_libraries(fake_ingest_host PRIVATE clinicavt_warnings)
+add_dependencies(engine_tests fake_ingest_host clinicavt_ingest_host)
 target_compile_definitions(engine_tests PRIVATE
-    AMBIENT_FAKE_INGEST_HOST="$<TARGET_FILE:fake_ingest_host>"
-    AMBIENT_INGEST_HOST="$<TARGET_FILE:ambient_ingest_host>")
+    CLINICAVT_FAKE_INGEST_HOST="$<TARGET_FILE:fake_ingest_host>"
+    CLINICAVT_INGEST_HOST="$<TARGET_FILE:clinicavt_ingest_host>")
 target_link_libraries(engine_tests PRIVATE
-    ambient_ipc ambient_audio ambient_corpus ambient_diarisation ambient_guidance
-    ambient_guidance_record ambient_models ambient_note ambient_storage ambient_transcription
-    ambient_warnings openvino::genai GTest::gtest_main)
+    clinicavt_ipc clinicavt_audio clinicavt_corpus clinicavt_diarisation clinicavt_guidance
+    clinicavt_guidance_record clinicavt_models clinicavt_note clinicavt_storage clinicavt_transcription
+    clinicavt_warnings openvino::genai GTest::gtest_main)
 
 # Real-microphone tests live in their own binary under the microphone label,
 # so the ci presets can exclude what a runner without audio cannot execute
 add_executable(capture_tests
     adapters/audio/wasapi_capture_test.cpp)
 target_link_libraries(capture_tests PRIVATE
-    ambient_audio ambient_warnings GTest::gtest_main)
+    clinicavt_audio clinicavt_warnings GTest::gtest_main)
 
 # Same mechanism for tests needing the Intel GPU
 add_executable(gpu_tests
     adapters/models/ov_device_test.cpp
     adapters/models/ov_runtime_test.cpp)
 target_link_libraries(gpu_tests PRIVATE
-    ambient_models ambient_warnings openvino::genai GTest::gtest_main)
+    clinicavt_models clinicavt_warnings openvino::genai GTest::gtest_main)
 
 # And for tests needing staged model weights
 add_executable(models_tests
@@ -154,23 +154,23 @@ add_executable(models_tests
     adapters/models/whisper_real_test.cpp
     adapters/models/worker_note_writer_test.cpp)
 target_compile_definitions(models_tests PRIVATE
-    AMBIENT_MODELS_DIR="${ambient_SOURCE_DIR}/models"
-    AMBIENT_DIAR_FIXTURE_DIR="${ambient_SOURCE_DIR}/engine/tests/fixtures/diarisation"
-    AMBIENT_GUIDANCE_FIXTURE_DIR="${ambient_SOURCE_DIR}/engine/tests/fixtures/guidance")
+    CLINICAVT_MODELS_DIR="${clinicavt_SOURCE_DIR}/models"
+    CLINICAVT_DIAR_FIXTURE_DIR="${clinicavt_SOURCE_DIR}/engine/tests/fixtures/diarisation"
+    CLINICAVT_GUIDANCE_FIXTURE_DIR="${clinicavt_SOURCE_DIR}/engine/tests/fixtures/guidance")
 target_link_libraries(models_tests PRIVATE
-    ambient_corpus ambient_diarisation ambient_guidance ambient_models ambient_note
-    ambient_transcription ambient_translate ambient_vad ambient_warnings
+    clinicavt_corpus clinicavt_diarisation clinicavt_guidance clinicavt_models clinicavt_note
+    clinicavt_transcription clinicavt_translate clinicavt_vad clinicavt_warnings
     nlohmann_json::nlohmann_json openvino::genai GTest::gtest_main)
 
 # Dev evaluation tool for the research acceptance scorer; never shipped
 add_executable(diar_eval_runner tools/diar_eval_runner.cpp)
-target_link_libraries(diar_eval_runner PRIVATE ambient_diarisation ambient_transcription ambient_warnings)
+target_link_libraries(diar_eval_runner PRIVATE clinicavt_diarisation clinicavt_transcription clinicavt_warnings)
 
-ambient_deploy_openvino(ov_test_runtime)
+clinicavt_deploy_openvino(ov_test_runtime)
 add_dependencies(diar_eval_runner ov_test_runtime)
 add_dependencies(engine_tests ov_test_runtime)
 add_dependencies(gpu_tests ov_test_runtime)
-add_dependencies(models_tests ov_test_runtime ambient_note_host)
+add_dependencies(models_tests ov_test_runtime clinicavt_note_host)
 
 include(GoogleTest)
 # Cold CI runners can take >5 s (the default) just to start a fresh exe

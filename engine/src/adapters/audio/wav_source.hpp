@@ -6,7 +6,7 @@
 
 #include "ports/audio_source.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Plays a mono 16 kHz wav through the audio port. Serves as the CI
 // microphone stand-in and the replay source
@@ -35,4 +35,4 @@ class WavSource : public IAudioSource {
     std::atomic<bool> monitor_{false};
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

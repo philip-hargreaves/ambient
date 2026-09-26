@@ -13,7 +13,7 @@
 #include "core/audio/audio_ring.hpp"
 #include "ports/audio_source.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Takes the source's thread off the processing path: OnAudio only copies into
 // a ring and returns, a consumer thread delivers to the inner sink. A stall
@@ -111,4 +111,4 @@ class BufferedSink : public IAudioSink {
     std::thread consumer_;
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

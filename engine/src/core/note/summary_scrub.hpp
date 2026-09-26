@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 // Removes direct identifiers from a case summary: ages to a decade, dates to "recently", NHS
 // numbers, postcodes and phones dropped. Contextual identifiers are the clinician's to spot
@@ -94,4 +94,4 @@ inline std::string ScrubSummary(std::string_view input) {
     return scrub_detail::Tidy(std::move(text));
 }
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

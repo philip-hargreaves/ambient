@@ -6,13 +6,13 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-namespace ambient::note {
+namespace clinicavt::note {
 namespace {
 
 using nlohmann::json;
 
 json LoadFixture(const std::string& name) {
-    std::ifstream in(std::string(AMBIENT_FIXTURE_DIR) + "/" + name);
+    std::ifstream in(std::string(CLINICAVT_FIXTURE_DIR) + "/" + name);
     if (!in.is_open()) throw std::runtime_error("missing fixture: " + name);
     return json::parse(in);
 }
@@ -49,4 +49,4 @@ TEST(SummaryScrub, LeavesCleanTextAlone) {
 }
 
 }  // namespace
-}  // namespace ambient::note
+}  // namespace clinicavt::note

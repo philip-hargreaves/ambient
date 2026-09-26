@@ -2,10 +2,10 @@
 
 #include <string_view>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // Text that looks like it is about a patient: an NHS number, a date of birth
 // label, a letter's opening or a discharge heading. Guidelines carry none
 bool LooksLikePatientData(std::string_view text);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

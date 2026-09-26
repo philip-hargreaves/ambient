@@ -6,9 +6,9 @@
 # Model .cache dirs stay out: they are compiled blobs specific to this
 # machine's GPU and driver, and every machine rebuilds its own on first use.
 #
-#   stage-release.ps1 [-Out C:\dev\ambient\build\ambient]
+#   stage-release.ps1 [-Out C:\dev\ambient\build\clinicavt]
 param(
-    [string]$Out = (Join-Path (Split-Path $PSScriptRoot -Parent) "build\ambient")
+    [string]$Out = (Join-Path (Split-Path $PSScriptRoot -Parent) "build\clinicavt")
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
@@ -16,7 +16,7 @@ $repo = Split-Path $PSScriptRoot -Parent
 Remove-Item $Out -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $Out | Out-Null
 
-dotnet publish "$repo\app\Ambient.App\Ambient.App.csproj" -c Release -r win-x64 `
+dotnet publish "$repo\app\ClinicAVT.App\ClinicAVT.App.csproj" -c Release -r win-x64 `
     --self-contained -p:Platform=x64 -o $Out
 if ($LASTEXITCODE -ne 0) { throw "app publish failed" }
 
@@ -44,4 +44,4 @@ robocopy (Join-Path $repo "models") (Join-Path $Out "models") /E /XD .cache /NFL
 if ($LASTEXITCODE -ge 8) { throw "model copy failed" }
 $global:LASTEXITCODE = 0
 
-Write-Host "Release folder at $Out - smoke it, then:  tar -a -c -f build\ambient.zip -C build ambient"
+Write-Host "Release folder at $Out - smoke it, then:  tar -a -c -f build\clinicavt.zip -C build clinicavt"

@@ -20,7 +20,7 @@
 #include "adapters/guidance/schema.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 using store::Db;
@@ -358,4 +358,4 @@ std::int64_t DocumentIndex::DropUnheld(std::int64_t document) {
     return document;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

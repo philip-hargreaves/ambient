@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 namespace {
 
 TEST(ScriptedTranscriber, OneChunkPerClipWithItsTiming) {
@@ -37,4 +37,4 @@ TEST(ScriptedTranscriber, TwoInstancesScriptTheSameText) {
 }
 
 }  // namespace
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

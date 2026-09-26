@@ -11,7 +11,7 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/note/worker_note_writer.hpp"
 
-namespace ambient::note {
+namespace clinicavt::note {
 namespace {
 
 using Phase = NoteModelState::Phase;
@@ -23,7 +23,7 @@ struct TieredStore {
     TieredStore() {
         root =
             std::filesystem::temp_directory_path() /
-            ("ambient-lane-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+            ("clinicavt-lane-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
              "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         Stage("qwen3.5-9b-int4", "Qwen3.5 9B", "default");
         Stage("qwen3.6-35b-a3b-int4", "Qwen3.6 35B", "accuracy");
@@ -79,7 +79,7 @@ struct Transitions {
 TEST(NoteLane, StartsIdleOnTheDefaultTierWithItsModelNamed) {
     TieredStore staged;
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
 
     const auto state = lane.State();
     EXPECT_EQ(state.phase, Phase::kIdle);
@@ -91,7 +91,7 @@ TEST(NoteLane, StartsIdleOnTheDefaultTierWithItsModelNamed) {
 TEST(NoteLane, ConfiguringAnotherTierLoadsItAtOnceAndReportsReady) {
     TieredStore staged;
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
     Transitions seen;
     lane.SetListener(seen.Listener());
 
@@ -111,7 +111,7 @@ TEST(NoteLane, ConfiguringAnotherTierLoadsItAtOnceAndReportsReady) {
 TEST(NoteLane, TheSameTierAgainIsANoOp) {
     TieredStore staged;
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
     Transitions seen;
     lane.SetListener(seen.Listener());
     lane.Configure("accuracy");
@@ -127,7 +127,7 @@ TEST(NoteLane, TheSameTierAgainIsANoOp) {
 TEST(NoteLane, AFailedLoadIsReportedWithItsReason) {
     TieredStore staged;
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
     Transitions seen;
     lane.SetListener(seen.Listener());
 
@@ -148,7 +148,7 @@ TEST(NoteLane, AnUnstagedTierIsRefusedNamingWhatIsStaged) {
     TieredStore staged;
     std::filesystem::remove_all(staged.root / "qwen3.6-35b-a3b-int4");
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
 
     try {
         lane.Configure("accuracy");
@@ -162,7 +162,7 @@ TEST(NoteLane, AnUnstagedTierIsRefusedNamingWhatIsStaged) {
 TEST(NoteLane, TheHostServesTheConfiguredTier) {
     TieredStore staged;
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
     Transitions seen;
     lane.SetListener(seen.Listener());
     lane.Configure("accuracy");
@@ -178,11 +178,11 @@ TEST(NoteLane, TheHostServesTheConfiguredTier) {
 TEST(NoteLane, TheSummaryComesBackFromTheHost) {
     TieredStore staged;
     const models::ModelStore store(staged.root);
-    WorkerNoteWriter lane(AMBIENT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
+    WorkerNoteWriter lane(CLINICAVT_FAKE_NOTE_HOST, staged.root, staged.root, &store);
 
     EXPECT_EQ(lane.WriteSummary("the note"), "A summary from qwen3.5-9b-int4");
     EXPECT_THROW(lane.WriteSummary(""), std::runtime_error);
 }
 
 }  // namespace
-}  // namespace ambient::note
+}  // namespace clinicavt::note

@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="ClinicAVT.App.Features.Guidance.PageView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ClinicAVT.App.Controls"
+    xmlns:views="using:ClinicAVT.App.Features.Guidance"
+    xmlns:vm="using:ClinicAVT.App.Core.Features.Guidance"
+    AutomationProperties.LandmarkType="Custom"
+    AutomationProperties.Name="Page view"
+    KeyDown="OnKeyDown">
+
+    <!-- The page stays white in both themes. Clinicians know the printed page, and
+         inverting it corrupts figures -->
+    <Border Padding="16,12" Style="{StaticResource InnerCardSurface}">
+        <Grid RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind ViewModel.DocumentName, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.DocumentName, Mode=OneWay}" />
+                    <TextBlock Style="{StaticResource MicroText}" Text="{x:Bind ViewModel.PageLabel, Mode=OneWay}" />
+                </StackPanel>
+                <Button
+                    Grid.Column="1"
+                    AutomationProperties.Name="Previous page"
+                    Command="{x:Bind ViewModel.PreviousPageCommand}"
+                    Style="{StaticResource TrayButton}"
+                    ToolTipService.ToolTip="Previous page (Page Up)">
+                    <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE70E;" />
+                </Button>
+                <Button
+                    Grid.Column="2"
+                    AutomationProperties.Name="Next page"
+                    Command="{x:Bind ViewModel.NextPageCommand}"
+                    Style="{StaticResource TrayButton}"
+                    ToolTipService.ToolTip="Next page (Page Down)">
+                    <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE70D;" />
+                </Button>
+                <Button
+                    x:Name="CloseButton"
+                    Grid.Column="3"
+                    AutomationProperties.Name="Close the page view"
+                    Command="{x:Bind ViewModel.CloseCommand}"
+                    Style="{StaticResource TrayButton}"
+                    ToolTipService.ToolTip="Close">
+                    <FontIcon FontSize="{StaticResource CaptionTextBlockFontSize}" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+
+            <Border
+                Grid.Row="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource ControlCornerRadius}">
+                <Grid>
+                    <ScrollViewer
+                        x:Name="Scroller"
+                        Background="{ThemeResource PageSheetBrush}"
+                        HorizontalScrollBarVisibility="Auto"
+                        HorizontalScrollMode="Auto"
+                        MaxZoomFactor="4"
+                        MinZoomFactor="1"
+                        SizeChanged="OnScrollerSized"
+                        Visibility="{x:Bind ViewModel.SheetVisible, Mode=OneWay}"
+                        ZoomMode="Enabled">
+                        <Viewbox x:Name="Sheet" Stretch="Uniform">
+                            <!-- The grid is the bitmap's size, so marks are placed in bitmap
+                                 pixels and only the Viewbox scales -->
+                            <Border
+                                Padding="24"
+                                Background="{ThemeResource PageSheetBrush}">
+                            <Border
+                                BorderBrush="{ThemeResource PageEdgeBrush}"
+                                BorderThickness="2">
+                            <Grid
+                                Width="{x:Bind ViewModel.Width, Mode=OneWay}"
+                                Height="{x:Bind ViewModel.Height, Mode=OneWay}"
+                                Background="White">
+                                <Image
+                                    AutomationProperties.Name="{x:Bind ViewModel.ImageName, Mode=OneWay}"
+                                    ImageOpened="OnPageOpened"
+                                    Source="{x:Bind views:PageView.Bitmap(ViewModel.ImagePath), Mode=OneWay}"
+                                    Stretch="Fill" />
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Boxes}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <Canvas />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:PageBox">
+                                            <!-- The canvas puts each item container at the origin,
+                                                 so the offset goes on the margin -->
+                                            <Rectangle
+                                                Width="{x:Bind views:PageView.Grown(Width)}"
+                                                Height="{x:Bind views:PageView.Grown(Height)}"
+                                                Margin="{x:Bind views:PageView.Offset(Left, Top)}"
+                                                AutomationProperties.AccessibilityView="Raw"
+                                                Fill="{ThemeResource PageMarkBrush}"
+                                                RadiusX="3"
+                                                RadiusY="3" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                            </Border>
+                            </Border>
+                        </Viewbox>
+                    </ScrollViewer>
+                    <!-- A blank sheet in the page's shape until the image and marks arrive together -->
+                    <Viewbox
+                        x:Name="Placeholder"
+                        Stretch="Uniform"
+                        Visibility="{x:Bind ViewModel.PlaceholderVisible, Mode=OneWay}">
+                        <Border Padding="24" Background="{ThemeResource PageSheetBrush}">
+                            <Grid
+                                Width="{x:Bind ViewModel.Width, Mode=OneWay}"
+                                Height="{x:Bind ViewModel.Height, Mode=OneWay}"
+                                Background="White"
+                                BorderBrush="{ThemeResource PageEdgeBrush}"
+                                BorderThickness="2">
+                                <ProgressRing
+                                    Width="64"
+                                    Height="64"
+                                    IsActive="{x:Bind ViewModel.Loading, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+                    </Viewbox>
+                    <StackPanel
+                        Margin="0,0,0,20"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        Spacing="6">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Style="{StaticResource CaptionText}"
+                            Text="Showing the page"
+                            Visibility="{x:Bind ViewModel.Slow, Mode=OneWay}" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource CautionBrush}"
+                            Style="{StaticResource CaptionText}"
+                            Text="The page could not be shown."
+                            Visibility="{x:Bind ViewModel.Failed, Mode=OneWay}" />
+                        <HyperlinkButton
+                            HorizontalAlignment="Center"
+                            Command="{x:Bind ViewModel.TryAgainCommand}"
+                            Content="Try again"
+                            Style="{StaticResource CaptionLink}"
+                            Visibility="{x:Bind ViewModel.Failed, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12">
+                <HyperlinkButton
+                    AutomationProperties.Name="Back to the passage"
+                    Command="{x:Bind ViewModel.BackToPassageCommand}"
+                    Style="{StaticResource CaptionLink}"
+                    Visibility="{x:Bind ViewModel.OffPassage, Mode=OneWay}">
+                    <controls:IconLabel Style="{StaticResource LinkIconLabel}" Glyph="&#xE72B;" Text="Back to the passage" />
+                </HyperlinkButton>
+                <HyperlinkButton
+                    AutomationProperties.Name="Open the document"
+                    Command="{x:Bind ViewModel.OpenDocumentCommand}"
+                    Style="{StaticResource CaptionLink}"
+                    ToolTipService.ToolTip="Opens a copy in your PDF viewer. The copy is removed when ClinicAVT closes.">
+                    <controls:IconLabel Style="{StaticResource LinkIconLabel}" Glyph="&#xE8A7;" Text="Open the document" />
+                </HyperlinkButton>
+                <HyperlinkButton
+                    AutomationProperties.Name="Copy citation"
+                    Command="{x:Bind ViewModel.CopyCitationCommand}"
+                    Style="{StaticResource CaptionLink}">
+                    <controls:IconLabel Style="{StaticResource LinkIconLabel}" Glyph="&#xE8C8;" Text="Copy citation" />
+                </HyperlinkButton>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

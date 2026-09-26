@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Turns WASAPI packet metadata into the port's "frames lost"
 // One instance per stream: positions restart from a new origin on any client rebuild.
@@ -64,4 +64,4 @@ class CaptureTimeline {
     std::uint64_t discontinuity_flags_ = 0;
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

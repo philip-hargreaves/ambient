@@ -10,7 +10,7 @@
 #include "core/diarisation/tidy_transcript.hpp"
 #include "core/session/transcribe_recording.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 SessionController::SessionController(SourceFactory factory, ISessionEvents& events,
                                      store::ISessionStore& store, asr::ITranscriber& transcriber,
@@ -62,7 +62,7 @@ bool SessionController::Start(std::optional<ReplaySpec> replay, const store::Ses
     try {
         if (!resume_from.empty()) {
             resumed_audio = store_.ReadAudio(resume_from);
-            std::fprintf(stderr, "ambient-engine: resuming %s with %.1f s of stored audio\n",
+            std::fprintf(stderr, "clinicavt-engine: resuming %s with %.1f s of stored audio\n",
                          resume_from.c_str(),
                          static_cast<double>(resumed_audio.size()) / audio::kSampleRate);
         }
@@ -81,7 +81,7 @@ bool SessionController::Start(std::optional<ReplaySpec> replay, const store::Ses
         note_prepared_ = false;
         session_audio_.clear();
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: session start failed: %s\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: session start failed: %s\n", e.what());
         std::lock_guard<std::mutex> lock(mutex_);
         running_ = false;
         end_ = {audio::SourceEndReason::kFailed, std::string("session setup failed: ") + e.what()};
@@ -406,9 +406,9 @@ void SessionController::DiarLoop() {
                 if (!guess.empty()) note_writer_->Prefill(guess, note_lane_.Options());
             }
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: capture tick failed: %s\n", e.what());
+            std::fprintf(stderr, "clinicavt-engine: capture tick failed: %s\n", e.what());
         } catch (...) {
-            std::fprintf(stderr, "ambient-engine: capture tick failed\n");
+            std::fprintf(stderr, "clinicavt-engine: capture tick failed\n");
         }
         lock.lock();
         cv_.wait_for(lock, kMinTickGap, [this] { return diar_stop_; });
@@ -462,14 +462,14 @@ void SessionController::FinishSession(Outcome outcome) {
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - finalise_start)
                 .count();
-        std::fprintf(stderr, "ambient-engine: finalise %s at %.1f s\n", name, seconds);
+        std::fprintf(stderr, "clinicavt-engine: finalise %s at %.1f s\n", name, seconds);
         if (metrics_ != nullptr) {
             metrics_->RecordStage(name, seconds);
         }
     };
     JoinDiarThread();
     stage("capture joined");
-    std::fprintf(stderr, "ambient-engine: session audio %.1f s, %d capture ticks\n",
+    std::fprintf(stderr, "clinicavt-engine: session audio %.1f s, %d capture ticks\n",
                  static_cast<double>(session_audio_.size()) / audio::kSampleRate, diar_ticks_);
     if (metrics_ != nullptr) {
         metrics_->RecordSession(static_cast<double>(session_audio_.size()) / audio::kSampleRate,
@@ -486,9 +486,9 @@ void SessionController::FinishSession(Outcome outcome) {
             const auto cuts = transcriber_.TakeClipCuts();
             if (!cuts.empty()) diariser_.AddCutPoints(cuts);
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: capture settle failed: %s\n", e.what());
+            std::fprintf(stderr, "clinicavt-engine: capture settle failed: %s\n", e.what());
         } catch (...) {
-            std::fprintf(stderr, "ambient-engine: capture settle failed\n");
+            std::fprintf(stderr, "clinicavt-engine: capture settle failed\n");
         }
         stage("capture settled");
         events_.OnProgress("transcript");
@@ -532,9 +532,9 @@ void SessionController::FinishSession(Outcome outcome) {
             }
             stage("anchor accrued");
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: transcription failed: %s\n", e.what());
+            std::fprintf(stderr, "clinicavt-engine: transcription failed: %s\n", e.what());
         } catch (...) {
-            std::fprintf(stderr, "ambient-engine: transcription failed\n");
+            std::fprintf(stderr, "clinicavt-engine: transcription failed\n");
         }
     }
     // Capture state a finalise did not consume must not leak into the next
@@ -589,4 +589,4 @@ std::string SessionController::StoredNote(const store::SessionId& id) const {
     }
 }
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

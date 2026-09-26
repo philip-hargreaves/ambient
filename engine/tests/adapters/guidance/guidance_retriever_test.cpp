@@ -13,10 +13,10 @@
 #include "adapters/guidance/retriever.hpp"
 #include "guidance_fixture.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
-constexpr const char* kFixtureDir = AMBIENT_GUIDANCE_FIXTURE_DIR;
+constexpr const char* kFixtureDir = CLINICAVT_GUIDANCE_FIXTURE_DIR;
 constexpr int kDim = 256;
 
 // Hashed bag of words, four letters and up, unit length: texts sharing words
@@ -294,7 +294,7 @@ TEST(Retriever, KeepsALoadFailureAndRethrowsIt) {
 
 TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
     Retriever retriever([] { return std::make_unique<WordEmbedder>(); },
-                        std::filesystem::temp_directory_path() / "ambient-retriever-none");
+                        std::filesystem::temp_directory_path() / "clinicavt-retriever-none");
     retriever.Prepare();
     EXPECT_TRUE(retriever.Corpora().empty());
     EXPECT_EQ(retriever.Status().phase, Readiness::Phase::kReady) << "loaded, nothing installed";
@@ -305,4 +305,4 @@ TEST(Retriever, AMissingRootHasNoCorporaAndReturnsNothing) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

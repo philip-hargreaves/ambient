@@ -8,7 +8,7 @@
 
 #include "ports/transcriber.hpp"
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 
 // CI stand-in when no ASR model is staged: one chunk per clip, numbered in
 // decode order
@@ -35,4 +35,4 @@ class ScriptedTranscriber : public ITranscriber {
     int decodes_ = 0;
 };
 
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

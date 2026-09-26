@@ -19,12 +19,12 @@
 #include "core/common/version.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 namespace {
 
 json HelloParams() {
     return json{
-        {"name", "ambient-shell"}, {"version", "0.1.0"}, {"protocolVersion", kProtocolVersion}};
+        {"name", "clinicavt-shell"}, {"version", "0.1.0"}, {"protocolVersion", kProtocolVersion}};
 }
 
 const json& ResultOf(const std::variant<json, Error>& outcome) {
@@ -36,8 +36,8 @@ TEST(Handlers, HelloAnswersWithTheEngineIdentity) {
 
     ASSERT_TRUE(std::holds_alternative<json>(outcome));
     const auto& result = ResultOf(outcome);
-    EXPECT_EQ(result["name"], ambient::kName);
-    EXPECT_EQ(result["version"], ambient::kVersion);
+    EXPECT_EQ(result["name"], clinicavt::kName);
+    EXPECT_EQ(result["version"], clinicavt::kVersion);
     EXPECT_EQ(result["protocolVersion"], kProtocolVersion);
 }
 
@@ -62,13 +62,12 @@ TEST(Handlers, HelloRejectsAPeerItCannotParse) {
 }
 
 TEST(Handlers, HelloIgnoresWhatThePeerClaimsAboutItself) {
-    // The reply describes the engine
     const auto outcome = HandleHello(
         json{{"name", "impostor"}, {"version", "9.9.9"}, {"protocolVersion", kProtocolVersion}});
 
     ASSERT_TRUE(std::holds_alternative<json>(outcome));
-    EXPECT_EQ(ResultOf(outcome)["name"], ambient::kName);
-    EXPECT_EQ(ResultOf(outcome)["version"], ambient::kVersion);
+    EXPECT_EQ(ResultOf(outcome)["name"], clinicavt::kName);
+    EXPECT_EQ(ResultOf(outcome)["version"], clinicavt::kVersion);
 }
 
 TEST(Handlers, EchoReturnsThePayload) {
@@ -88,13 +87,13 @@ TEST(Handlers, EchoPreservesClinicalNonAscii) {
 }
 
 json LoadFixture(const std::string& name) {
-    std::ifstream in(std::string(AMBIENT_FIXTURE_DIR) + "/" + name);
+    std::ifstream in(std::string(CLINICAVT_FIXTURE_DIR) + "/" + name);
     if (!in.is_open()) throw std::runtime_error("missing fixture: " + name);
     return json::parse(in);
 }
 
 TEST(Handlers, ModelsListMatchesTheFixture) {
-    const auto root = std::filesystem::temp_directory_path() / "ambient-handlers-models";
+    const auto root = std::filesystem::temp_directory_path() / "clinicavt-handlers-models";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root / "whisper-turbo-int8");
     std::ofstream(root / "whisper-turbo-int8" / "manifest.json")
@@ -102,16 +101,16 @@ TEST(Handlers, ModelsListMatchesTheFixture) {
         << R"( "task": "asr", "tier": "default", "licence": "MIT", "runtime": {"device": "GPU"},)"
         << R"( "files": {"model.xml": "00"}})";
 
-    const ambient::models::ModelStore store(root);
+    const clinicavt::models::ModelStore store(root);
     const json built = MakeResult(std::int64_t{7}, HandleModels(store));
     EXPECT_EQ(built, LoadFixture("models-list.json"));
     std::filesystem::remove_all(root);
 }
 
-// Two note models staged: the configured tier is the active one, whatever
+// With two note models staged, the configured tier is the active one whatever
 // order the store lists them in
 TEST(Handlers, ModelsListMarksTheConfiguredNoteTierActive) {
-    const auto root = std::filesystem::temp_directory_path() / "ambient-handlers-tiers";
+    const auto root = std::filesystem::temp_directory_path() / "clinicavt-handlers-tiers";
     std::filesystem::remove_all(root);
     for (const auto& [id, tier] :
          {std::pair{"qwen3.5-9b-int4", "default"}, std::pair{"qwen3.6-35b-a3b-int4", "accuracy"}}) {
@@ -122,7 +121,7 @@ TEST(Handlers, ModelsListMarksTheConfiguredNoteTierActive) {
             << R"( "files": {"model.xml": "00"}})";
     }
 
-    const ambient::models::ModelStore store(root);
+    const clinicavt::models::ModelStore store(root);
     const json listed = HandleModels(store, "accuracy");
     for (const auto& model : listed["models"]) {
         EXPECT_EQ(model["active"], model["tier"] == "accuracy") << model.dump();
@@ -131,20 +130,20 @@ TEST(Handlers, ModelsListMarksTheConfiguredNoteTierActive) {
 }
 
 // A lane that records what it was asked and answers with a state
-struct FakeLane : ambient::note::INoteLane {
+struct FakeLane : clinicavt::note::INoteLane {
     std::vector<std::string> configured;
-    ambient::note::NoteModelState state;
+    clinicavt::note::NoteModelState state;
     std::string refuse;  // Configure throws this as invalid_argument when set
 
-    ambient::note::NoteModelState Configure(const std::string& tier) override {
+    clinicavt::note::NoteModelState Configure(const std::string& tier) override {
         if (!refuse.empty()) throw std::invalid_argument(refuse);
         configured.push_back(tier);
         state.tier = tier;
-        state.phase = ambient::note::NoteModelState::Phase::kLoading;
+        state.phase = clinicavt::note::NoteModelState::Phase::kLoading;
         return state;
     }
 
-    ambient::note::NoteModelState State() const override {
+    clinicavt::note::NoteModelState State() const override {
         return state;
     }
 
@@ -170,35 +169,35 @@ TEST(Handlers, NoteTierConfiguresTheLaneAndAnswersWithItsState) {
 TEST(Handlers, NoteTierRefusesWhatTheLaneCannotServe) {
     FakeLane lane;
 
-    // Not a tier at all: never reaches the lane
+    // Something that is not a tier never reaches the lane
     auto outcome = HandleNoteTier(&lane, false, json{{"tier", "premium"}});
     ASSERT_TRUE(std::holds_alternative<Error>(outcome));
     EXPECT_EQ(std::get<Error>(outcome).code, kInvalidParams);
     EXPECT_TRUE(lane.configured.empty());
 
-    // A tier nothing is staged for: the store's message, as a parameter error
+    // A tier with nothing staged returns the store's message as a parameter error
     lane.refuse = "no model for note/accuracy; installed: qwen3.5-9b-int4(note/default)";
     outcome = HandleNoteTier(&lane, false, json{{"tier", "accuracy"}});
     ASSERT_TRUE(std::holds_alternative<Error>(outcome));
     EXPECT_EQ(std::get<Error>(outcome).code, kInvalidParams);
     EXPECT_NE(std::get<Error>(outcome).data->dump().find("qwen3.5-9b-int4"), std::string::npos);
 
-    // Mid-consultation: a switch would end the resident model under a session
+    // Mid-consultation a switch would end the resident model under a session
     lane.refuse.clear();
     outcome = HandleNoteTier(&lane, true, json{{"tier", "accuracy"}});
     ASSERT_TRUE(std::holds_alternative<Error>(outcome));
     EXPECT_EQ(std::get<Error>(outcome).code, kSessionError);
     EXPECT_TRUE(lane.configured.empty());
 
-    // No note lane at all (nothing staged, or no host beside the engine)
+    // No note lane at all, when nothing is staged or no host sits beside the engine
     outcome = HandleNoteTier(nullptr, false, json{{"tier", "default"}});
     ASSERT_TRUE(std::holds_alternative<Error>(outcome));
     EXPECT_EQ(std::get<Error>(outcome).code, kSessionError);
 }
 
 TEST(Handlers, NoteModelNotificationMatchesTheFixture) {
-    ambient::note::NoteModelState state;
-    state.phase = ambient::note::NoteModelState::Phase::kReady;
+    clinicavt::note::NoteModelState state;
+    state.phase = clinicavt::note::NoteModelState::Phase::kReady;
     state.tier = "accuracy";
     state.id = "qwen3.6-35b-a3b-int4";
     state.name = "Qwen3.6 35B";
@@ -211,14 +210,14 @@ TEST(Handlers, NoteModelNotificationMatchesTheFixture) {
 
 struct SessionStoreFixture {
     std::filesystem::path root;
-    std::unique_ptr<ambient::store::SqliteSessionStore> store;
+    std::unique_ptr<clinicavt::store::SqliteSessionStore> store;
 
     SessionStoreFixture() {
         root = std::filesystem::temp_directory_path() /
-               ("ambient-handlers-sessions-" +
+               ("clinicavt-handlers-sessions-" +
                 std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        store = std::make_unique<ambient::store::SqliteSessionStore>(root, std::chrono::hours(1));
+        store = std::make_unique<clinicavt::store::SqliteSessionStore>(root, std::chrono::hours(1));
     }
 
     ~SessionStoreFixture() {
@@ -244,8 +243,8 @@ TEST(Handlers, SessionListAndTranscriptRoundTrip) {
     EXPECT_TRUE(list["sessions"][0]["editedAt"].is_null());
     EXPECT_EQ(list["sessions"][0]["audioSeconds"], 33.0)
         << "the audio's length from the turns, which outlive the audio";
-    // The fixture is the shape both languages agree on. Named first: iterating
-    // a temporary's sub-object dangles (range-for extends only the top level)
+    // The fixture is the shape both languages agree on. It is named first because
+    // iterating a temporary's sub-object dangles, as range-for extends only the top level
     const json list_fixture = LoadFixture("session-list.json");
     for (const auto& [key, value] : list_fixture["result"]["sessions"][0].items()) {
         EXPECT_TRUE(list["sessions"][0].contains(key)) << key;
@@ -262,7 +261,7 @@ TEST(Handlers, SessionNoteReturnsTheStoredText) {
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote,
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kNote,
                                 {.text = "The patient presents with a swollen left elbow.",
                                  .style = "soap",
                                  .detail = "concise"});
@@ -280,7 +279,7 @@ TEST(Handlers, SessionNoteReturnsTheStoredText) {
         EXPECT_TRUE(note.contains(key)) << key;
     }
 
-    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited");
+    fixture.store->EditDocument(id, clinicavt::store::DocumentKind::kNote, "edited");
     const json edited = std::get<json>(HandleSessionNote(*fixture.store, json{{"id", id}}));
     EXPECT_EQ(edited["text"], "edited");
     EXPECT_TRUE(edited["editedAt"].is_string());
@@ -291,16 +290,16 @@ TEST(Handlers, SessionNoteReturnsTheStoredText) {
 
 // Seeds once, lists as samples, clears without touching the real session
 TEST(Handlers, TheSampleYearSeedsOnceAndClearsCleanly) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     SessionStoreFixture fixture;
     const auto real = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(real);
 
-    const auto seeded = HandleDemoSeed(*fixture.store, AMBIENT_DEMO_DIR);
+    const auto seeded = HandleDemoSeed(*fixture.store, CLINICAVT_DEMO_DIR);
     ASSERT_TRUE(std::holds_alternative<json>(seeded))
         << (std::holds_alternative<Error>(seeded) ? std::get<Error>(seeded).message : "");
     EXPECT_EQ(std::get<json>(seeded)["added"], 8);
-    const auto again = HandleDemoSeed(*fixture.store, AMBIENT_DEMO_DIR);
+    const auto again = HandleDemoSeed(*fixture.store, CLINICAVT_DEMO_DIR);
     ASSERT_TRUE(std::holds_alternative<json>(again));
     EXPECT_EQ(std::get<json>(again)["added"], 0) << "already seeded is a no-op, not an error";
 
@@ -338,15 +337,14 @@ TEST(Handlers, TheSampleYearSeedsOnceAndClearsCleanly) {
     EXPECT_EQ(left[0]["id"], real);
     EXPECT_EQ(HandleReflectionList(*fixture.store)["reflections"].size(), 0u);
 
-    // Everything, samples and real alike, in one erase
-    ASSERT_TRUE(std::holds_alternative<json>(HandleDemoSeed(*fixture.store, AMBIENT_DEMO_DIR)));
+    // One erase removes samples and real sessions alike
+    ASSERT_TRUE(std::holds_alternative<json>(HandleDemoSeed(*fixture.store, CLINICAVT_DEMO_DIR)));
     EXPECT_EQ(fixture.store->DeleteAll(), 9u);
     EXPECT_EQ(HandleSessionList(*fixture.store)["sessions"].size(), 0u);
 }
 
-// Stored summaries leave scrubbed whoever wrote them
 TEST(Handlers, AStoredSummaryLeavesScrubbedWhateverWasStored) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
@@ -366,20 +364,20 @@ TEST(Handlers, AStoredSummaryLeavesScrubbedWhateverWasStored) {
 }
 
 TEST(Handlers, ReflectionGetUpdateListAndDelete) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
     fixture.store->SaveDocument(id, DocumentKind::kLabel, {.text = "Elbow swelling"});
 
-    // Nothing yet: label only, both parts null, and unlisted
+    // Before anything is written there is only a label, both parts are null and it is unlisted
     json got = std::get<json>(HandleReflectionGet(*fixture.store, json{{"id", id}}));
     EXPECT_EQ(got["label"], "Elbow swelling");
     EXPECT_TRUE(got["summary"].is_null());
     EXPECT_TRUE(got["reflection"].is_null());
     EXPECT_EQ(HandleReflectionList(*fixture.store)["reflections"].size(), 0u);
 
-    // A summary alone is an entry: the sheet was opened, the writing can follow
+    // A summary alone is an entry because the sheet was opened and the writing can follow
     fixture.store->SaveDocument(id, DocumentKind::kSummary,
                                 {.text = "A patient in their forties."});
     json listed = HandleReflectionList(*fixture.store)["reflections"];
@@ -412,7 +410,7 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
         EXPECT_TRUE(got["reflection"].contains(key)) << key;
     }
 
-    // Ticked references keep their own words and replace as a set; answers stay
+    // Ticked references keep their own words and replace as a set. Answers stay
     EXPECT_TRUE(got["reflection"]["references"].is_array());
     EXPECT_TRUE(got["reflection"]["references"].empty());
     ASSERT_TRUE(std::holds_alternative<json>(HandleReflectionUpdate(
@@ -449,7 +447,7 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
     EXPECT_EQ(list[0]["id"], id);
     EXPECT_EQ(list[0]["label"], "Elbow swelling");
     EXPECT_EQ(list[0]["learned"], "check the temperature");
-    // Named first: iterating a temporary's sub-object dangles
+    // Named first because iterating a temporary's sub-object dangles
     const json list_fixture = LoadFixture("reflection-list.json");
     for (const auto& [key, value] : list_fixture["result"]["reflections"][0].items()) {
         EXPECT_TRUE(list[0].contains(key)) << key;
@@ -470,7 +468,7 @@ TEST(Handlers, ReflectionGetUpdateListAndDelete) {
 }
 
 TEST(Handlers, SessionPatientCarriesTheTranslationWhenStored) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
@@ -494,7 +492,7 @@ TEST(Handlers, SessionPatientCarriesTheTranslationWhenStored) {
 }
 
 TEST(Handlers, SessionListCarriesTheLabelAndTheLatestEdit) {
-    using ambient::store::DocumentKind;
+    using clinicavt::store::DocumentKind;
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
@@ -543,7 +541,7 @@ TEST(Handlers, SessionMethodsRejectAMissingId) {
 }
 
 TEST(Handlers, AudioInputsCarryThePickerFields) {
-    const std::vector<ambient::audio::CaptureDevice> devices{
+    const std::vector<clinicavt::audio::CaptureDevice> devices{
         {"{0.0.1}.{aa}", "Microphone Array (Realtek(R) Audio)", "Microphone Array", true, false},
         {"{0.0.1}.{bb}", "Headset (H800 Hands-Free)", "Headset", false, true},
     };
@@ -566,10 +564,10 @@ TEST(Handlers, NoMicrophonesIsAnEmptyListNotAnError) {
 }
 
 TEST(Handlers, AnchorStatusReportsOriginAndSessions) {
-    const auto root = std::filesystem::temp_directory_path() / "ambient-handlers-anchor";
+    const auto root = std::filesystem::temp_directory_path() / "clinicavt-handlers-anchor";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
-    ambient::diar::AnchorStore anchors(root);
+    clinicavt::diar::AnchorStore anchors(root);
     EXPECT_EQ(MakeResult(std::int64_t{3}, HandleAnchorStatus(anchors)),
               LoadFixture("anchor-status.json"));
 
@@ -587,10 +585,10 @@ TEST(Handlers, AnchorStatusReportsOriginAndSessions) {
 }
 
 TEST(Handlers, AnchorClearRefusesDuringASessionAndOtherwiseForgets) {
-    const auto root = std::filesystem::temp_directory_path() / "ambient-handlers-anchor-clear";
+    const auto root = std::filesystem::temp_directory_path() / "clinicavt-handlers-anchor-clear";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
-    ambient::diar::AnchorStore anchors(root);
+    clinicavt::diar::AnchorStore anchors(root);
     anchors.Accrue(std::vector<float>{1.0f, 0.0f});
 
     const auto refused = HandleAnchorClear(anchors, true);
@@ -606,8 +604,8 @@ TEST(Handlers, AnchorClearRefusesDuringASessionAndOtherwiseForgets) {
 }
 
 TEST(Handlers, AnEmptyModelStoreListsNothing) {
-    const ambient::models::ModelStore store(std::filesystem::temp_directory_path() /
-                                            "ambient-no-models");
+    const clinicavt::models::ModelStore store(std::filesystem::temp_directory_path() /
+                                              "clinicavt-no-models");
     const json result = HandleModels(store);
     EXPECT_TRUE(result["models"].is_array());
     EXPECT_TRUE(result["models"].empty());
@@ -629,33 +627,33 @@ TEST(Handlers, EchoRejectsAMissingOrNonStringPayload) {
 }
 
 // Answers every search with one result that names the note it was given
-struct EchoRetriever : ambient::guidance::IGuidanceRetriever {
+struct EchoRetriever : clinicavt::guidance::IGuidanceRetriever {
     std::mutex mutex;
     std::vector<std::pair<std::string, int>> searches;
-    std::vector<ambient::guidance::SearchMode> modes;
+    std::vector<clinicavt::guidance::SearchMode> modes;
     bool fail = false;
 
-    ambient::guidance::Results Search(const std::string& note, int limit,
-                                      ambient::guidance::SearchMode mode) override {
+    clinicavt::guidance::Results Search(const std::string& note, int limit,
+                                        clinicavt::guidance::SearchMode mode) override {
         {
             const std::lock_guard<std::mutex> lock(mutex);
             searches.emplace_back(note, limit);
             modes.push_back(mode);
         }
         if (fail) throw std::runtime_error("no embedding model staged");
-        ambient::guidance::Results results;
+        clinicavt::guidance::Results results;
         results.considered = 1;
-        ambient::guidance::Result one;
+        clinicavt::guidance::Result one;
         one.chunk_id = "fx100-1_1_1";
         one.trigger = note;
         results.shown.push_back(one);
         return results;
     }
-    std::vector<ambient::guidance::Corpus> Corpora() override {
+    std::vector<clinicavt::guidance::Corpus> Corpora() override {
         return {};
     }
-    ambient::guidance::Readiness Status() override {
-        return {ambient::guidance::Readiness::Phase::kReady, ""};
+    clinicavt::guidance::Readiness Status() override {
+        return {clinicavt::guidance::Readiness::Phase::kReady, ""};
     }
 };
 
@@ -679,11 +677,11 @@ struct Sent {
 };
 
 TEST(Handlers, GuidanceReadyMatchesTheFixture) {
-    ambient::guidance::Results results;
+    clinicavt::guidance::Results results;
     results.considered = 40;
     results.floor = 0.85;
     results.upload_floor = 0.85;
-    ambient::guidance::Corpus structured;
+    clinicavt::guidance::Corpus structured;
     structured.id = "fixture-nice";
     structured.name = "Fixture guidance corpus (structured)";
     structured.licence = "invented";
@@ -695,7 +693,7 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     structured.chunks = 40;
     structured.built_at = "2026-09-11T00:00:00Z";
     results.searched.push_back(structured);
-    ambient::guidance::Corpus plain;
+    clinicavt::guidance::Corpus plain;
     plain.id = "fixture";
     plain.name = "Fixture guidance corpus";
     plain.licence = "invented";
@@ -706,7 +704,7 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     plain.chunks = 5;
     plain.built_at = "2026-09-12T00:00:00Z";
     results.searched.push_back(plain);
-    ambient::guidance::Result one;
+    clinicavt::guidance::Result one;
     one.corpus = "fixture-nice";
     one.chunk_id = "fx100-1_1_1";
     one.code = "fx100";
@@ -724,7 +722,7 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     one.score = 0.8971234;
     one.trigger = "Examination shows synovitis of several MCP joints.";
     results.shown.push_back(one);
-    ambient::guidance::Result two;  // a plain-text corpus: no section, date or tag, whole-note hit
+    clinicavt::guidance::Result two;  // plain text with no section, date or tag, a whole-note hit
     two.corpus = "fixture";
     two.chunk_id = "gout-1";
     two.code = "gout";
@@ -740,14 +738,14 @@ TEST(Handlers, GuidanceReadyMatchesTheFixture) {
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
-    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, clinicavt::store::DocumentKind::kNote);
     Sent sent;
     std::string stored_first;
     auto request = GuidanceSearchRequest(
         *fixture.store, id, note, 3, [&](const std::string& method, json params) {
             stored_first =
-                fixture.store->ReadDocument(id, ambient::store::DocumentKind::kGuidance).text;
+                fixture.store->ReadDocument(id, clinicavt::store::DocumentKind::kGuidance).text;
             sent.Sink()(method, std::move(params));
         });
     request.on_ready(results);
@@ -769,12 +767,12 @@ TEST(Handlers, GuidanceReadyIsStaleWhenTheNoteMovedDuringTheSearch) {
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
-    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, clinicavt::store::DocumentKind::kNote);
     Sent sent;
     auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
-    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited meanwhile");
-    request.on_ready(ambient::guidance::Results{});
+    fixture.store->EditDocument(id, clinicavt::store::DocumentKind::kNote, "edited meanwhile");
+    request.on_ready(clinicavt::guidance::Results{});
     ASSERT_EQ(sent.all.size(), 1u);
     EXPECT_TRUE(sent.all[0].second["stale"]);
 }
@@ -783,12 +781,12 @@ TEST(Handlers, GuidanceForAnErasedSessionIsDroppedQuietly) {
     SessionStoreFixture fixture;
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
-    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kNote, {.text = "note"});
+    const auto note = fixture.store->ReadDocument(id, clinicavt::store::DocumentKind::kNote);
     Sent sent;
     auto request = GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink());
     fixture.store->Delete(id);
-    request.on_ready(ambient::guidance::Results{});
+    request.on_ready(clinicavt::guidance::Results{});
     EXPECT_TRUE(sent.all.empty());
 }
 
@@ -798,7 +796,7 @@ TEST(Handlers, GuidanceTheStoreRefusesStillArrivesWithTheReason) {
     Sent sent;
     auto request =
         GuidanceSearchRequest(*fixture.store, recording, {.text = "note"}, 3, sent.Sink());
-    request.on_ready(ambient::guidance::Results{});
+    request.on_ready(clinicavt::guidance::Results{});
     ASSERT_EQ(sent.all.size(), 1u);
     EXPECT_EQ(sent.all[0].first, "guidance/ready");
     EXPECT_EQ(sent.all[0].second["id"], recording);
@@ -819,7 +817,7 @@ TEST(Handlers, GuidanceFailedMatchesTheFixture) {
 }
 
 TEST(Handlers, GuidanceCorporaMatchesTheFixture) {
-    ambient::guidance::Corpus loaded;
+    clinicavt::guidance::Corpus loaded;
     loaded.id = "fixture";
     loaded.name = "Fixture guidance corpus";
     loaded.licence = "invented";
@@ -829,18 +827,18 @@ TEST(Handlers, GuidanceCorporaMatchesTheFixture) {
     loaded.sha256 = "e4f1be59be8647759ccd16d916ba9504b464f39a2799cb598ca5f0e4dc779a9f";
     loaded.chunks = 40;
     loaded.built_at = "2026-09-11T00:00:00Z";
-    ambient::guidance::Corpus refused;
+    clinicavt::guidance::Corpus refused;
     refused.id = "nice-2026-08-25";
     refused.unavailable = "corpus.db sha256 does not match the manifest";
 
-    ambient::guidance::Readiness ready;
-    ready.phase = ambient::guidance::Readiness::Phase::kReady;
+    clinicavt::guidance::Readiness ready;
+    ready.phase = clinicavt::guidance::Readiness::Phase::kReady;
     const json fixture = LoadFixture("guidance-corpora.json");
     EXPECT_EQ(GuidanceCorporaJson(ready, {loaded, refused}), fixture["result"]);
 }
 
-ambient::guidance::DocumentInfo ReadyDocument() {
-    ambient::guidance::DocumentInfo d;
+clinicavt::guidance::DocumentInfo ReadyDocument() {
+    clinicavt::guidance::DocumentInfo d;
     d.path = "BSR gout guideline 2017.md";
     d.sha256 = "bc9860cdfed1879752e67ea846b7bbef6f59290b9f16988e7ff977769ac60b3c";
     d.id = 7302914125883421;
@@ -854,8 +852,8 @@ ambient::guidance::DocumentInfo ReadyDocument() {
     return d;
 }
 
-ambient::guidance::DocumentInfo IndexingDocument() {
-    ambient::guidance::DocumentInfo d;
+clinicavt::guidance::DocumentInfo IndexingDocument() {
+    clinicavt::guidance::DocumentInfo d;
     d.path = "PMR local pathway.txt";
     d.sha256 = "7e3f9e26abe9d7567618d8c8cf96083afd0a7e4bfe3a3b553aad3b2c26cbf2f6";
     d.id = 2871034561297730;
@@ -867,8 +865,8 @@ ambient::guidance::DocumentInfo IndexingDocument() {
     return d;
 }
 
-ambient::guidance::DocumentInfo FailedDocument() {
-    ambient::guidance::DocumentInfo d;
+clinicavt::guidance::DocumentInfo FailedDocument() {
+    clinicavt::guidance::DocumentInfo d;
     d.path = "Clinic letter.txt";
     d.sha256 = "5135b53eff5763333bbc3e0e03acd94f020be0b3396d05f326f3e1388dc23a0f";
     d.id = 9106572248130415;
@@ -881,34 +879,36 @@ ambient::guidance::DocumentInfo FailedDocument() {
     return d;
 }
 
-struct FakeIngest : ambient::guidance::IDocumentIngest {
+struct FakeIngest : clinicavt::guidance::IDocumentIngest {
     std::vector<std::filesystem::path> added;
     std::vector<std::int64_t> removed;
     std::vector<std::pair<int, std::int64_t>> rendered;
 
-    ambient::guidance::Accepted Add(const std::vector<std::filesystem::path>& paths) override {
+    clinicavt::guidance::Accepted Add(const std::vector<std::filesystem::path>& paths) override {
         added = paths;
-        ambient::guidance::Accepted out;
+        clinicavt::guidance::Accepted out;
         out.documents.push_back(IndexingDocument());
         out.skipped.push_back({"C:\\Guidelines\\scan.pdf", "unsupported"});
         out.skipped.push_back({"C:\\Guidelines\\empty.txt", "unreadable"});
         return out;
     }
-    ambient::guidance::Listing List() override {
+    clinicavt::guidance::Listing List() override {
         return {Folder(), true, 2, {ReadyDocument(), IndexingDocument(), FailedDocument()}};
     }
     void Remove(std::int64_t id) override {
         if (id != ReadyDocument().id) {
-            throw ambient::store::StoreError(ambient::store::StoreCode::kNotFound, "no document");
+            throw clinicavt::store::StoreError(clinicavt::store::StoreCode::kNotFound,
+                                               "no document");
         }
         removed.push_back(id);
     }
     std::size_t RemoveAll() override {
         return 3;
     }
-    ambient::guidance::PageRender Render(std::int64_t id, int page, std::int64_t chunk) override {
+    clinicavt::guidance::PageRender Render(std::int64_t id, int page, std::int64_t chunk) override {
         if (id != ReadyDocument().id) {
-            throw ambient::store::StoreError(ambient::store::StoreCode::kNotFound, "no document");
+            throw clinicavt::store::StoreError(clinicavt::store::StoreCode::kNotFound,
+                                               "no document");
         }
         rendered.emplace_back(page, chunk);
         return {Scratch() / "page-7302914125883421-2.bmp", 1191, 1684, 5,
@@ -917,18 +917,19 @@ struct FakeIngest : ambient::guidance::IDocumentIngest {
     }
     std::filesystem::path Path(std::int64_t id) override {
         if (id != ReadyDocument().id) {
-            throw ambient::store::StoreError(ambient::store::StoreCode::kNotFound, "no document");
+            throw clinicavt::store::StoreError(clinicavt::store::StoreCode::kNotFound,
+                                               "no document");
         }
         return Folder() / "BSR gout guideline 2017.md";
     }
     static std::filesystem::path Folder() {
-        return R"(C:\Users\clinician\Documents\Ambient guidelines)";
+        return R"(C:\Users\clinician\Documents\ClinicAVT guidelines)";
     }
     static std::filesystem::path Scratch() {
-        return R"(C:\Users\clinician\AppData\Local\ambient\store\documents\scratch)";
+        return R"(C:\Users\clinician\AppData\Local\clinicavt\store\documents\scratch)";
     }
-    void SetListener(std::function<void(const ambient::guidance::IngestProgress&)>,
-                     std::function<void(const ambient::guidance::DocumentInfo&)>) override {}
+    void SetListener(std::function<void(const clinicavt::guidance::IngestProgress&)>,
+                     std::function<void(const clinicavt::guidance::DocumentInfo&)>) override {}
 };
 
 TEST(Handlers, PageAndOpenMatchTheFixtures) {
@@ -998,13 +999,13 @@ TEST(Handlers, TheReadySetChangesWhenADocumentFinishesOrAFinishedOneGoes) {
 }
 
 TEST(Handlers, GuidanceModelMatchesTheFixture) {
-    ambient::guidance::Readiness unavailable;
-    unavailable.phase = ambient::guidance::Readiness::Phase::kUnavailable;
+    clinicavt::guidance::Readiness unavailable;
+    unavailable.phase = clinicavt::guidance::Readiness::Phase::kUnavailable;
     unavailable.detail = "no model for embedding/default";
     const json fixture = LoadFixture("guidance-model.json");
     EXPECT_EQ(fixture["method"], "guidance/model");
     EXPECT_EQ(GuidanceModelJson(unavailable), fixture["params"]);
-    EXPECT_EQ(GuidanceModelJson(ambient::guidance::Readiness{})["state"], "loading");
+    EXPECT_EQ(GuidanceModelJson(clinicavt::guidance::Readiness{})["state"], "loading");
 }
 
 TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
@@ -1012,13 +1013,13 @@ TEST(Handlers, GuidanceSearchRunsTheStoredNoteThroughTheLane) {
     const auto id = fixture.store->Begin({16000, "", ""});
     fixture.store->Finalise(id);
     fixture.store->SaveDocument(
-        id, ambient::store::DocumentKind::kNote,
+        id, clinicavt::store::DocumentKind::kNote,
         {.text = "Six weeks of synovitis in the small joints of both hands.",
          .style = "prose",
          .detail = "standard"});
     EchoRetriever retriever;
     Sent sent;
-    ambient::guidance::GuidanceLane lane(retriever);
+    clinicavt::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(*fixture.store, lane, json{{"id", id}}, sent.Sink());
     ASSERT_TRUE(std::holds_alternative<json>(outcome));
@@ -1038,7 +1039,7 @@ TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     SessionStoreFixture fixture;
     EchoRetriever retriever;
     Sent sent;
-    ambient::guidance::GuidanceLane lane(retriever);
+    clinicavt::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(
         *fixture.store, lane, json{{"text", "Chest pain on exertion."}, {"limit", 5}}, sent.Sink());
@@ -1050,23 +1051,25 @@ TEST(Handlers, GuidanceSearchTakesFreeTextAndALimit) {
     EXPECT_EQ(sent.all[0].second.at("stale"), nullptr) << "no note, nothing to be stale against";
     EXPECT_EQ(retriever.searches,
               (std::vector<std::pair<std::string, int>>{{"Chest pain on exertion.", 5}}));
-    EXPECT_EQ(retriever.modes,
-              (std::vector<ambient::guidance::SearchMode>{ambient::guidance::SearchMode::kQuery}));
+    EXPECT_EQ(
+        retriever.modes,
+        (std::vector<clinicavt::guidance::SearchMode>{clinicavt::guidance::SearchMode::kQuery}));
 }
 
 TEST(Handlers, GuidanceSearchRunsTypedTextAsANoteOnRequest) {
     SessionStoreFixture fixture;
     EchoRetriever retriever;
     Sent sent;
-    ambient::guidance::GuidanceLane lane(retriever);
+    clinicavt::guidance::GuidanceLane lane(retriever);
 
     const auto outcome = HandleGuidanceSearch(
         *fixture.store, lane, json{{"text", "Chest pain on exertion."}, {"mode", "note"}},
         sent.Sink());
     ASSERT_TRUE(std::holds_alternative<json>(outcome));
     ASSERT_TRUE(sent.WaitFor(1));
-    EXPECT_EQ(retriever.modes,
-              (std::vector<ambient::guidance::SearchMode>{ambient::guidance::SearchMode::kNote}));
+    EXPECT_EQ(
+        retriever.modes,
+        (std::vector<clinicavt::guidance::SearchMode>{clinicavt::guidance::SearchMode::kNote}));
 }
 
 TEST(Handlers, GuidanceSearchRefusesBadParamsAndAMissingNote) {
@@ -1075,7 +1078,7 @@ TEST(Handlers, GuidanceSearchRefusesBadParamsAndAMissingNote) {
     fixture.store->Finalise(without_note);
     EchoRetriever retriever;
     Sent sent;
-    ambient::guidance::GuidanceLane lane(retriever);
+    clinicavt::guidance::GuidanceLane lane(retriever);
 
     struct Case {
         json params;
@@ -1105,7 +1108,7 @@ TEST(Handlers, GuidanceSearchReportsAFailedSearch) {
     EchoRetriever retriever;
     retriever.fail = true;
     Sent sent;
-    ambient::guidance::GuidanceLane lane(retriever);
+    clinicavt::guidance::GuidanceLane lane(retriever);
 
     const auto outcome =
         HandleGuidanceSearch(*fixture.store, lane, json{{"text", "Chest pain."}}, sent.Sink());
@@ -1123,12 +1126,12 @@ TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
     EXPECT_EQ(ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}})),
               (json{{"guidance", nullptr}}));
 
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "note"});
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kNote, {.text = "note"});
     const json expected = LoadFixture("session-guidance.json")["result"];
     json record = expected["guidance"];
     record.erase("generatedAt");
     record.erase("stale");
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kGuidance,
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kGuidance,
                                 {.text = record.dump()});
 
     json result = ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}));
@@ -1136,15 +1139,15 @@ TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
     result["guidance"]["generatedAt"] = expected["guidance"]["generatedAt"];
     EXPECT_EQ(result, expected);
 
-    fixture.store->EditDocument(id, ambient::store::DocumentKind::kNote, "edited");
+    fixture.store->EditDocument(id, clinicavt::store::DocumentKind::kNote, "edited");
     EXPECT_TRUE(
         ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}}))["guidance"]["stale"]);
 
     // A search after a rewrite replaces the record and it reads fresh again
-    fixture.store->SaveDocument(id, ambient::store::DocumentKind::kNote, {.text = "regenerated"});
-    const auto note = fixture.store->ReadDocument(id, ambient::store::DocumentKind::kNote);
+    fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kNote, {.text = "regenerated"});
+    const auto note = fixture.store->ReadDocument(id, clinicavt::store::DocumentKind::kNote);
     Sent sent;
-    ambient::guidance::Results second;
+    clinicavt::guidance::Results second;
     second.considered = 1;
     GuidanceSearchRequest(*fixture.store, id, note, 3, sent.Sink()).on_ready(second);
     const json again =
@@ -1162,7 +1165,8 @@ TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
     EXPECT_TRUE(compared["documentsChanged"]);
 
     for (const char* broken : {"{ not json", R"({"version": 99})", R"({"shown": [{"text": 5}]})"}) {
-        fixture.store->SaveDocument(id, ambient::store::DocumentKind::kGuidance, {.text = broken});
+        fixture.store->SaveDocument(id, clinicavt::store::DocumentKind::kGuidance,
+                                    {.text = broken});
         EXPECT_EQ(ResultOf(HandleSessionGuidance(*fixture.store, json{{"id", id}})),
                   (json{{"guidance", nullptr}}))
             << broken;
@@ -1174,4 +1178,4 @@ TEST(Handlers, SessionGuidanceReadsTheStoredRecordAndItsStaleness) {
 }
 
 }  // namespace
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

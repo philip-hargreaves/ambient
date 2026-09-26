@@ -7,7 +7,7 @@
 
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // A merged turn can carry the other speaker's sentence at an
 // edge when the segmenter's boundary fell short and no cut caught it. At finalise
@@ -33,4 +33,4 @@ std::vector<ResplitTurn> ResplitByEmbedding(const std::vector<LabelledSlice>& tu
                                             const std::vector<std::vector<float>>& centroids,
                                             double margin = kResplitMargin);
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

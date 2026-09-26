@@ -8,16 +8,17 @@
 #include <string>
 #include <thread>
 
-namespace ambient::store {
+namespace clinicavt::store {
 namespace {
 
 struct TempDb {
     std::filesystem::path path;
 
     TempDb() {
-        path = std::filesystem::temp_directory_path() /
-               ("ambient-db-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-                "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".db");
+        path =
+            std::filesystem::temp_directory_path() /
+            ("clinicavt-db-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+             "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".db");
     }
 
     ~TempDb() {
@@ -105,7 +106,7 @@ TEST(Db, BadSqlThrows) {
 }
 
 TEST(Db, OpenInMissingDirectoryThrows) {
-    const auto path = std::filesystem::temp_directory_path() / "ambient-db-no-such-dir" / "x.db";
+    const auto path = std::filesystem::temp_directory_path() / "clinicavt-db-no-such-dir" / "x.db";
     EXPECT_THROW(Db{path}, std::runtime_error);
 }
 
@@ -152,4 +153,4 @@ TEST(Db, ASecondConnectionWaitsRatherThanThrows) {
 }
 
 }  // namespace
-}  // namespace ambient::store
+}  // namespace clinicavt::store

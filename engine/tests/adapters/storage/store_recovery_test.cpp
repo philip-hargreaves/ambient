@@ -16,7 +16,7 @@
 #include "adapters/storage/db.hpp"
 #include "adapters/storage/sqlite_session_store.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 namespace {
 
 float PatternAt(std::uint64_t frame) {
@@ -27,10 +27,10 @@ struct TempRoot {
     std::filesystem::path path;
 
     TempRoot() {
-        path =
-            std::filesystem::temp_directory_path() /
-            ("ambient-crash-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-             "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        path = std::filesystem::temp_directory_path() /
+               ("clinicavt-crash-" +
+                std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name());
     }
 
     ~TempRoot() {
@@ -50,7 +50,7 @@ class HelperProcess {
             throw std::runtime_error("pipe setup failed");
         }
 
-        std::string command = std::string(AMBIENT_CRASH_HELPER) + " \"" + root.string() + "\"";
+        std::string command = std::string(CLINICAVT_CRASH_HELPER) + " \"" + root.string() + "\"";
         if (mode != nullptr) {
             command += std::string(" ") + mode;
         }
@@ -143,7 +143,7 @@ TEST(StoreRecovery, AHardKilledSessionRecoversEveryAckedChunk) {
 
     // Every acked chunk survived the kill, decrypts, and carries the exact
     // frames that were appended
-    Db db(root.path / "ambient.db");
+    Db db(root.path / "clinicavt.db");
     Db::Stmt key = db.Prepare("SELECT wrapped FROM session_keys WHERE session_id = ?");
     key.BindText(1, session_id);
     ASSERT_TRUE(key.Step()) << "the key row was committed with the session";
@@ -204,10 +204,10 @@ TEST(StoreRecovery, AHardKillAfterCancelLeavesNothing) {
     SqliteSessionStore reopened(root.path, std::chrono::hours(1));
     EXPECT_TRUE(reopened.ScanRecoverable().empty());
     EXPECT_TRUE(reopened.ListSessions().empty());
-    Db db(root.path / "ambient.db");
+    Db db(root.path / "clinicavt.db");
     EXPECT_EQ(db.QueryInt64("SELECT COUNT(*) FROM session_keys"), 0) << "the key went first";
     EXPECT_EQ(db.QueryInt64("SELECT COUNT(*) FROM chunks"), 0);
 }
 
 }  // namespace
-}  // namespace ambient::store
+}  // namespace clinicavt::store

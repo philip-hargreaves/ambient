@@ -6,7 +6,7 @@ namespace {
 
 // Real enumeration. A runner with no microphone legitimately lists nothing
 TEST(CaptureDevices, EveryListedDeviceIsWellFormed) {
-    const auto devices = ambient::audio::ListCaptureDevices();
+    const auto devices = clinicavt::audio::ListCaptureDevices();
     int defaults = 0;
     for (const auto& device : devices) {
         EXPECT_FALSE(device.id.empty());
@@ -24,34 +24,34 @@ TEST(CaptureDevices, EveryListedDeviceIsWellFormed) {
 }
 
 TEST(CaptureDevices, ResolveFindsTheRequestedDevice) {
-    const std::vector<ambient::audio::CaptureDevice> devices{
+    const std::vector<clinicavt::audio::CaptureDevice> devices{
         {"{aa}", "Array", "Array", true, false},
         {"{bb}", "Headset", "Headset", false, true},
     };
-    EXPECT_EQ(ambient::audio::ResolveMicrophone(devices, "{bb}").id, "{bb}");
+    EXPECT_EQ(clinicavt::audio::ResolveMicrophone(devices, "{bb}").id, "{bb}");
 }
 
 TEST(CaptureDevices, AGoneChoiceResolvesToTheDefault) {
-    const std::vector<ambient::audio::CaptureDevice> devices{
+    const std::vector<clinicavt::audio::CaptureDevice> devices{
         {"{aa}", "USB Mic", "USB Mic", false, false},
         {"{bb}", "Array", "Array", true, false},
     };
-    const auto resolved = ambient::audio::ResolveMicrophone(devices, "{unplugged}");
+    const auto resolved = clinicavt::audio::ResolveMicrophone(devices, "{unplugged}");
     EXPECT_EQ(resolved.id, "{bb}");
     EXPECT_EQ(resolved.name, "Array");
 }
 
 TEST(CaptureDevices, NoDefaultFallsToTheFirstAndEmptyToNothing) {
-    const std::vector<ambient::audio::CaptureDevice> devices{
+    const std::vector<clinicavt::audio::CaptureDevice> devices{
         {"{aa}", "USB Mic", "USB Mic", false, false},
     };
-    EXPECT_EQ(ambient::audio::ResolveMicrophone(devices, "").id, "{aa}");
-    EXPECT_EQ(ambient::audio::ResolveMicrophone({}, "{any}").id, "");
+    EXPECT_EQ(clinicavt::audio::ResolveMicrophone(devices, "").id, "{aa}");
+    EXPECT_EQ(clinicavt::audio::ResolveMicrophone({}, "{any}").id, "");
 }
 
 TEST(CaptureDevices, WideIdRoundTripsAscii) {
-    EXPECT_EQ(ambient::audio::WideId("{0.0.1.00000000}.{abc}"), L"{0.0.1.00000000}.{abc}");
-    EXPECT_TRUE(ambient::audio::WideId("").empty());
+    EXPECT_EQ(clinicavt::audio::WideId("{0.0.1.00000000}.{abc}"), L"{0.0.1.00000000}.{abc}");
+    EXPECT_TRUE(clinicavt::audio::WideId("").empty());
 }
 
 }  // namespace

@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <thread>
 
-namespace ambient::models {
+namespace clinicavt::models {
 namespace {
 
 using namespace std::chrono_literals;
@@ -143,4 +143,4 @@ TEST(Residency, AFailedBackgroundLoadIsRetriedByUseWhichReportsItsOwnFailure) {
 }
 
 }  // namespace
-}  // namespace ambient::models
+}  // namespace clinicavt::models

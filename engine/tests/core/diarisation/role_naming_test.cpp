@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 RoleTurn Turn(int cluster, std::string text, std::uint64_t frames = 32000) {
@@ -137,4 +137,4 @@ TEST(NameRoles, ASingleClusterAbstains) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

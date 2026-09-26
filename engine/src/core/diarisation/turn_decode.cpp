@@ -12,7 +12,7 @@
 #include "core/diarisation/diar_regions.hpp"
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 std::size_t MaxRepeatedNgram(const std::string& text) {
     std::vector<std::string> words;
@@ -145,4 +145,4 @@ std::vector<LabelledSlice> SpeculatedTurns(const std::vector<LabelledSlice>& mer
     return known;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

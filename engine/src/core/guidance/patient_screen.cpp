@@ -6,7 +6,7 @@
 
 #include "core/common/strings.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -42,11 +42,11 @@ bool LooksLikePatientData(std::string_view text) {
         "date of birth", "dob:", "nhs number", "nhs no", "dear dr", "dear doctor",
         "discharge summary", "discharge letter",
         // The app marks its own note and sheet exports, so a filed one is refused
-        "ambient export"};
+        "clinicavt export"};
     for (const char* phrase : kPhrases) {
         if (lower.find(phrase) != std::string::npos) return true;
     }
     return HoldsNhsNumber(text);
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

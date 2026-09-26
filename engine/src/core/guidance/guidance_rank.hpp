@@ -7,7 +7,7 @@
 
 #include "core/guidance/guidance_query.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // Ordering and abstention over first-stage candidates. Each sub-query's
 // ranked hits vote by rank (reciprocal rank fusion), a floor on the best cosine
@@ -76,4 +76,4 @@ bool NearDuplicate(std::string_view a, std::string_view b);
 // "NG100 1.1.1, Rheumatoid arthritis in adults: management"
 std::string Citation(std::string_view code, std::string_view number, std::string_view title);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

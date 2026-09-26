@@ -5,7 +5,7 @@
 
 #include "adapters/storage/db.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 // 1 was a catalog beside one file per session. 2 is the single database.
 // 3 adds retain. 4 adds the summary and reflection kinds. 5 adds the demo flag.
@@ -20,4 +20,4 @@ inline constexpr std::int64_t kApplicationId = 0x414D4243;
 // older build's half-stamped file already has them
 Db OpenDatabase(const std::filesystem::path& root);
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

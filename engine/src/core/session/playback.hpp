@@ -11,7 +11,7 @@
 #include "core/session/session_events.hpp"
 #include "ports/session_store.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 // The clock covers the whole recording in `listen`. Each document waits
 // `first_token` then types itself out a little faster than the accuracy tier
@@ -92,4 +92,4 @@ class Playback {
     store::SessionId current_;
 };
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

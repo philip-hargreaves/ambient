@@ -22,12 +22,12 @@ import time
 import wave
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-APP_BIN = glob.glob(os.path.join(ROOT, "app", "Ambient.App", "bin", "x64", "Debug", "net*", "win-x64"))
-ENGINE = os.path.join(APP_BIN[0], "ambient_engine.exe") if APP_BIN else ""
+APP_BIN = glob.glob(os.path.join(ROOT, "app", "ClinicAVT.App", "bin", "x64", "Debug", "net*", "win-x64"))
+ENGINE = os.path.join(APP_BIN[0], "clinicavt_engine.exe") if APP_BIN else ""
 TRACKS = os.path.join(ROOT, "demo", "tracks.json")
 LOG = os.path.join(ROOT, "build", "demo-masters.log")
-PREFERENCES = os.path.join(os.environ["LOCALAPPDATA"], "ambient", "preferences.json")
-MASTERS = os.path.join(os.environ["LOCALAPPDATA"], "ambient", "masters.json")
+PREFERENCES = os.path.join(os.environ["LOCALAPPDATA"], "clinicavt", "preferences.json")
+MASTERS = os.path.join(os.environ["LOCALAPPDATA"], "clinicavt", "masters.json")
 
 
 def log(line):
@@ -40,7 +40,7 @@ def log(line):
 class Engine:
     # One synchronous pipe handle: PeekNamedPipe says what is waiting and only that is read
     def __init__(self):
-        self.pipe_name = f"LOCAL\\ambient-masters-{os.getpid()}"
+        self.pipe_name = f"LOCAL\\clinicavt-masters-{os.getpid()}"
         self.notifications = collections.deque()
         self.replies = {}
         self.buf = b""
@@ -176,7 +176,7 @@ def remember(name, row):
 
 def main():
     if not ENGINE or not os.path.exists(ENGINE):
-        sys.exit("build the app first: no engine beside Ambient.App")
+        sys.exit("build the app first: no engine beside ClinicAVT.App")
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
     with open(TRACKS, encoding="utf-8") as f:
         tracks = json.load(f)["tracks"]

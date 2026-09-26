@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // Below this lexical margin no one is named. Chosen from the observed
 // margin range without a sweep. Revisit first if it abstains too often
@@ -39,4 +39,4 @@ double LexicalDoctorScore(const std::string& text);
 RoleResult NameRoles(const std::vector<RoleTurn>& turns, int cluster_count,
                      const std::vector<double>& anchor_similarity = {});
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

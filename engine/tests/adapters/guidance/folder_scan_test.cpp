@@ -7,13 +7,13 @@
 #include <set>
 #include <string>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 struct TempFolder {
     std::filesystem::path path;
     TempFolder() {
-        path = std::filesystem::temp_directory_path() / "ambient-folder-scan-test";
+        path = std::filesystem::temp_directory_path() / "clinicavt-folder-scan-test";
         std::filesystem::remove_all(path);
         std::filesystem::create_directories(path);
     }
@@ -60,11 +60,11 @@ TEST(FolderScan, ListsSupportedFilesToTheDepthAndCountsTheRest) {
 }
 
 TEST(FolderScan, AMissingFolderListsNothing) {
-    const auto listing =
-        ListFolder("C:/no/such/folder/for/ambient", 3, [](const std::string&) { return true; }, "");
+    const auto listing = ListFolder(
+        "C:/no/such/folder/for/clinicavt", 3, [](const std::string&) { return true; }, "");
     EXPECT_TRUE(listing.files.empty());
     EXPECT_EQ(listing.unsupported, 0);
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

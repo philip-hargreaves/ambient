@@ -5,11 +5,11 @@
 #include <filesystem>
 #include <fstream>
 
-namespace ambient::note {
+namespace clinicavt::note {
 namespace {
 
 TEST(NotePrompt, LoadsTheFileVerbatim) {
-    const auto path = std::filesystem::temp_directory_path() / "ambient-note-prompt-test.md";
+    const auto path = std::filesystem::temp_directory_path() / "clinicavt-note-prompt-test.md";
     std::ofstream(path) << "Write the note.\n\nTRANSCRIPT:\n";
     EXPECT_EQ(LoadPrompt(path), "Write the note.\n\nTRANSCRIPT:\n");
     std::filesystem::remove(path);
@@ -30,4 +30,4 @@ TEST(NotePrompt, TranscriptBlockIsUpperCasedRolesOnePerLine) {
 }
 
 }  // namespace
-}  // namespace ambient::note
+}  // namespace clinicavt::note

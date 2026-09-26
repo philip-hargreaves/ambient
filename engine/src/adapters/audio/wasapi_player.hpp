@@ -3,7 +3,7 @@
 #include <memory>
 #include <span>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Best-effort playback to the default render endpoint, 16 kHz mono float.
 // Write drops rather than waits, so playback never throttles the pipeline feed
@@ -23,4 +23,4 @@ class WasapiPlayer {
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

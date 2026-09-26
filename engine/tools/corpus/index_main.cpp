@@ -1,7 +1,7 @@
 // Builds a guidance corpus from a build spec with the staged embedder, so index
 // and query embeddings come from the same code.
 //
-//   ambient_index <spec.json> <out-dir> [--models <root>] [--verify]
+//   clinicavt_index <spec.json> <out-dir> [--models <root>] [--verify]
 
 #include <chrono>
 #include <cstdio>
@@ -19,7 +19,7 @@
 
 namespace {
 
-constexpr const char* kBuilder = "ambient_index 1";
+constexpr const char* kBuilder = "clinicavt_index 1";
 
 std::string NowUtc() {
     const auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -34,7 +34,7 @@ std::string NowUtc() {
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
-    std::filesystem::path models_root = ambient::system::DefaultModelsRoot();
+    std::filesystem::path models_root = clinicavt::system::DefaultModelsRoot();
     bool verify = false;
     std::vector<std::string> positional;
     for (std::size_t i = 0; i < args.size(); ++i) {
@@ -48,22 +48,22 @@ int main(int argc, char** argv) {
     }
     if (positional.size() != 2) {
         std::fprintf(stderr,
-                     "usage: ambient_index <spec.json> <out-dir> [--models <root>] [--verify]\n");
+                     "usage: clinicavt_index <spec.json> <out-dir> [--models <root>] [--verify]\n");
         return 2;
     }
     try {
-        const auto spec = ambient::guidance::ReadBuildSpec(positional[0]);
+        const auto spec = clinicavt::guidance::ReadBuildSpec(positional[0]);
         const std::filesystem::path out_dir = positional[1];
-        const ambient::models::ModelStore store(models_root);
+        const clinicavt::models::ModelStore store(models_root);
         std::printf("embedder: loading from %s\n", models_root.string().c_str());
-        const auto embedder = ambient::guidance::Embedder::Load(store);
+        const auto embedder = clinicavt::guidance::Embedder::Load(store);
         const auto& identity = embedder->Identity();
         std::printf("embedder: %s %s, %d dimensions\n", identity.id.c_str(),
                     identity.rev.substr(0, 12).c_str(), identity.dim);
 
         const auto start = std::chrono::steady_clock::now();
         std::size_t last_reported = 0;
-        const auto report = ambient::guidance::IndexCorpus(
+        const auto report = clinicavt::guidance::IndexCorpus(
             spec, *embedder, out_dir, NowUtc(), kBuilder, [&](std::size_t done, std::size_t total) {
                 if (done - last_reported >= 500 || done == total) {
                     const auto seconds =
@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
 
         if (verify) {
             std::string reason;
-            const auto opened = ambient::guidance::CorpusStore::Open(out_dir, identity, reason);
+            const auto opened = clinicavt::guidance::CorpusStore::Open(out_dir, identity, reason);
             if (!opened) {
                 std::fprintf(stderr, "verify: refused: %s\n", reason.c_str());
                 return 1;
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
         }
         return 0;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient_index: %s\n", e.what());
+        std::fprintf(stderr, "clinicavt_index: %s\n", e.what());
         return 1;
     }
 }

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 PageLine Line(const std::string& text, float top = 0.5F) {
@@ -124,4 +124,4 @@ TEST(PageClean, CleaningRepairsThenJoinsThenDropsEmptyLines) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

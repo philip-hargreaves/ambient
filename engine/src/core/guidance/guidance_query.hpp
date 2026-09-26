@@ -4,7 +4,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // Sub-queries for retrieval: each sentence of the note on its own, plus the
 // whole note. The boundaries mirror the evaluation harness's splitter so the
@@ -29,4 +29,4 @@ std::vector<std::string> SubQueries(std::string_view note);
 // A capital, digit, quote or bracket: what a sentence may begin with
 bool OpensSentence(unsigned char c);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

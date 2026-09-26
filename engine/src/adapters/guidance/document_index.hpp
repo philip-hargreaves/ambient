@@ -10,7 +10,7 @@
 #include "adapters/storage/db.hpp"
 #include "ports/document_ingest.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 inline constexpr std::uint32_t kIndexApplicationId = 0x414D4249;  // "AMBI"
 inline constexpr int kIndexFormat = 3;
@@ -93,4 +93,4 @@ class DocumentIndex {
     bool adopted_ = false;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -12,7 +12,7 @@
 
 #include "ports/audio_source.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 namespace {
 
 std::string Iso8601(std::chrono::sys_seconds at) {
@@ -26,7 +26,7 @@ void Call(const std::function<void(const store::SessionId&)>& hook, const store:
     try {
         hook(id);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: playback %s hook failed: %s\n", what, e.what());
+        std::fprintf(stderr, "clinicavt-engine: playback %s hook failed: %s\n", what, e.what());
     }
 }
 
@@ -50,10 +50,10 @@ bool Playback::Start(const store::SessionId& source) {
     try {
         copy = MakeCopy(source);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: playback refused: %s\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: playback refused: %s\n", e.what());
         return false;
     }
-    std::fprintf(stderr, "ambient-engine: playback of %s as demo %s\n", source.c_str(),
+    std::fprintf(stderr, "clinicavt-engine: playback of %s as demo %s\n", source.c_str(),
                  copy.id.c_str());
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -228,7 +228,7 @@ void Playback::Erase(const store::SessionId& id) {
     try {
         store_.Delete(id);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: playback copy not erased: %s\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: playback copy not erased: %s\n", e.what());
     }
 }
 
@@ -242,4 +242,4 @@ void Playback::Join() {
     if (thread_.joinable()) thread_.join();
 }
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

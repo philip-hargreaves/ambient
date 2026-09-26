@@ -15,7 +15,7 @@
 #include <tlhelp32.h>
 // clang-format on
 
-namespace ambient::system {
+namespace clinicavt::system {
 
 // Live processes with this image name: detects a note host left wedged
 // by an earlier engine
@@ -43,4 +43,4 @@ inline bool WaitUntilGone(const wchar_t* image, std::chrono::milliseconds bound)
     return true;
 }
 
-}  // namespace ambient::system
+}  // namespace clinicavt::system

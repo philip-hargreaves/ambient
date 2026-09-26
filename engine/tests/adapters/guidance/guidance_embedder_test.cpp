@@ -17,13 +17,13 @@
 #include "guidance_fixture.hpp"
 #include "tools/corpus/indexer.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
-constexpr const char* kFixtureDir = AMBIENT_GUIDANCE_FIXTURE_DIR;
+constexpr const char* kFixtureDir = CLINICAVT_GUIDANCE_FIXTURE_DIR;
 
 const models::ModelStore& Store() {
-    static const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
+    static const models::ModelStore store{std::filesystem::path(CLINICAVT_MODELS_DIR)};
     return store;
 }
 
@@ -93,7 +93,7 @@ TEST(GuidanceEmbedder, ReportsTruncationOnALongText) {
 }
 
 TEST(GuidanceEmbedder, IndexesTheFixtureCorpusAndFindsTheRightGuideline) {
-    const auto dir = std::filesystem::temp_directory_path() / "ambient-index-real";
+    const auto dir = std::filesystem::temp_directory_path() / "clinicavt-index-real";
     std::filesystem::remove_all(dir);
     fixture::WriteMarkdown(kFixtureDir, dir / "docs");
     std::ofstream(dir / "build.json")
@@ -128,7 +128,7 @@ TEST(GuidanceEmbedder, IndexesTheFixtureCorpusAndFindsTheRightGuideline) {
 // refused at the shipped floor. Ordering is asserted without the floor. What
 // the floor does with each note is printed, since the fixture is invented text
 TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {
-    const auto dir = std::filesystem::temp_directory_path() / "ambient-guidance-real";
+    const auto dir = std::filesystem::temp_directory_path() / "clinicavt-guidance-real";
     std::filesystem::remove_all(dir);
     auto& embedder = StagedEmbedder();
     fixture::Build(dir / "corpora" / "fixture", "fixture", embedder, fixture::Chunks(kFixtureDir));
@@ -167,4 +167,4 @@ TEST(GuidanceEmbedder, SearchesTheFixtureNotes) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 using namespace std::chrono_literals;
@@ -260,4 +260,4 @@ TEST(GuidanceLane, PrepareRunsOnceOnTheWorker) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

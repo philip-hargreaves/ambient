@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ClinicAVT.App.Controls">
+
+    <!-- These build on WinUI's own styles and theme resources, so states, themes and focus
+         visuals come from the platform -->
+
+    <Style x:Key="PaneHeaderText" TargetType="TextBlock"
+           BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource MutedTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="DocumentHeadingText" TargetType="TextBlock"
+           BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <Style x:Key="BodyText" TargetType="TextBlock"
+           BasedOn="{StaticResource BodyTextBlockStyle}">
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="RecommendationText" TargetType="TextBlock"
+           BasedOn="{StaticResource BodyText}">
+        <Setter Property="LineHeight" Value="22" />
+    </Style>
+
+    <Style x:Key="CaptionText" TargetType="TextBlock"
+           BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource MutedTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="MicroText" TargetType="TextBlock"
+           BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource FaintTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Mica is level 1, the layer fill 2 and cards 3. The fill difference alone gives the lift -->
+    <Style x:Key="InnerCardSurface" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+
+    <Style x:Key="RecordDisc" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+        <Setter Property="Width" Value="88" />
+        <Setter Property="Height" Value="88" />
+        <Setter Property="CornerRadius" Value="44" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="StopDisc" TargetType="Button">
+        <Setter Property="Width" Value="88" />
+        <Setter Property="Height" Value="88" />
+        <Setter Property="CornerRadius" Value="44" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+    </Style>
+
+    <Style x:Key="ClockText" TargetType="TextBlock"
+           BasedOn="{StaticResource SubtitleTextBlockStyle}">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="TrayButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Padding" Value="9,5" />
+    </Style>
+
+    <Style x:Key="TrayToggleButton" TargetType="ToggleButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- A fold toggle drawn as text. It has no chrome until hovered and sits flush with the text beside it -->
+    <Style x:Key="FoldButton" TargetType="Button" BasedOn="{StaticResource TrayButton}">
+        <Setter Property="Padding" Value="0,4" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <Style x:Key="CaptionLink" TargetType="HyperlinkButton" BasedOn="{StaticResource DefaultHyperlinkButtonStyle}">
+        <Setter Property="Padding" Value="2,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="{StaticResource CaptionTextBlockFontSize}" />
+    </Style>
+
+    <Style x:Key="LinkIconLabel" TargetType="controls:IconLabel">
+        <Setter Property="IconSize" Value="{StaticResource CaptionTextBlockFontSize}" />
+        <Setter Property="Spacing" Value="6" />
+    </Style>
+
+    <!-- An editable title that reads as a heading -->
+    <Style x:Key="TitleTextBox" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0,4" />
+        <Setter Property="FontSize" Value="{StaticResource SubtitleTextBlockFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- A document box with card chrome in place of text box chrome. The template keeps the
+         platform's focus underline -->
+    <Style x:Key="DocumentTextBox" TargetType="TextBox">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+        <Setter Property="Padding" Value="16,14" />
+        <Setter Property="FontSize" Value="{StaticResource BodyTextBlockFontSize}" />
+        <Setter Property="AcceptsReturn" Value="True" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="IsSpellCheckEnabled" Value="False" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    </Style>
+
+    <Style x:Key="SettingsGroupHeader" TargetType="TextBlock"
+           BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="Margin" Value="4,20,0,4" />
+    </Style>
+
+    <Style x:Key="SettingsDescription" TargetType="TextBlock"
+           BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource FaintTextBrush}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+
+    <!-- Chip base. Colours are set where it is used -->
+    <Style x:Key="ChipBorder" TargetType="Border">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="9,3" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Chip colours by source. ChipStyles picks the pair and the element's theme resolves
+         the brushes -->
+    <Style x:Key="ReferenceChip" TargetType="Border" BasedOn="{StaticResource ChipBorder}">
+        <Setter Property="Background" Value="{ThemeResource ReferenceChipSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ReferenceChipBorderBrush}" />
+    </Style>
+    <Style x:Key="DocumentChip" TargetType="Border" BasedOn="{StaticResource ChipBorder}">
+        <Setter Property="Background" Value="{ThemeResource OnDeviceSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource OnDeviceChipBorderBrush}" />
+    </Style>
+    <Style x:Key="ReferenceChipText" TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+        <Setter Property="Foreground" Value="{ThemeResource ReferenceChipBrush}" />
+    </Style>
+    <Style x:Key="DocumentChipText" TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+        <Setter Property="Foreground" Value="{ThemeResource OnDeviceBrush}" />
+    </Style>
+
+    <!-- Speaker colours by role. SpeakerPalette looks these up by key -->
+    <Style x:Key="DoctorSpeakerStripe" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource DoctorBrush}" />
+    </Style>
+    <Style x:Key="PatientSpeakerStripe" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource PatientBrush}" />
+    </Style>
+    <Style x:Key="UnknownSpeakerStripe" TargetType="Rectangle">
+        <Setter Property="Fill" Value="{ThemeResource UnknownSpeakerBrush}" />
+    </Style>
+    <Style x:Key="DoctorSpeakerName" TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+        <Setter Property="Foreground" Value="{ThemeResource DoctorBrush}" />
+    </Style>
+    <Style x:Key="PatientSpeakerName" TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+        <Setter Property="Foreground" Value="{ThemeResource PatientBrush}" />
+    </Style>
+    <Style x:Key="UnknownSpeakerName" TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+        <Setter Property="Foreground" Value="{ThemeResource UnknownSpeakerBrush}" />
+    </Style>
+
+</ResourceDictionary>

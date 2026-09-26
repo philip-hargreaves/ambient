@@ -6,7 +6,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/recommendation_marks.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // A region of a page as fractions of its displayed size, origin top left
 struct Box {
@@ -59,4 +59,4 @@ std::vector<Paragraph> ParagraphsFromPages(const std::vector<Page>& pages);
 // whitespace runs collapsed to one space, boxes empty
 std::vector<Paragraph> ParagraphsFromText(const std::string& text);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

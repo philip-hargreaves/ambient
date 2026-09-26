@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 asr::Turn T(std::uint64_t first_s10, std::uint64_t end_s10, const char* who, const char* text) {
@@ -90,4 +90,4 @@ TEST(TidyTranscript, NoWordMovesBetweenSpeakers) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

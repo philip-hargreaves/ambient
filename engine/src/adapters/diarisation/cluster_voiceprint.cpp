@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 std::vector<float> ClusterVoiceprint(SpeakerEmbedder& embedder, std::span<const float> audio,
                                      const std::vector<LabelledSlice>& slices, int cluster) {
@@ -19,4 +19,4 @@ std::vector<float> ClusterVoiceprint(SpeakerEmbedder& embedder, std::span<const 
     return embedder.Embed(clip);
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

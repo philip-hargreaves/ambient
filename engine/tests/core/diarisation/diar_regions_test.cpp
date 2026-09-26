@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 constexpr std::uint64_t kHop = audio::kVadHopFrames;
@@ -71,4 +71,4 @@ TEST(DiarRegions, OpenSpeechAtTheEndClosesAtTheTotal) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

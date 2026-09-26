@@ -9,7 +9,7 @@
 #include "core/diarisation/diar_regions.hpp"
 #include "ports/audio_source.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // A Whisper chunk edge is a few hundred ms out, so a raw
 // edge clips a word or leaves a sliver. An edge is kept only where the VAD shows
@@ -44,4 +44,4 @@ inline std::vector<std::uint64_t> SnapClipCuts(std::span<const std::uint64_t> cu
     return kept;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

@@ -6,7 +6,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_text.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // The reference list: its heading sits in the second half of the paragraphs,
 // on its own or as the last line of one, and numbered citations follow. The
@@ -25,4 +25,4 @@ inline constexpr std::size_t kListLookahead = 3;
 
 void DropReferenceTail(std::vector<Paragraph>& paragraphs);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

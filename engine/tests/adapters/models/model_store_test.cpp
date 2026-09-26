@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-namespace ambient::models {
+namespace clinicavt::models {
 namespace {
 
 // Known SHA-256 digests, so fixtures need no hashing of their own
@@ -21,10 +21,10 @@ struct TempRoot {
     std::filesystem::path path;
 
     TempRoot() {
-        path =
-            std::filesystem::temp_directory_path() /
-            ("ambient-models-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-             "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        path = std::filesystem::temp_directory_path() /
+               ("clinicavt-models-" +
+                std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::create_directories(path);
     }
 
@@ -340,4 +340,4 @@ TEST(ModelStore, AnUnknownPipelineOrANonScalarPropertyIsRefused) {
 }
 
 }  // namespace
-}  // namespace ambient::models
+}  // namespace clinicavt::models

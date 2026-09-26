@@ -14,16 +14,16 @@
 
 #include "ports/transcriber.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 class ModelStore;
 class OvRuntime;
-}  // namespace ambient::models
+}  // namespace clinicavt::models
 
-namespace ambient::metrics {
+namespace clinicavt::metrics {
 class Registry;
-}  // namespace ambient::metrics
+}  // namespace clinicavt::metrics
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 
 // One decode: Whisper's chunks with absolute frames, the cut-point source
 using DecodeFn = std::function<std::vector<Turn>(std::span<const float>, std::uint64_t)>;
@@ -70,4 +70,4 @@ class WhisperTranscriber : public ITranscriber {
     std::thread worker_;
 };
 
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

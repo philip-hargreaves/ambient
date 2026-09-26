@@ -6,7 +6,7 @@
 
 #include <filesystem>
 
-namespace ambient::system {
+namespace clinicavt::system {
 
 inline std::filesystem::path ExeDir() {
     wchar_t exe_path[MAX_PATH]{};
@@ -23,4 +23,4 @@ inline std::filesystem::path DefaultModelsRoot() {
     return root;
 }
 
-}  // namespace ambient::system
+}  // namespace clinicavt::system

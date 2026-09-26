@@ -20,7 +20,7 @@
 #include "core/diarisation/turn_decode.hpp"
 #include "ports/audio_source.hpp"
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 namespace {
 
 // Not in the repo. The test skips without it
@@ -101,14 +101,14 @@ TEST(AsrWer, ProductionPathHoldsTheBaseline) {
     const auto frames = LoadWav(kWav);
     const auto gold = NormalisedWords(LoadGold(kRef));
 
-    const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
+    const models::ModelStore store(std::filesystem::path(CLINICAVT_MODELS_DIR));
     models::OvRuntime runtime;
     const auto load_start = std::chrono::steady_clock::now();
     WhisperTranscriber transcriber(store, runtime);
     const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - load_start);
     // A throwaway anchor root: evaluation must never touch a real anchor
-    const auto anchor_root = std::filesystem::temp_directory_path() / "ambient-asr-wer-anchor";
+    const auto anchor_root = std::filesystem::temp_directory_path() / "clinicavt-asr-wer-anchor";
     std::filesystem::create_directories(anchor_root);
     diar::AnchorStore anchors(anchor_root);
     diar::SpeakerDiariser diariser(store, runtime, anchors);
@@ -141,4 +141,4 @@ TEST(AsrWer, ProductionPathHoldsTheBaseline) {
 }
 
 }  // namespace
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

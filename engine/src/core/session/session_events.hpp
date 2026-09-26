@@ -14,7 +14,7 @@
 #include "ports/session_store.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 // Session events, delivered on the audio pipeline thread behind the capture ring
 class ISessionEvents {
@@ -79,7 +79,7 @@ using SourceFactory = std::function<std::unique_ptr<audio::IAudioSource>(
 
 // Every store failure is logged. A full or failing disk is announced
 inline void ReportStoreFailure(ISessionEvents& events, const char* what, const std::exception& e) {
-    std::fprintf(stderr, "ambient-engine: store %s failed: %s\n", what, e.what());
+    std::fprintf(stderr, "clinicavt-engine: store %s failed: %s\n", what, e.what());
     const auto* fault = dynamic_cast<const store::StoreError*>(&e);
     if (fault != nullptr &&
         (fault->Code() == store::StoreCode::kFull || fault->Code() == store::StoreCode::kIo)) {
@@ -87,4 +87,4 @@ inline void ReportStoreFailure(ISessionEvents& events, const char* what, const s
     }
 }
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

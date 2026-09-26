@@ -19,14 +19,14 @@
 
 // The invented fixture corpus and notes, and a corpus directory built from
 // them with any embedder
-namespace ambient::guidance::fixture {
+namespace clinicavt::guidance::fixture {
 
 // One directory per test and process, so parallel runs never share a path
 struct TempDir {
     std::filesystem::path path;
     explicit TempDir(const char* name)
         : path(std::filesystem::temp_directory_path() /
-               ("ambient-guidance-" + std::string(name) + "-" +
+               ("clinicavt-guidance-" + std::string(name) + "-" +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name() + "-" +
                 std::to_string(_getpid()))) {
         std::error_code ignored;
@@ -128,4 +128,4 @@ inline void Build(const std::filesystem::path& dir, const std::string& id, IEmbe
     BuildCorpus(dir, spec, chunks, vectors);
 }
 
-}  // namespace ambient::guidance::fixture
+}  // namespace clinicavt::guidance::fixture

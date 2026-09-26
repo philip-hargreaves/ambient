@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 // Four unit vectors in three dimensions
@@ -39,4 +39,4 @@ TEST(Scan, AnEmptyMatrixYieldsNothing) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -35,12 +35,12 @@ from embed import make_pipeline
 
 # FOLDER_STUDY names a second working directory, for the same study over a changed folder
 STUDY = REPO / "build" / "retrieval" / os.environ.get("FOLDER_STUDY", "study")
-FOLDER = Path(os.environ["USERPROFILE"]) / "Documents" / "Ambient guidelines"
-UNITS_EXE = REPO / "build" / "release" / "engine" / "ambient_units.exe"
+FOLDER = Path(os.environ["USERPROFILE"]) / "Documents" / "ClinicAVT guidelines"
+UNITS_EXE = REPO / "build" / "release" / "engine" / "clinicavt_units.exe"
 MODEL = REPO / "models" / "gte-large-int8"
 
 # The first-stage finalists of the selection round, as shortlist.json configures them
-CANDIDATES = Path(os.environ.get("RETRIEVAL_CANDIDATES", r"D:\ambient-rag\candidates"))
+CANDIDATES = Path(os.environ.get("RETRIEVAL_CANDIDATES", r"D:\clinicavt-rag\candidates"))
 EMBEDDERS = ["gte-large", "bge-large", "arctic-l-v2", "bge-base"]
 
 FLOOR = 0.85

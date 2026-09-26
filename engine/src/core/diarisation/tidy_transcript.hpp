@@ -7,7 +7,7 @@
 #include "ports/audio_source.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // The finished transcript tidied as a professional transcriber would. Three
 // rules in this order, and none moves a word between speakers:
@@ -24,4 +24,4 @@ std::vector<asr::Turn> TidyTranscript(std::vector<asr::Turn> turns);
 // No lexical content: only disfluencies, or at most two function words
 bool NoContent(const std::string& text);
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

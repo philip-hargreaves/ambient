@@ -9,7 +9,7 @@
 #include <thread>
 #include <utility>
 
-namespace ambient::models {
+namespace clinicavt::models {
 
 // Keeps a model loaded while it is wanted. Want loads it in the background
 // and Use loads it inline if needed, which also retries a failed background
@@ -111,7 +111,8 @@ class Residency {
                 try {
                     load_();
                 } catch (const std::exception& e) {
-                    std::fprintf(stderr, "ambient-engine: background load failed (%s)\n", e.what());
+                    std::fprintf(stderr, "clinicavt-engine: background load failed (%s)\n",
+                                 e.what());
                     ok = false;
                 } catch (...) {
                     ok = false;
@@ -162,4 +163,4 @@ class Residency {
     std::thread worker_;
 };
 
-}  // namespace ambient::models
+}  // namespace clinicavt::models

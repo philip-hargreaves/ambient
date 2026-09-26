@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 # Assembled by hand, since the HF cache's symlinks fail on exFAT
 CHECKPOINT = ROOT / "models-eval" / "wmt20-comet-qe-da" / "checkpoints" / "model.ckpt"
 REFERENCE = "nllb-600m-int8"

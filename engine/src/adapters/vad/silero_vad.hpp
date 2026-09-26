@@ -6,7 +6,7 @@
 #include "adapters/models/ov_runtime.hpp"
 #include "ports/streaming_vad.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Silero through the model store, on CPU, loaded eagerly: ~0.1 ms per hop,
 // so it runs inline on the audio pipeline, behind the capture ring
@@ -26,4 +26,4 @@ class SileroVad : public IStreamingVad {
     std::array<float, kContext> context_{};
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

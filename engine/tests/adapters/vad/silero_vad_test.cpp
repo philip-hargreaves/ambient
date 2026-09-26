@@ -11,7 +11,7 @@
 
 #include "ports/audio_source.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 namespace {
 
 // Not in the repo. These tests skip without it
@@ -34,7 +34,7 @@ TEST(SileroVad, SeparatesSpeechFromSilenceAtTheShippedThresholds) {
     if (!std::filesystem::exists(kWav)) {
         GTEST_SKIP() << "research corpus not mounted";
     }
-    const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
+    const models::ModelStore store(std::filesystem::path(CLINICAVT_MODELS_DIR));
     models::OvRuntime runtime;
     SileroVad vad(store, runtime);
 
@@ -72,7 +72,7 @@ TEST(SileroVad, ResetClearsTheRecurrentState) {
     if (!std::filesystem::exists(kWav)) {
         GTEST_SKIP() << "research corpus not mounted";
     }
-    const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
+    const models::ModelStore store(std::filesystem::path(CLINICAVT_MODELS_DIR));
     models::OvRuntime runtime;
     SileroVad vad(store, runtime);
 
@@ -88,7 +88,7 @@ TEST(SileroVad, ResetClearsTheRecurrentState) {
 }
 
 TEST(SileroVad, AWrongHopSizeIsRefused) {
-    const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
+    const models::ModelStore store(std::filesystem::path(CLINICAVT_MODELS_DIR));
     models::OvRuntime runtime;
     SileroVad vad(store, runtime);
     const std::vector<float> wrong(100, 0.0f);
@@ -96,4 +96,4 @@ TEST(SileroVad, AWrongHopSizeIsRefused) {
 }
 
 }  // namespace
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

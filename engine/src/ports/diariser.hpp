@@ -10,7 +10,7 @@
 
 #include "ports/transcriber.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // (clip, absolute first frame) -> Whisper's chunks with absolute frames.
 // The text is their join
@@ -120,4 +120,4 @@ class IDiariser {
     virtual void DiscardCapture() {}
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

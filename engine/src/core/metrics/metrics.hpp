@@ -5,7 +5,7 @@
 #include <mutex>
 #include <string>
 
-namespace ambient::metrics {
+namespace clinicavt::metrics {
 
 // One engine-wide sink. Any thread records, readers get a copy. Devices
 // and load times persist, the rest resets per session
@@ -80,4 +80,4 @@ class Registry {
     Snapshot data_;
 };
 
-}  // namespace ambient::metrics
+}  // namespace clinicavt::metrics

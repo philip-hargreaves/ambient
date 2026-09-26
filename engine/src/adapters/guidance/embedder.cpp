@@ -9,7 +9,7 @@
 
 #include "adapters/models/model_store.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 struct Embedder::Impl {
     EmbedderIdentity identity;
@@ -98,4 +98,4 @@ Embedding Embedder::Embed(const std::string& text) {
     return out;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

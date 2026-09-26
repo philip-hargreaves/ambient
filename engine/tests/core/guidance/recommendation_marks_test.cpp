@@ -5,7 +5,7 @@
 
 #include "core/guidance/document_units.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 std::vector<Paragraph> Paras(const std::vector<std::string>& texts) {
@@ -70,4 +70,4 @@ TEST(RecommendationMarks, AWrappedGradeTailRejoinsTheLineAbove) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

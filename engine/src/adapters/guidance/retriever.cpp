@@ -12,7 +12,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/guidance_scan.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 bool IsResearch(const std::filesystem::path& manifest) {
@@ -248,7 +248,7 @@ Results Retriever::Search(const std::string& text, int limit, SearchMode mode) {
     // A hit the population guard rules out, or one that restates a shown card, spends no slot
     const auto suppressed = [&](const std::string& body, const std::string& title) {
         if (PopulationConflict(text, body, title)) {
-            std::fprintf(stderr, "ambient-engine: guard suppressed a hit in %s\n", title.c_str());
+            std::fprintf(stderr, "clinicavt-engine: guard suppressed a hit in %s\n", title.c_str());
             return true;
         }
         return Restates(out.shown, body);
@@ -334,4 +334,4 @@ Readiness Retriever::Status() {
     return readiness_;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -11,7 +11,7 @@
 #include "core/diarisation/role_naming.hpp"
 #include "core/diarisation/slice_refinement.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 SpeakerDiariser::SpeakerDiariser(const models::ModelStore& store, models::OvRuntime& runtime,
                                  AnchorStore& anchors)
@@ -169,4 +169,4 @@ std::vector<float> SpeakerDiariser::EmbedVoice(std::span<const float> audio) {
         audio.subspan(0, std::min<std::size_t>(audio.size(), kVoiceprintCapFrames)));
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

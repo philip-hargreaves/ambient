@@ -18,14 +18,14 @@
 #include "core/note/summary_scrub.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 
 std::variant<json, Error> HandleHello(const json& params) {
     const auto peer = PeerInfoFromJson(params);
     if (!peer) {
         return InvalidParams("expected name, version, protocolVersion");
     }
-    return ToJson(PeerInfo{ambient::kName, ambient::kVersion, kProtocolVersion});
+    return ToJson(PeerInfo{clinicavt::kName, clinicavt::kVersion, kProtocolVersion});
 }
 
 std::variant<json, Error> HandleEcho(const json& params) {
@@ -35,7 +35,7 @@ std::variant<json, Error> HandleEcho(const json& params) {
     return json{{"payload", params["payload"]}};
 }
 
-json HandleAudioInputs(const std::vector<ambient::audio::CaptureDevice>& devices) {
+json HandleAudioInputs(const std::vector<clinicavt::audio::CaptureDevice>& devices) {
     json list = json::array();
     for (const auto& device : devices) {
         list.push_back({{"id", device.id},
@@ -47,17 +47,17 @@ json HandleAudioInputs(const std::vector<ambient::audio::CaptureDevice>& devices
     return json{{"devices", std::move(list)}};
 }
 
-json HandleAnchorStatus(const ambient::diar::AnchorStore& anchors) {
+json HandleAnchorStatus(const clinicavt::diar::AnchorStore& anchors) {
     const auto status = anchors.Status();
-    const char* origin = status.origin == ambient::diar::AnchorOrigin::kEnrolled  ? "enrolled"
-                         : status.origin == ambient::diar::AnchorOrigin::kAccrued ? "accrued"
-                                                                                  : "none";
+    const char* origin = status.origin == clinicavt::diar::AnchorOrigin::kEnrolled  ? "enrolled"
+                         : status.origin == clinicavt::diar::AnchorOrigin::kAccrued ? "accrued"
+                                                                                    : "none";
     json result{{"origin", origin}, {"sessions", status.sessions}};
     result["enrolledAt"] = status.enrolled_at == 0 ? json(nullptr) : json(status.enrolled_at);
     return result;
 }
 
-std::variant<json, Error> HandleAnchorClear(ambient::diar::AnchorStore& anchors,
+std::variant<json, Error> HandleAnchorClear(clinicavt::diar::AnchorStore& anchors,
                                             bool session_active) {
     if (session_active) {
         return SessionError("finish the consultation first");
@@ -66,7 +66,7 @@ std::variant<json, Error> HandleAnchorClear(ambient::diar::AnchorStore& anchors,
     return json::object();
 }
 
-json HandleModels(const ambient::models::ModelStore& models, const std::string& note_tier) {
+json HandleModels(const clinicavt::models::ModelStore& models, const std::string& note_tier) {
     json list = json::array();
     for (const auto& model : models.List()) {
         const bool active = model.tier == (model.task == "note" ? note_tier : "default");
@@ -81,24 +81,24 @@ json HandleModels(const ambient::models::ModelStore& models, const std::string& 
     return json{{"models", std::move(list)}};
 }
 
-json NoteModelJson(const ambient::note::NoteModelState& state) {
+json NoteModelJson(const clinicavt::note::NoteModelState& state) {
     json result{{"tier", state.tier},
                 {"id", state.id},
                 {"name", state.name},
-                {"state", ambient::note::PhaseName(state.phase)}};
-    if (state.phase == ambient::note::NoteModelState::Phase::kLoading) {
+                {"state", clinicavt::note::PhaseName(state.phase)}};
+    if (state.phase == clinicavt::note::NoteModelState::Phase::kLoading) {
         result["firstUse"] = state.first_use;
     }
-    if (state.phase == ambient::note::NoteModelState::Phase::kReady) {
+    if (state.phase == clinicavt::note::NoteModelState::Phase::kReady) {
         result["seconds"] = state.seconds;
     }
-    if (state.phase == ambient::note::NoteModelState::Phase::kFailed) {
+    if (state.phase == clinicavt::note::NoteModelState::Phase::kFailed) {
         result["detail"] = state.detail;
     }
     return result;
 }
 
-std::variant<json, Error> HandleNoteTier(ambient::note::INoteLane* lane, bool session_active,
+std::variant<json, Error> HandleNoteTier(clinicavt::note::INoteLane* lane, bool session_active,
                                          const json& params) {
     if (!params.contains("tier") || !params["tier"].is_string()) {
         return InvalidParams("tier must be a string");
@@ -198,7 +198,7 @@ void RegisterEngineMethods(PipeServer& server, const EngineServices& services) {
         server.RegisterMethod(
             "anchor/enrol", [&controller](const json& params) -> std::variant<json, Error> {
                 const double seconds = params.value("seconds", 45.0);
-                ambient::session::MicSelection mic;
+                clinicavt::session::MicSelection mic;
                 if (params.contains("mic") && params["mic"].is_object()) {
                     mic.id = params["mic"].value("id", "");
                     mic.name = params["mic"].value("name", "");
@@ -223,8 +223,8 @@ void RegisterEngineMethods(PipeServer& server, const EngineServices& services) {
     // Enumerated fresh per call, so a picker opened after a headset is
     // plugged in sees it without any notification plumbing
     server.RegisterMethod("audio/inputs", [](const json&) {
-        return HandleAudioInputs(ambient::audio::ListCaptureDevices());
+        return HandleAudioInputs(clinicavt::audio::ListCaptureDevices());
     });
 }
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 namespace {
 
@@ -176,4 +176,4 @@ RoleResult NameRoles(const std::vector<RoleTurn>& turns, int cluster_count,
     return result;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

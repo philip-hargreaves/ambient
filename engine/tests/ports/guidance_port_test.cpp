@@ -11,10 +11,10 @@
 
 #include "ports/guidance_retriever.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
-constexpr const char* kFixtureDir = AMBIENT_GUIDANCE_FIXTURE_DIR;
+constexpr const char* kFixtureDir = CLINICAVT_GUIDANCE_FIXTURE_DIR;
 
 std::vector<nlohmann::json> ReadLines(const std::string& name) {
     std::ifstream in(std::filesystem::path(kFixtureDir) / name);
@@ -67,4 +67,4 @@ struct StubRetriever : IGuidanceRetriever {
 };
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

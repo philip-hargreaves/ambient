@@ -18,15 +18,15 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/note/worker_note_writer.hpp"
 
-namespace ambient::note {
+namespace clinicavt::note {
 namespace {
 
-const std::filesystem::path kModels = AMBIENT_MODELS_DIR;
+const std::filesystem::path kModels = CLINICAVT_MODELS_DIR;
 
 std::filesystem::path HostExe() {
     wchar_t path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
-    return std::filesystem::path(path).parent_path().parent_path() / "ambient_note_host.exe";
+    return std::filesystem::path(path).parent_path().parent_path() / "clinicavt_note_host.exe";
 }
 
 std::filesystem::path PromptPath() {
@@ -96,7 +96,7 @@ TEST(WorkerNoteWriter, AKilledWorkerRespawnsAndTheNoteStillArrives) {
             // The first streamed words prove generation is mid-flight, then
             // the worker dies under it
             if (partial.size() > 20 && !killed.exchange(true)) {
-                std::system("taskkill /IM ambient_note_host.exe /F >nul 2>&1");
+                std::system("taskkill /IM clinicavt_note_host.exe /F >nul 2>&1");
             }
         });
 
@@ -139,14 +139,14 @@ TEST(WorkerNoteWriter, TheAccuracyTierWritesANoteThroughItsOwnPipeline) {
                  note.size());
 }
 
-// One tier through the real host, for the per-tier sweep. AMBIENT_SWEEP_TIER
+// One tier through the real host, for the per-tier sweep. CLINICAVT_SWEEP_TIER
 // names it, and the host's own log carries verify, load and decode figures
 TEST(WorkerNoteWriter, NoteTierSweep) {
     char* wanted = nullptr;
     const std::string tier =
-        _dupenv_s(&wanted, nullptr, "AMBIENT_SWEEP_TIER") == 0 && wanted != nullptr ? wanted : "";
+        _dupenv_s(&wanted, nullptr, "CLINICAVT_SWEEP_TIER") == 0 && wanted != nullptr ? wanted : "";
     std::free(wanted);
-    if (tier.empty()) GTEST_SKIP() << "set AMBIENT_SWEEP_TIER to a tier";
+    if (tier.empty()) GTEST_SKIP() << "set CLINICAVT_SWEEP_TIER to a tier";
     if (!std::filesystem::exists(HostExe())) GTEST_SKIP() << "host not staged";
     const models::ModelStore store(kModels);
     WorkerNoteWriter writer(HostExe(), kModels, PromptPath(), &store);
@@ -173,7 +173,7 @@ std::vector<DWORD> NoteHostPids() {
     PROCESSENTRY32W entry{};
     entry.dwSize = sizeof(entry);
     for (BOOL ok = Process32FirstW(snapshot, &entry); ok; ok = Process32NextW(snapshot, &entry)) {
-        if (_wcsicmp(entry.szExeFile, L"ambient_note_host.exe") == 0) {
+        if (_wcsicmp(entry.szExeFile, L"clinicavt_note_host.exe") == 0) {
             pids.push_back(entry.th32ProcessID);
         }
     }
@@ -184,7 +184,7 @@ std::vector<DWORD> NoteHostPids() {
 // The zombie probe: a host terminated part-way through loading the 35B, the
 // way a tier switch, a respawn or an engine exit terminates it. Either the
 // process is gone within 30 s or it is a process wedged inside a GPU driver
-// call, which nothing but a reboot removes. Opt-in (AMBIENT_ZOMBIE_PROBE=1):
+// call, which nothing but a reboot removes. Opt-in (CLINICAVT_ZOMBIE_PROBE=1):
 // a positive result costs the machine a hard reset
 void TerminateLoadingHostAfter(int seconds) {
     if (!std::filesystem::exists(kModels / "qwen3.6-35b-a3b-int4") ||
@@ -192,10 +192,10 @@ void TerminateLoadingHostAfter(int seconds) {
         GTEST_SKIP() << "accuracy note model or host not staged";
     }
     char* armed = nullptr;
-    const bool run = _dupenv_s(&armed, nullptr, "AMBIENT_ZOMBIE_PROBE") == 0 && armed != nullptr &&
-                     std::string(armed) == "1";
+    const bool run = _dupenv_s(&armed, nullptr, "CLINICAVT_ZOMBIE_PROBE") == 0 &&
+                     armed != nullptr && std::string(armed) == "1";
     std::free(armed);
-    if (!run) GTEST_SKIP() << "set AMBIENT_ZOMBIE_PROBE=1 to run (may need a reboot after)";
+    if (!run) GTEST_SKIP() << "set CLINICAVT_ZOMBIE_PROBE=1 to run (may need a reboot after)";
 
     const models::ModelStore store(kModels);
     const auto before = NoteHostPids();
@@ -241,7 +241,7 @@ TEST(WorkerNoteWriter, ZombieProbeTerminatedWhileCompiling) {
 }
 
 TEST(WorkerNoteWriter, AMissingHostFailsLoudly) {
-    WorkerNoteWriter writer("C:/nowhere/ambient_note_host.exe", kModels, PromptPath());
+    WorkerNoteWriter writer("C:/nowhere/clinicavt_note_host.exe", kModels, PromptPath());
     EXPECT_THROW(writer.Write(ElbowTranscript(), {}, nullptr), std::runtime_error);
 }
 
@@ -251,4 +251,4 @@ TEST(WorkerNoteWriter, AnEmptyTranscriptRefusesToWrite) {
 }
 
 }  // namespace
-}  // namespace ambient::note
+}  // namespace clinicavt::note

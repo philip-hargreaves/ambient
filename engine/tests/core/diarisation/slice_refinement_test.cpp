@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 TEST(RefineRegions, AChangePointInsideARegionSplitsIt) {
@@ -69,4 +69,4 @@ TEST(EmbeddingRanges, NoOverlapMeansTheWholeSliceOneRange) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

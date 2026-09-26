@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 namespace {
 
 // The engine drops a few milliseconds while the stream settles after Start
@@ -80,4 +80,4 @@ TEST(WasapiCapture, AnUnknownEndpointFailsWithTheCall) {
 }
 
 }  // namespace
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

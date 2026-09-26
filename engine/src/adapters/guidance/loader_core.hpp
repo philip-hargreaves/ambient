@@ -16,7 +16,7 @@
 
 // What the corpus and upload stores share when they load vectors: a refusal
 // with its reason, the memory guard and the unit-length check
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 struct Refused : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -47,4 +47,4 @@ inline void GuardUnitVectors(const float* matrix, std::size_t rows, std::size_t 
     }
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

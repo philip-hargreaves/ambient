@@ -1,0 +1,113 @@
+using ClinicAVT.Client.Tests.Support;
+
+namespace ClinicAVT.Client.Tests.Contract;
+
+/// <summary>
+/// The session methods and the notifications they produce, against the real
+/// engine on a private pipe.
+/// </summary>
+[Collection("engine")]
+[Trait("Requires", "Engine")]
+public class SessionContractTest
+{
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
+
+    // The stopped session reports the three finalise stages (transcript, speakers,
+    // turns), then the documents. The cancelled one reports nothing
+    private static readonly string[] ExpectedNotifications =
+        ["session/progress", "session/progress", "session/progress", "note/ready", "patient/ready"];
+
+    // Two seconds of PCM16 silence that sessions replay instead of a microphone
+    internal static string WriteSilenceWav()
+    {
+        const int frames = 2 * 16000;
+        var bytes = new byte[44 + frames * 2];
+        void Tag(int offset, string tag) =>
+            System.Text.Encoding.ASCII.GetBytes(tag).CopyTo(bytes, offset);
+        void U32(int offset, uint value) =>
+            BitConverter.GetBytes(value).CopyTo(bytes, offset);
+        void U16(int offset, ushort value) =>
+            BitConverter.GetBytes(value).CopyTo(bytes, offset);
+        Tag(0, "RIFF");
+        U32(4, (uint)(bytes.Length - 8));
+        Tag(8, "WAVE");
+        Tag(12, "fmt ");
+        U32(16, 16);
+        U16(20, 1);
+        U16(22, 1);
+        U32(24, 16000);
+        U32(28, 32000);
+        U16(32, 2);
+        U16(34, 16);
+        Tag(36, "data");
+        U32(40, (uint)(frames * 2));
+
+        var path = Path.Combine(
+            Path.GetTempPath(), $"clinicavt-silence-{Guid.NewGuid():N}.wav");
+        File.WriteAllBytes(path, bytes);
+        return path;
+    }
+
+    [Fact]
+    public async Task StopProducesTheNoteThenPatientNotifications()
+    {
+        var wav = WriteSilenceWav();
+        try
+        {
+            await using var engine =
+                EngineProcess.Start($"LOCAL\\clinicavt-session-{Guid.NewGuid():N}", wav);
+            var notifications = new List<string>();
+            var patientReady = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            await using (var client = await engine.ConnectAsync())
+            {
+                client.NotificationReceived += (method, parameters) =>
+                {
+                    lock (notifications)
+                    {
+                        notifications.Add(method);
+                    }
+
+                    if (method == "patient/ready")
+                    {
+                        patientReady.TrySetResult();
+                    }
+                };
+
+                // A stale micId must never stop a session starting. The
+                // engine resolves it against what exists and falls back
+                await client.RequestAsync("session/start", System.Text.Json.JsonSerializer
+                    .SerializeToElement(new { micId = "{unplugged-device}" }), Timeout);
+                await client.RequestAsync("session/cancel", null, Timeout);
+                await client.RequestAsync("session/start", null, Timeout);
+                await client.RequestAsync("session/stop", null, Timeout);
+
+                await patientReady.Task.WaitAsync(Timeout);
+                lock (notifications)
+                {
+                    // Sessions stream levels and the embedder announces itself once.
+                    // The pipeline ordering holds among the rest
+                    Assert.Contains("audio.level", notifications);
+                    Assert.Equal(
+                        ExpectedNotifications,
+                        notifications
+                            .Where(n => n is not ("audio.level" or "guidance/model"))
+                            .ToArray());
+                }
+            }
+
+            // Disconnect ends ServeOneClient, and supervised restarts rely on this exit
+            Assert.Equal(0, await engine.WaitForExitAsync(Timeout));
+
+            // Of the two sessions, the cancelled one left nothing and the stopped
+            // one is in the database. The readback test checks its contents
+            Assert.True(File.Exists(Path.Combine(engine.StoreRoot, "clinicavt.db")));
+            Assert.False(Directory.Exists(Path.Combine(engine.StoreRoot, "sessions")));
+        }
+        finally
+        {
+            File.Delete(wav);
+        }
+    }
+}

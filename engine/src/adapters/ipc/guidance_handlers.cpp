@@ -18,24 +18,24 @@
 #include "core/note/summary_scrub.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 namespace {
 
-json GuidanceReadyJson(const std::string& session, const ambient::guidance::Record& record) {
-    json body = ambient::guidance::ToJson(record);
+json GuidanceReadyJson(const std::string& session, const clinicavt::guidance::Record& record) {
+    json body = clinicavt::guidance::ToJson(record);
     body["id"] = NullWhenEmpty(session);
     body["storeError"] = nullptr;
     body["stale"] = nullptr;
     return body;
 }
 
-const char* PhaseName(ambient::guidance::Readiness::Phase phase) {
+const char* PhaseName(clinicavt::guidance::Readiness::Phase phase) {
     switch (phase) {
-        case ambient::guidance::Readiness::Phase::kLoading:
+        case clinicavt::guidance::Readiness::Phase::kLoading:
             return "loading";
-        case ambient::guidance::Readiness::Phase::kReady:
+        case clinicavt::guidance::Readiness::Phase::kReady:
             return "ready";
-        case ambient::guidance::Readiness::Phase::kUnavailable:
+        case clinicavt::guidance::Readiness::Phase::kUnavailable:
             return "unavailable";
     }
     return "unavailable";
@@ -43,40 +43,41 @@ const char* PhaseName(ambient::guidance::Readiness::Phase phase) {
 
 }  // namespace
 
-json GuidanceModelJson(const ambient::guidance::Readiness& readiness) {
+json GuidanceModelJson(const clinicavt::guidance::Readiness& readiness) {
     return json{{"state", PhaseName(readiness.phase)}, {"detail", NullWhenEmpty(readiness.detail)}};
 }
 
-json GuidanceCorporaJson(const ambient::guidance::Readiness& readiness,
-                         const std::vector<ambient::guidance::Corpus>& corpora) {
+json GuidanceCorporaJson(const clinicavt::guidance::Readiness& readiness,
+                         const std::vector<clinicavt::guidance::Corpus>& corpora) {
     json result = GuidanceModelJson(readiness);
     json list = json::array();
-    for (const auto& c : corpora) list.push_back(ambient::guidance::ToJson(c));
+    for (const auto& c : corpora) list.push_back(clinicavt::guidance::ToJson(c));
     result["corpora"] = list;
     return result;
 }
 
-ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionStore& sessions,
-                                                       const std::string& session,
-                                                       ambient::store::Document note, int limit,
-                                                       Notify notify) {
-    ambient::guidance::SearchRequest request;
+clinicavt::guidance::SearchRequest GuidanceSearchRequest(clinicavt::store::ISessionStore& sessions,
+                                                         const std::string& session,
+                                                         clinicavt::store::Document note, int limit,
+                                                         Notify notify) {
+    clinicavt::guidance::SearchRequest request;
     request.session = session;
     request.note = std::move(note.text);
     request.limit = limit;
     const auto revision = note.revision;
     request.on_ready = [&sessions, session, revision,
-                        notify](const ambient::guidance::Results& results) {
-        using ambient::store::DocumentKind;
-        const ambient::guidance::Record record{results, revision};
+                        notify](const clinicavt::guidance::Results& results) {
+        using clinicavt::store::DocumentKind;
+        const clinicavt::guidance::Record record{results, revision};
         json body = GuidanceReadyJson(session, record);
         if (!session.empty()) {
             try {
                 sessions.SaveDocument(session, DocumentKind::kGuidance,
-                                      {.text = ambient::guidance::Dump(record)});
-            } catch (const ambient::store::StoreError& e) {
-                if (e.Code() == ambient::store::StoreCode::kNotFound) {
-                    std::fprintf(stderr, "ambient-engine: guidance for %s dropped, session gone\n",
+                                      {.text = clinicavt::guidance::Dump(record)});
+            } catch (const clinicavt::store::StoreError& e) {
+                if (e.Code() == clinicavt::store::StoreCode::kNotFound) {
+                    std::fprintf(stderr,
+                                 "clinicavt-engine: guidance for %s dropped, session gone\n",
                                  session.c_str());
                     return;
                 }
@@ -88,8 +89,8 @@ ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionS
             try {
                 body["stale"] =
                     sessions.ReadDocument(session, DocumentKind::kNote).revision != revision;
-            } catch (const ambient::store::StoreError& e) {
-                if (e.Code() == ambient::store::StoreCode::kNotFound) return;
+            } catch (const clinicavt::store::StoreError& e) {
+                if (e.Code() == clinicavt::store::StoreCode::kNotFound) return;
             } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
             }
         }
@@ -101,8 +102,8 @@ ambient::guidance::SearchRequest GuidanceSearchRequest(ambient::store::ISessionS
     return request;
 }
 
-std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& sessions,
-                                               ambient::guidance::IGuidanceLane& lane,
+std::variant<json, Error> HandleGuidanceSearch(clinicavt::store::ISessionStore& sessions,
+                                               clinicavt::guidance::IGuidanceLane& lane,
                                                const json& params, const Notify& notify) {
     int limit = kGuidanceLimit;
     if (params.contains("limit")) {
@@ -114,7 +115,7 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
     }
     std::string session;
     bool as_note = false;
-    ambient::store::Document note;
+    clinicavt::store::Document note;
     if (params.contains("text")) {
         if (!params["text"].is_string()) {
             return InvalidParams("text must be a string");
@@ -133,7 +134,7 @@ std::variant<json, Error> HandleGuidanceSearch(ambient::store::ISessionStore& se
         if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
         session = std::get<std::string>(id);
         try {
-            note = sessions.ReadDocument(session, ambient::store::DocumentKind::kNote);
+            note = sessions.ReadDocument(session, clinicavt::store::DocumentKind::kNote);
         } catch (const std::exception& e) {
             return SessionError(e.what());
         }
@@ -149,8 +150,8 @@ namespace {
 
 // The searched list mixes corpora with added documents. Only the added ones,
 // which carry an "upload:" id, are compared
-bool DocumentsChangedSince(const ambient::guidance::Record& record,
-                           ambient::guidance::IDocumentIngest& ingest) {
+bool DocumentsChangedSince(const clinicavt::guidance::Record& record,
+                           clinicavt::guidance::IDocumentIngest& ingest) {
     std::set<std::string> searched;
     for (const auto& c : record.results.searched) {
         if (c.id.starts_with("upload:")) searched.insert(c.id);
@@ -164,30 +165,30 @@ bool DocumentsChangedSince(const ambient::guidance::Record& record,
 
 }  // namespace
 
-std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& sessions,
+std::variant<json, Error> HandleSessionGuidance(clinicavt::store::ISessionStore& sessions,
                                                 const json& params,
-                                                ambient::guidance::IDocumentIngest* ingest) {
+                                                clinicavt::guidance::IDocumentIngest* ingest) {
     const auto id = IdFrom(params);
     if (std::holds_alternative<Error>(id)) return std::get<Error>(id);
     try {
-        using ambient::store::DocumentKind;
+        using clinicavt::store::DocumentKind;
         const auto& session = std::get<std::string>(id);
         const auto stored = sessions.ReadDocument(session, DocumentKind::kGuidance);
         if (stored.text.empty()) return json{{"guidance", nullptr}};
         const json parsed = json::parse(stored.text, nullptr, false);
-        std::optional<ambient::guidance::Record> record;
-        if (ambient::guidance::CanRead(parsed)) {
+        std::optional<clinicavt::guidance::Record> record;
+        if (clinicavt::guidance::CanRead(parsed)) {
             try {
-                record = ambient::guidance::RecordFromJson(parsed);
+                record = clinicavt::guidance::RecordFromJson(parsed);
             } catch (const json::exception&) {  // NOLINT(bugprone-empty-catch)
             }
         }
         if (!record) {
-            std::fprintf(stderr, "ambient-engine: guidance record for %s unreadable, dropped\n",
+            std::fprintf(stderr, "clinicavt-engine: guidance record for %s unreadable, dropped\n",
                          session.c_str());
             return json{{"guidance", nullptr}};
         }
-        json guidance = ambient::guidance::ToJson(*record);
+        json guidance = clinicavt::guidance::ToJson(*record);
         guidance["generatedAt"] = NullWhenEmpty(stored.generated_at);
         guidance["stale"] =
             record->note_revision != sessions.ReadDocument(session, DocumentKind::kNote).revision;
@@ -198,7 +199,7 @@ std::variant<json, Error> HandleSessionGuidance(ambient::store::ISessionStore& s
     }
 }
 
-json DocumentJson(const ambient::guidance::DocumentInfo& document) {
+json DocumentJson(const clinicavt::guidance::DocumentInfo& document) {
     return json{{"id", document.id},
                 {"name", document.name},
                 {"path", document.path},
@@ -214,14 +215,14 @@ json DocumentJson(const ambient::guidance::DocumentInfo& document) {
                 {"chunks", document.chunks}};
 }
 
-json ProgressJson(const ambient::guidance::IngestProgress& progress) {
+json ProgressJson(const clinicavt::guidance::IngestProgress& progress) {
     return json{{"id", progress.id},
                 {"phase", progress.phase},
                 {"done", progress.done},
                 {"total", progress.total}};
 }
 
-bool ChangesReadySet(const ambient::guidance::DocumentInfo& document) {
+bool ChangesReadySet(const clinicavt::guidance::DocumentInfo& document) {
     return document.state == "ready" || (document.state == "removed" && document.chunks > 0);
 }
 
@@ -238,8 +239,8 @@ Error DocumentsError(const std::exception& e) {
 
 // An unknown document is the caller's mistake, anything else the store's
 std::variant<json, Error> DocumentsRefused(const std::exception& e) {
-    if (const auto* store = dynamic_cast<const ambient::store::StoreError*>(&e);
-        store != nullptr && store->Code() == ambient::store::StoreCode::kNotFound) {
+    if (const auto* store = dynamic_cast<const clinicavt::store::StoreError*>(&e);
+        store != nullptr && store->Code() == clinicavt::store::StoreCode::kNotFound) {
         return InvalidParams("unknown document");
     }
     return DocumentsError(e);
@@ -251,7 +252,7 @@ json Param(const json& params, const char* key) {
 
 }  // namespace
 
-std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest& ingest,
+std::variant<json, Error> HandleDocumentsAdd(clinicavt::guidance::IDocumentIngest& ingest,
                                              const json& params) {
     const json paths = Param(params, "paths");
     const Error invalid{kInvalidParams, "Invalid params", json("paths must be a list of strings")};
@@ -276,7 +277,7 @@ std::variant<json, Error> HandleDocumentsAdd(ambient::guidance::IDocumentIngest&
     }
 }
 
-std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest& ingest) {
+std::variant<json, Error> HandleDocumentsList(clinicavt::guidance::IDocumentIngest& ingest) {
     try {
         const auto listing = ingest.List();
         json documents = json::array();
@@ -290,7 +291,7 @@ std::variant<json, Error> HandleDocumentsList(ambient::guidance::IDocumentIngest
     }
 }
 
-std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentIngest& ingest,
+std::variant<json, Error> HandleDocumentsRemove(clinicavt::guidance::IDocumentIngest& ingest,
                                                 const json& params) {
     const json id = Param(params, "id");
     if (!id.is_number_integer()) {
@@ -304,7 +305,7 @@ std::variant<json, Error> HandleDocumentsRemove(ambient::guidance::IDocumentInge
     }
 }
 
-std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest& ingest,
+std::variant<json, Error> HandleDocumentsPage(clinicavt::guidance::IDocumentIngest& ingest,
                                               const json& params) {
     const json id = Param(params, "id");
     const json page = Param(params, "page");
@@ -331,7 +332,7 @@ std::variant<json, Error> HandleDocumentsPage(ambient::guidance::IDocumentIngest
     }
 }
 
-std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest& ingest,
+std::variant<json, Error> HandleDocumentsOpen(clinicavt::guidance::IDocumentIngest& ingest,
                                               const json& params) {
     const json id = Param(params, "id");
     if (!id.is_number_integer()) {
@@ -344,10 +345,10 @@ std::variant<json, Error> HandleDocumentsOpen(ambient::guidance::IDocumentIngest
     }
 }
 
-void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& sessions,
-                             ambient::guidance::IGuidanceRetriever& retriever,
-                             ambient::guidance::IGuidanceLane& lane,
-                             ambient::guidance::IDocumentIngest& ingest) {
+void RegisterGuidanceMethods(PipeServer& server, clinicavt::store::ISessionStore& sessions,
+                             clinicavt::guidance::IGuidanceRetriever& retriever,
+                             clinicavt::guidance::IGuidanceLane& lane,
+                             clinicavt::guidance::IDocumentIngest& ingest) {
     server.RegisterMethod("guidance/search", [&server, &sessions, &lane](const json& params) {
         return HandleGuidanceSearch(sessions, lane, params,
                                     [&server](const std::string& method, json notification) {
@@ -396,4 +397,4 @@ void RegisterGuidanceMethods(PipeServer& server, ambient::store::ISessionStore& 
                           });
 }
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

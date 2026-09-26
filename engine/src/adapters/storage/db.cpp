@@ -6,7 +6,7 @@
 
 #include "sqlite3.h"
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 namespace {
 
@@ -267,4 +267,4 @@ void Db::Transaction::Commit() {
     done_ = true;
 }
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

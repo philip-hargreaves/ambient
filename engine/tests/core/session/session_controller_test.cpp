@@ -18,7 +18,7 @@
 #include "adapters/transcription/scripted_transcriber.hpp"
 #include "adapters/vad/passthrough_vad.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 namespace {
 
 using audio::EnrolProgress;
@@ -2234,4 +2234,4 @@ TEST(SessionController, AWrittenNoteLetsThePrintLearnAndAConfirmedRewriteCannotB
 
 }  // namespace
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

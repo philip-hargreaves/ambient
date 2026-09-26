@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 
 struct Turn {
     std::uint64_t first_frame = 0;
@@ -49,4 +49,4 @@ class ITranscriber {
     }
 };
 
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

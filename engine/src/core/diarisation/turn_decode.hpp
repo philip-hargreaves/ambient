@@ -9,7 +9,7 @@
 #include "core/diarisation/diar_regions.hpp"
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // 0.30 s: at 0.40 a clinical "No." was dropped and the note fabricated the denial
 inline constexpr std::uint64_t kPerTurnMinClipFrames = 4800;
@@ -49,4 +49,4 @@ std::vector<LabelledSlice> SpeculatedTurns(const std::vector<LabelledSlice>& mer
 // Most-repeated 5-gram, sliding. Legitimate speech peaks at 2
 std::size_t MaxRepeatedNgram(const std::string& text);
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

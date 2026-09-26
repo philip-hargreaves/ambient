@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::metrics {
+namespace clinicavt::metrics {
 namespace {
 
 TEST(Throughput, ASteadyStreamReadsItsRate) {
@@ -50,4 +50,4 @@ TEST(Throughput, DegenerateInputsAreQuiet) {
 }
 
 }  // namespace
-}  // namespace ambient::metrics
+}  // namespace clinicavt::metrics

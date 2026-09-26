@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::note {
+namespace clinicavt::note {
 namespace {
 
 TEST(NoteLabel, TakesTheFirstSentence) {
@@ -51,4 +51,4 @@ TEST(NoteLabel, SanitiseRejectsWhatDoesNotSurvive) {
 }
 
 }  // namespace
-}  // namespace ambient::note
+}  // namespace clinicavt::note

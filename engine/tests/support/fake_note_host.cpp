@@ -18,11 +18,11 @@ int main(int argc, char* argv[]) {
         }
         const std::wstring pipe_name = std::filesystem::path(argv[1]).wstring();
         const std::string tier = argc > 4 ? argv[4] : "default";
-        ambient::models::ModelStore store(argv[2]);
-        const ambient::models::ModelInfo& info = store.Resolve("note", tier);
+        clinicavt::models::ModelStore store(argv[2]);
+        const clinicavt::models::ModelInfo& info = store.Resolve("note", tier);
 
-        ambient::ipc::PipeServer server(pipe_name);
-        using ambient::ipc::json;
+        clinicavt::ipc::PipeServer server(pipe_name);
+        using clinicavt::ipc::json;
         std::thread loader;
         server.RegisterMethod("prepare", [&](const json&) {
             if (loader.joinable()) loader.join();

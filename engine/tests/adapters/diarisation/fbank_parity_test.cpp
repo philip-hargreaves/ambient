@@ -11,14 +11,14 @@
 
 #include "adapters/diarisation/fbank.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 // The fixture features are torchaudio output (the research reference), so
 // the test checks torch-vs-C++ front-end parity directly on real speech.
 // Pass criteria are the research port's own gate: identical frame count,
 // p99 abs diff < 1e-4, max abs diff < 1e-2
-constexpr const char* kFixtureDir = AMBIENT_DIAR_FIXTURE_DIR;
+constexpr const char* kFixtureDir = CLINICAVT_DIAR_FIXTURE_DIR;
 
 std::vector<float> LoadWav(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
@@ -72,4 +72,4 @@ TEST(FbankParity, MatchesTheTorchReferenceOnRealSpeech) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

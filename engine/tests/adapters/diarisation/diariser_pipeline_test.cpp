@@ -11,7 +11,7 @@
 #include "adapters/diarisation/cluster_voiceprint.hpp"
 #include "adapters/diarisation/speaker_diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 // Shape checks on the assembled chain over a real consultation. Quality is
@@ -39,9 +39,10 @@ TEST(DiariserPipeline, ADoctorPatientConsultDiarisesToTwoSpeakers) {
         GTEST_SKIP() << "research corpus not mounted";
     }
     const auto audio = LoadWav(kWav);
-    const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
+    const models::ModelStore store{std::filesystem::path(CLINICAVT_MODELS_DIR)};
     models::OvRuntime runtime;
-    const auto anchor_root = std::filesystem::temp_directory_path() / "ambient-diar-pipeline-test";
+    const auto anchor_root =
+        std::filesystem::temp_directory_path() / "clinicavt-diar-pipeline-test";
     std::filesystem::create_directories(anchor_root);
     AnchorStore diariser_anchors(anchor_root);
     SpeakerDiariser diariser(store, runtime, diariser_anchors);
@@ -77,9 +78,9 @@ TEST(DiariserPipeline, AnchorSimilaritiesAreTheReferenceVoiceprintsAndAccrueReus
         GTEST_SKIP() << "research corpus not mounted";
     }
     const auto audio = LoadWav(kWav);
-    const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
+    const models::ModelStore store{std::filesystem::path(CLINICAVT_MODELS_DIR)};
     models::OvRuntime runtime;
-    const auto anchor_root = std::filesystem::temp_directory_path() / "ambient-diar-anchor-test";
+    const auto anchor_root = std::filesystem::temp_directory_path() / "clinicavt-diar-anchor-test";
     std::filesystem::remove_all(anchor_root);
     std::filesystem::create_directories(anchor_root);
     AnchorStore diariser_anchors(anchor_root);
@@ -124,9 +125,9 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
         GTEST_SKIP() << "research corpus not mounted";
     }
     const auto audio = LoadWav(kWav);
-    const models::ModelStore store{std::filesystem::path(AMBIENT_MODELS_DIR)};
+    const models::ModelStore store{std::filesystem::path(CLINICAVT_MODELS_DIR)};
     models::OvRuntime runtime;
-    const auto root = std::filesystem::temp_directory_path() / "ambient-diar-capture-test";
+    const auto root = std::filesystem::temp_directory_path() / "clinicavt-diar-capture-test";
     std::filesystem::create_directories(root);
     AnchorStore batch_anchors(root / "a");
     SpeakerDiariser batch(store, runtime, batch_anchors);
@@ -163,4 +164,4 @@ TEST(DiariserPipeline, CaptureFedDiariseMatchesBatchExactly) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

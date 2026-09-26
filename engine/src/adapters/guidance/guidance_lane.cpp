@@ -5,7 +5,7 @@
 #include <exception>
 #include <utility>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 GuidanceLane::GuidanceLane(IGuidanceRetriever& retriever, ReadinessListener on_readiness)
     : retriever_(retriever), on_readiness_(std::move(on_readiness)) {}
@@ -59,7 +59,7 @@ void GuidanceLane::Fail(const SearchRequest& request, const char* detail) {
     try {
         request.on_failed(detail);
     } catch (...) {
-        std::fprintf(stderr, "ambient-engine: guidance failure not delivered: %s\n", detail);
+        std::fprintf(stderr, "clinicavt-engine: guidance failure not delivered: %s\n", detail);
     }
 }
 
@@ -78,10 +78,11 @@ void GuidanceLane::Work() {
                 for (const auto& corpus : retriever_.Corpora()) {
                     ++(corpus.unavailable.empty() ? available : unavailable);
                 }
-                std::fprintf(stderr, "ambient-engine: guidance ready, %d corpora, %d unavailable\n",
+                std::fprintf(stderr,
+                             "clinicavt-engine: guidance ready, %d corpora, %d unavailable\n",
                              available, unavailable);
             } catch (const std::exception& e) {
-                std::fprintf(stderr, "ambient-engine: guidance unavailable: %s\n", e.what());
+                std::fprintf(stderr, "clinicavt-engine: guidance unavailable: %s\n", e.what());
             }
             if (on_readiness_) on_readiness_(retriever_.Status());
             lock.lock();
@@ -110,4 +111,4 @@ void GuidanceLane::Work() {
     }
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

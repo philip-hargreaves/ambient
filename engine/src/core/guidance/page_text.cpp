@@ -11,7 +11,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/recommendation_marks.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -147,4 +147,4 @@ std::vector<Paragraph> ParagraphsFromText(const std::string& text) {
     return out;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

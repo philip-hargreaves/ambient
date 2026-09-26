@@ -16,7 +16,7 @@ from pathlib import Path
 
 from translate import option
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 HERE = Path(__file__).resolve().parent
 PYTHON = sys.executable
 LANGUAGES = ["Urdu", "Polish"]

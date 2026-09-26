@@ -14,7 +14,7 @@
 #include "ports/diariser.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 struct Transcript {
     std::vector<asr::Turn> turns;  // attributed and tidied, empty when nothing was heard
@@ -34,4 +34,4 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
                                asr::ITranscriber& transcriber, ISessionEvents& events,
                                metrics::Registry* metrics, const StageFn& stage);
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

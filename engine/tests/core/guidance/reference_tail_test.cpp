@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 Paragraph Para(const std::string& text) {
@@ -85,4 +85,4 @@ TEST(ReferenceTail, TheWordAloneOrEarlyDropsNothing) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

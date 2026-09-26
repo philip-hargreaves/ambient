@@ -11,7 +11,7 @@
 #include "core/diarisation/slice_refinement.hpp"
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // Below one fbank frame (25 ms) the embedder has nothing to embed
 inline constexpr std::size_t kEmbedMinFrames = 400;
@@ -75,4 +75,4 @@ inline std::vector<LabelledSlice> OverlapTurns(const std::vector<Region>& slices
     return out;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

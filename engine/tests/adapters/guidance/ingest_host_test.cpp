@@ -8,7 +8,7 @@
 
 #include "tiny_pdf.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 std::vector<std::uint8_t> Bytes(const std::string& s) {
@@ -16,7 +16,7 @@ std::vector<std::uint8_t> Bytes(const std::string& s) {
 }
 
 IngestHost Fake(HostLimits limits = {}) {
-    return IngestHost(AMBIENT_FAKE_INGEST_HOST, limits);
+    return IngestHost(CLINICAVT_FAKE_INGEST_HOST, limits);
 }
 
 std::string ReasonOf(const IngestHost& host, const std::string& input) {
@@ -74,7 +74,7 @@ TEST(IngestHost, ALargeDocumentReachesTheHostWhole) {
 }
 
 TEST(IngestHost, TheRealHostReadsAPdf) {
-    const IngestHost host(AMBIENT_INGEST_HOST);
+    const IngestHost host(CLINICAVT_INGEST_HOST);
     const auto pages = host.Extract(fixture::TinyPdf(
         {"Offer allopurinol after a first attack.", "Check urate six weeks later."}));
     ASSERT_EQ(pages.size(), 1u);
@@ -89,7 +89,7 @@ TEST(IngestHost, TheRealHostReadsAPdf) {
 }
 
 TEST(IngestHost, SpacesAroundALineShapeNeitherItsBoxNorItsText) {
-    const IngestHost host(AMBIENT_INGEST_HOST);
+    const IngestHost host(CLINICAVT_INGEST_HOST);
     const auto pages =
         host.Extract(fixture::TinyPdf({"Offer allopurinol.", "   Offer allopurinol.        "}));
     ASSERT_EQ(pages.size(), 1u);
@@ -102,7 +102,7 @@ TEST(IngestHost, SpacesAroundALineShapeNeitherItsBoxNorItsText) {
 }
 
 TEST(IngestHost, TheRealHostDrawsAPage) {
-    const IngestHost host(AMBIENT_INGEST_HOST);
+    const IngestHost host(CLINICAVT_INGEST_HOST);
     const auto pdf = fixture::TinyPdf({"Offer allopurinol after a first attack."});
     const auto bitmap = host.Render(pdf, 0, 72);
     EXPECT_EQ(bitmap.width, 595);
@@ -123,4 +123,4 @@ TEST(IngestHost, TheRealHostDrawsAPage) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

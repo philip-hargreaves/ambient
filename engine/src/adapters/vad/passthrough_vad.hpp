@@ -2,7 +2,7 @@
 
 #include "ports/streaming_vad.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Fallback when no VAD model is staged: everything is speech, so the
 // endpointer degenerates to capped cuts
@@ -15,4 +15,4 @@ class PassthroughVad : public IStreamingVad {
     void Reset() override {}
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

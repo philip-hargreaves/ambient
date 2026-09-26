@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 struct ScanHit {
     std::size_t ord = 0;
@@ -33,4 +33,4 @@ inline std::vector<ScanHit> Scan(const float* matrix, std::size_t rows, int dim,
     return hits;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -8,21 +8,21 @@
 namespace {
 
 TEST(SegSettledFrontier, TrailsVadByTheRegionMargin) {
-    using ambient::diar::kSegFrontierMarginFrames;
-    EXPECT_EQ(ambient::diar::SegSettledFrontier(320000, 160000),
-              160000u - kSegFrontierMarginFrames);                          // vad behind
-    EXPECT_EQ(ambient::diar::SegSettledFrontier(100000, 320000), 100000u);  // seg behind
+    using clinicavt::diar::kSegFrontierMarginFrames;
+    EXPECT_EQ(clinicavt::diar::SegSettledFrontier(320000, 160000),
+              160000u - kSegFrontierMarginFrames);                            // vad behind
+    EXPECT_EQ(clinicavt::diar::SegSettledFrontier(100000, 320000), 100000u);  // seg behind
 }
 
 TEST(SegSettledFrontier, NothingSettlesInsideTheFirstMargin) {
-    EXPECT_EQ(ambient::diar::SegSettledFrontier(320000, ambient::diar::kSegFrontierMarginFrames),
-              0u);
-    EXPECT_EQ(ambient::diar::SegSettledFrontier(320000, 0), 0u);
+    EXPECT_EQ(
+        clinicavt::diar::SegSettledFrontier(320000, clinicavt::diar::kSegFrontierMarginFrames), 0u);
+    EXPECT_EQ(clinicavt::diar::SegSettledFrontier(320000, 0), 0u);
 }
 
 }  // namespace
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 // 32 ms hops: speech to hop 50, silence after
@@ -50,4 +50,4 @@ TEST(TurnClosed, SpeechInsideTheWindowKeepsItOpen) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

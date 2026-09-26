@@ -14,7 +14,7 @@
 
 #include "adapters/audio/wasapi_player.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 namespace {
 
@@ -232,4 +232,4 @@ SourceEnd WavSource::RunToEnd(IAudioSink& sink) {
     return {SourceEndReason::kCompleted, ""};
 }
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

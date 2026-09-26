@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 HERE = Path(__file__).resolve().parent
 MODELS = Path(r"C:\dev\ambient\models")
 SYSTEM = ("You are a professional medical translator. "

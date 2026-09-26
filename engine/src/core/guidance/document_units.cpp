@@ -14,7 +14,7 @@
 #include "core/guidance/recommendation_marks.hpp"
 #include "core/guidance/reference_tail.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -357,4 +357,4 @@ std::vector<Unit> UnitsFromText(const std::string& text) {
     return DropFragments(UnitsFromParagraphs(paragraphs));
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

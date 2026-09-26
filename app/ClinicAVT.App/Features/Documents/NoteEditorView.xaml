@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="ClinicAVT.App.Features.Documents.NoteEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ClinicAVT.App.Controls">
+
+    <Grid x:Name="Editor" Padding="0,10,0,8" RowSpacing="10">
+        <!-- The note sizes to its text up to a cap set in code. Guidance takes the last row,
+             which stays empty when the host shows guidance elsewhere -->
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="StateRow" Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="ActionRow" Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <controls:BusyCaption
+                    IsActive="{x:Bind ViewModel.NotePreparing, Mode=OneWay}"
+                    Text="{x:Bind ViewModel.NoteStateCaption, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.NoteCaptionVisible, Mode=OneWay}" />
+                <TextBlock
+                    Style="{StaticResource MicroText}"
+                    Text="{x:Bind ViewModel.EditedStamp, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.Edited, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <TextBlock
+                    Style="{StaticResource MicroText}"
+                    VerticalAlignment="Center"
+                    Text="{x:Bind ViewModel.RefusalReason, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.NoteRefused, Mode=OneWay}" />
+                <Button
+                    Command="{x:Bind ViewModel.WriteAnywayCommand}"
+                    Content="Write a note anyway"
+                    Visibility="{x:Bind ViewModel.CanWriteAnyway, Mode=OneWay}" />
+                <!-- Demo records only. A written case stands in for the note -->
+                <ComboBox
+                    MinWidth="140"
+                    MaxWidth="180"
+                    AutomationProperties.Name="Example case"
+                    ItemsSource="{x:Bind ViewModel.ExampleCaseTitles, Mode=OneWay}"
+                    PlaceholderText="Example case"
+                    SelectedIndex="{x:Bind ViewModel.ExampleCaseIndex, Mode=TwoWay}"
+                    Visibility="{x:Bind ViewModel.ExampleCasesVisible, Mode=OneWay}" />
+                <!-- Style and detail apply on the next Regenerate. Items are built in code -->
+                <DropDownButton
+                    AutomationProperties.Name="Note style"
+                    Content="Note style"
+                    IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="OptionsMenu" Placement="BottomEdgeAlignedRight" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button
+                    AutomationProperties.Name="Regenerate"
+                    x:Name="RegenerateButton"
+                    Command="{x:Bind ViewModel.RegenerateCommand}"
+                    ToolTipService.ToolTip="Rewrite the note with the chosen style and detail">
+                    <controls:IconLabel Glyph="&#xE72C;" Text="Regenerate" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- The minimum height keeps a short note looking like a document, even in an
+             unbounded column -->
+        <TextBox
+            x:Name="NoteBox"
+            Grid.Row="1"
+            MinHeight="140"
+            IsHitTestVisible="{x:Bind ViewModel.NoteEditing, Mode=OneWay}"
+            IsReadOnly="{x:Bind ViewModel.NoteViewing, Mode=OneWay}"
+            IsTabStop="{x:Bind ViewModel.NoteEditing, Mode=OneWay}"
+            SelectionHighlightColorWhenNotFocused="{ThemeResource AccentFillColorTertiaryBrush}"
+            Style="{StaticResource DocumentTextBox}"
+            Text="{x:Bind ViewModel.ClinicalNoteText, Mode=TwoWay}" />
+
+        <Grid Grid.Row="2" Margin="0,2,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button AutomationProperties.Name="Copy" Command="{x:Bind Export.CopyNoteCommand}"
+                        IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}">
+                    <controls:IconLabel Glyph="&#xE8C8;" Text="Copy" />
+                </Button>
+                <Button AutomationProperties.Name="Export" Command="{x:Bind Export.ExportNoteCommand}"
+                        IsEnabled="{x:Bind ViewModel.NoteDocumentReady, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.NoteViewing, Mode=OneWay}">
+                    <controls:IconLabel Glyph="&#xE898;" Text="Export" />
+                </Button>
+                <!-- Disabled when the consultation is not being kept -->
+                <Button AutomationProperties.Name="{x:Bind ViewModel.ReflectLabel, Mode=OneWay}" Command="{x:Bind ViewModel.ReflectCommand}"
+                        ToolTipService.ToolTip="An appraisal reflection on this consultation"
+                        Visibility="{x:Bind ViewModel.NoteViewing, Mode=OneWay}">
+                    <controls:IconLabel Glyph="&#xE70B;" Text="{x:Bind ViewModel.ReflectLabel, Mode=OneWay}" />
+                </Button>
+            </StackPanel>
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+                <Button
+                    AutomationProperties.Name="Edit"
+                    Command="{x:Bind ViewModel.EditNoteCommand}"
+                    Visibility="{x:Bind ViewModel.NoteViewing, Mode=OneWay}">
+                    <controls:IconLabel Glyph="&#xE70F;" Text="Edit" />
+                </Button>
+                <Button
+                    Command="{x:Bind ViewModel.DiscardNoteCommand}"
+                    Content="Discard"
+                    Visibility="{x:Bind ViewModel.NoteEditing, Mode=OneWay}" />
+                <Button
+                    AutomationProperties.Name="Save note"
+                    Command="{x:Bind ViewModel.SaveNoteCommand}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind ViewModel.NoteEditing, Mode=OneWay}">
+                    <controls:IconLabel Glyph="&#xE74E;" Text="Save note" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <ContentControl
+            x:Name="GuidanceHost"
+            Grid.Row="3"
+            Margin="0,12,0,0"
+            HorizontalContentAlignment="Stretch"
+            VerticalContentAlignment="Stretch" />
+
+        <!-- Regenerate asks first because an edited note holds the clinician's own wording -->
+        <TeachingTip
+            Title="Replace your edits?"
+            ActionButtonCommand="{x:Bind ViewModel.ConfirmRegenerateCommand}"
+            ActionButtonContent="Regenerate"
+            CloseButtonCommand="{x:Bind ViewModel.KeepEditsCommand}"
+            CloseButtonContent="Keep my note"
+            IsOpen="{x:Bind ViewModel.RegenerateWarningOpen, Mode=TwoWay}"
+            PreferredPlacement="Top"
+            Subtitle="You changed this note. Regenerating writes a new note from the transcript and your changes are lost."
+            Target="{x:Bind RegenerateButton}" />
+    </Grid>
+</UserControl>

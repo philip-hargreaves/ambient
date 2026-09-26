@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::translate {
+namespace clinicavt::translate {
 namespace {
 
 TEST(PlainPunctuation, CurlyQuotesDashesSpacesAndEllipsisBecomePlain) {
@@ -24,4 +24,4 @@ TEST(PlainPunctuation, OtherTextIsUntouched) {
 }
 
 }  // namespace
-}  // namespace ambient::translate
+}  // namespace clinicavt::translate

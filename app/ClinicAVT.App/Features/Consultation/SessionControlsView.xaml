@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="ClinicAVT.App.Features.Consultation.SessionControlsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ClinicAVT.App.Controls">
+
+    <UserControl.Resources>
+        <!-- Swells and fades behind the disc while recording can start -->
+        <Storyboard x:Name="Breathing" RepeatBehavior="Forever">
+            <DoubleAnimation
+                EnableDependentAnimation="True"
+                Storyboard.TargetName="RingScale"
+                Storyboard.TargetProperty="ScaleX"
+                From="1"
+                To="1.6"
+                Duration="0:0:2.8" />
+            <DoubleAnimation
+                EnableDependentAnimation="True"
+                Storyboard.TargetName="RingScale"
+                Storyboard.TargetProperty="ScaleY"
+                From="1"
+                To="1.6"
+                Duration="0:0:2.8" />
+            <DoubleAnimation
+                Storyboard.TargetName="Ring"
+                Storyboard.TargetProperty="Opacity"
+                From="0.35"
+                To="0"
+                Duration="0:0:2.8" />
+        </Storyboard>
+    </UserControl.Resources>
+
+    <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel
+            HorizontalAlignment="Center"
+            Spacing="14"
+            Visibility="{x:Bind ViewModel.IdleVisible, Mode=OneWay}">
+            <Grid>
+                <Ellipse
+                    x:Name="Ring"
+                    Width="88"
+                    Height="88"
+                    Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                    IsHitTestVisible="False"
+                    Opacity="0"
+                    RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform x:Name="RingScale" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Button
+                    x:Name="StartButton"
+                    AutomationProperties.Name="Start recording"
+                    Command="{x:Bind ViewModel.StartRecordingCommand}"
+                    Style="{StaticResource RecordDisc}">
+                    <FontIcon FontSize="32" Glyph="&#xE720;" />
+                </Button>
+            </Grid>
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                Text="{x:Bind ViewModel.StartLabel, Mode=OneWay}" />
+        </StackPanel>
+
+        <StackPanel
+            HorizontalAlignment="Center"
+            Spacing="14"
+            Visibility="{x:Bind ViewModel.RecordingVisible, Mode=OneWay}">
+            <Grid HorizontalAlignment="Center">
+                <controls:LevelRing Diameter="88" Level="{x:Bind ViewModel.Level, Mode=OneWay}" />
+                <Button
+                    AutomationProperties.Name="Stop recording"
+                    Command="{x:Bind ViewModel.StopRecordingCommand}"
+                    Style="{StaticResource StopDisc}">
+                    <FontIcon FontSize="28" Glyph="&#xE71A;" />
+                </Button>
+            </Grid>
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource ClockText}"
+                Text="{x:Bind ViewModel.ElapsedLabel, Mode=OneWay}" />
+            <Button
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.CancelRecordingCommand}"
+                Content="Cancel"
+                Style="{StaticResource TrayButton}" />
+        </StackPanel>
+
+        <StackPanel
+            HorizontalAlignment="Center"
+            Spacing="14"
+            Visibility="{x:Bind ViewModel.FinalisingVisible, Mode=OneWay}">
+            <ProgressRing
+                Width="44"
+                Height="44"
+                HorizontalAlignment="Center"
+                IsActive="{x:Bind ViewModel.FinalisingVisible, Mode=OneWay}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind ViewModel.FinalisingLabel, Mode=OneWay}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource ClockText}"
+                Text="{x:Bind ViewModel.ElapsedLabel, Mode=OneWay}" />
+        </StackPanel>
+        <StackPanel
+            MaxWidth="420"
+            HorizontalAlignment="Center"
+            Spacing="12"
+            Visibility="{x:Bind ViewModel.RefusedVisible, Mode=OneWay}">
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                TextAlignment="Center"
+                TextWrapping="Wrap"
+                Text="This recording did not contain enough clinical information to write a note." />
+            <StackPanel
+                HorizontalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    Command="{x:Bind ViewModel.Note.WriteAnywayCommand}"
+                    Content="Write a note anyway"
+                    Visibility="{x:Bind ViewModel.Note.CanWriteAnyway, Mode=OneWay}" />
+                <Button
+                    Command="{x:Bind ViewModel.DoneCommand}"
+                    Content="Done"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // The leading dotted number of a paragraph ("1.2.3"), or empty
 std::string LeadingNumber(const std::string& paragraph);
@@ -35,4 +35,4 @@ bool IsGradeTail(std::string_view text);
 // the end of a recommendation, allowing a short tail after the token
 bool EndsWithToken(std::string_view text);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

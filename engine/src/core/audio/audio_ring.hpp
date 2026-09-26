@@ -8,7 +8,7 @@
 #include <span>
 #include <vector>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // SPSC Lamport ring with monotonic indices masked on access. Capacity is
 // rounded to a power of two
@@ -65,4 +65,4 @@ class AudioRing {
 };
 #pragma warning(pop)
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

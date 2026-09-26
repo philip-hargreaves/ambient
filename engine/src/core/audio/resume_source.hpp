@@ -10,7 +10,7 @@
 
 #include "ports/audio_source.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 // Replays a crashed session's stored audio at full speed, then hands the
 // sink to the live source. Downstream sees one continuous capture stream
@@ -63,4 +63,4 @@ class ResumeSource : public IAudioSource {
     std::atomic<bool> paused_{false};
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

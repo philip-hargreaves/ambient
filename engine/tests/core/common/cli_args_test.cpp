@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient {
+namespace clinicavt {
 namespace {
 
 TEST(CliArgs, TakesTheFlagAndItsValue) {
@@ -24,4 +24,4 @@ TEST(CliArgs, FlagWithoutAValueIsIgnored) {
 }
 
 }  // namespace
-}  // namespace ambient
+}  // namespace clinicavt

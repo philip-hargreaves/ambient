@@ -8,7 +8,7 @@
 #define NOMINMAX
 #include <windows.h>
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 namespace {
 
 // The rights the pipe is meant to grant, spelled out independently of the
@@ -182,4 +182,4 @@ TEST(PipeSecurity, TrusteesAreThisLogonSessionAndSystem) {
 }
 
 }  // namespace
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

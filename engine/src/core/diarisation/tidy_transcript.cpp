@@ -10,7 +10,7 @@
 #include "ports/audio_source.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 namespace {
 
@@ -125,4 +125,4 @@ std::vector<asr::Turn> TidyTranscript(std::vector<asr::Turn> turns) {
     return out;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

@@ -5,7 +5,7 @@
 
 #include "adapters/ipc/handlers.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 namespace {
 
 const char* ReasonName(audio::SourceEndReason reason) {
@@ -169,4 +169,4 @@ double WireEvents::Seconds(std::chrono::steady_clock::time_point now) const {
     return std::chrono::duration<double>(now - started_).count();
 }
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

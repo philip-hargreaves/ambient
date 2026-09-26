@@ -39,16 +39,16 @@ std::vector<float> LoadWav(const char* path) {
 }
 
 // The clip-decode contract hands back chunks. The probe's whole-clip text is one
-std::vector<ambient::asr::Turn> AsChunk(std::string text, std::span<const float> clip,
-                                        std::uint64_t first_frame) {
-    ambient::asr::Turn chunk;
+std::vector<clinicavt::asr::Turn> AsChunk(std::string text, std::span<const float> clip,
+                                          std::uint64_t first_frame) {
+    clinicavt::asr::Turn chunk;
     chunk.first_frame = first_frame;
     chunk.frame_count = clip.size();
     chunk.text = std::move(text);
     return {chunk};
 }
 
-std::string Decode(ambient::asr::WhisperTranscriber& transcriber, std::span<const float> clip,
+std::string Decode(clinicavt::asr::WhisperTranscriber& transcriber, std::span<const float> clip,
                    std::uint64_t first_frame) {
     return transcriber.DecodeClip(clip, first_frame);
 }
@@ -56,19 +56,21 @@ std::string Decode(ambient::asr::WhisperTranscriber& transcriber, std::span<cons
 // --amortise-probe: feeds a SpeakerDiariser the audio so far in five-second
 // steps, exactly as the session controller does, then times what a stop pays
 // and verifies the output is bit-identical to the batch pass
-void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
-                   ambient::asr::WhisperTranscriber& whisper, const std::vector<float>& audio,
-                   const ambient::diar::DiariseResult& batch) {
+void AmortiseProbe(const clinicavt::models::ModelStore& store,
+                   clinicavt::models::OvRuntime& runtime,
+                   clinicavt::asr::WhisperTranscriber& whisper, const std::vector<float>& audio,
+                   const clinicavt::diar::DiariseResult& batch) {
     using Clock = std::chrono::steady_clock;
     const auto seconds = [](Clock::time_point a, Clock::time_point b) {
         return std::chrono::duration<double>(b - a).count();
     };
     constexpr std::uint64_t kStepFrames = 5 * 16000;
 
-    const auto anchor_root = std::filesystem::temp_directory_path() / "ambient-diar-eval-amortise";
+    const auto anchor_root =
+        std::filesystem::temp_directory_path() / "clinicavt-diar-eval-amortise";
     std::filesystem::create_directories(anchor_root);
-    ambient::diar::AnchorStore fed_anchors(anchor_root);
-    ambient::diar::SpeakerDiariser fed(store, runtime, fed_anchors);
+    clinicavt::diar::AnchorStore fed_anchors(anchor_root);
+    clinicavt::diar::SpeakerDiariser fed(store, runtime, fed_anchors);
     std::size_t decodes = 0;
     const auto decode = [&whisper, &decodes](std::span<const float> clip, std::uint64_t first) {
         ++decodes;
@@ -91,21 +93,21 @@ void AmortiseProbe(const ambient::models::ModelStore& store, ambient::models::Ov
     const auto stop_start = Clock::now();
     const auto result = fed.Diarise(audio);
     const auto cache = fed.TakeTurnTexts();
-    const auto turns = ambient::diar::MergeByCluster(result.slices);
+    const auto turns = clinicavt::diar::MergeByCluster(result.slices);
     std::size_t hits = 0;
-    for (const auto& span : ambient::diar::DecodeSpans(turns, audio.size())) {
+    for (const auto& span : clinicavt::diar::DecodeSpans(turns, audio.size())) {
         if (cache.contains({span.first_frame, span.end_frame})) ++hits;
     }
-    const auto turn_texts = ambient::diar::DecodeTurnTexts(turns, audio, decode, &cache);
-    std::vector<ambient::diar::RoleTurn> role_turns;
+    const auto turn_texts = clinicavt::diar::DecodeTurnTexts(turns, audio, decode, &cache);
+    std::vector<clinicavt::diar::RoleTurn> role_turns;
     for (std::size_t i = 0; i < turns.size(); ++i) {
         role_turns.push_back(
             {turns[i].cluster, turns[i].end_frame - turns[i].first_frame, turn_texts[i]});
     }
-    const auto named = ambient::diar::NameRoles(role_turns, result.cluster_count);
+    const auto named = clinicavt::diar::NameRoles(role_turns, result.cluster_count);
     const auto vp_start = Clock::now();
     for (int c = 0; c < result.cluster_count && c < 2; ++c) {
-        (void)ambient::diar::ClusterVoiceprint(fed.Embedder(), audio, result.slices, c);
+        (void)clinicavt::diar::ClusterVoiceprint(fed.Embedder(), audio, result.slices, c);
     }
     const double vp_s = seconds(vp_start, Clock::now());
     const double stop_s = seconds(stop_start, Clock::now());
@@ -178,18 +180,18 @@ int main(int argc, char** argv) {
         }
     }
     try {
-        const ambient::models::ModelStore store{std::filesystem::path(argv[1])};
-        ambient::models::OvRuntime runtime;
+        const clinicavt::models::ModelStore store{std::filesystem::path(argv[1])};
+        clinicavt::models::OvRuntime runtime;
         // A throwaway anchor root: evaluation must never touch a real anchor
-        const auto anchor_root = std::filesystem::temp_directory_path() / "ambient-diar-eval";
+        const auto anchor_root = std::filesystem::temp_directory_path() / "clinicavt-diar-eval";
         std::filesystem::create_directories(anchor_root);
-        ambient::diar::AnchorStore diariser_anchors(anchor_root);
-        ambient::diar::SpeakerDiariser diariser(store, runtime, diariser_anchors);
+        clinicavt::diar::AnchorStore diariser_anchors(anchor_root);
+        clinicavt::diar::SpeakerDiariser diariser(store, runtime, diariser_anchors);
         const auto audio = LoadWav(argv[2]);
 
-        std::unique_ptr<ambient::asr::WhisperTranscriber> whisper;
+        std::unique_ptr<clinicavt::asr::WhisperTranscriber> whisper;
         if (roles) {
-            whisper = std::make_unique<ambient::asr::WhisperTranscriber>(store, runtime);
+            whisper = std::make_unique<clinicavt::asr::WhisperTranscriber>(store, runtime);
         }
         const auto result = diariser.Diarise(audio);
 
@@ -208,20 +210,20 @@ int main(int argc, char** argv) {
 
         // The production finalise: each merged turn decodes its own audio
         const auto before = std::chrono::steady_clock::now();
-        const auto pturns = ambient::diar::MergeByCluster(result.slices);
-        const auto turn_texts = ambient::diar::DecodeTurnTexts(
+        const auto pturns = clinicavt::diar::MergeByCluster(result.slices);
+        const auto turn_texts = clinicavt::diar::DecodeTurnTexts(
             pturns, audio, [&whisper](std::span<const float> clip, std::uint64_t first) {
                 return AsChunk(Decode(*whisper, clip, first), clip, first);
             });
         const auto took = std::chrono::duration<double>(std::chrono::steady_clock::now() - before);
         std::fprintf(stderr, "per-turn: %zu turns decoded in %.1f s\n", pturns.size(),
                      took.count());
-        std::vector<ambient::diar::RoleTurn> role_turns;
+        std::vector<clinicavt::diar::RoleTurn> role_turns;
         for (std::size_t i = 0; i < pturns.size(); ++i) {
             role_turns.push_back(
                 {pturns[i].cluster, pturns[i].end_frame - pturns[i].first_frame, turn_texts[i]});
         }
-        const auto named = ambient::diar::NameRoles(role_turns, result.cluster_count);
+        const auto named = clinicavt::diar::NameRoles(role_turns, result.cluster_count);
 
         std::printf("DOCTOR %d\nMARGIN %.4f\n", named.doctor_cluster, named.margin);
         for (std::size_t c = 0; c < named.role_of_cluster.size(); ++c) {
@@ -229,7 +231,7 @@ int main(int argc, char** argv) {
         }
         for (int c = 0; c < result.cluster_count; ++c) {
             const auto voiceprint =
-                ambient::diar::ClusterVoiceprint(diariser.Embedder(), audio, result.slices, c);
+                clinicavt::diar::ClusterVoiceprint(diariser.Embedder(), audio, result.slices, c);
             if (voiceprint.empty()) continue;
             std::printf("VP %d", c);
             for (const float x : voiceprint) std::printf(" %.6f", x);

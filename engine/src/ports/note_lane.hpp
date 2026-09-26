@@ -3,7 +3,7 @@
 #include <functional>
 #include <string>
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 // Which tier is configured and whether its model is resident.
 // Transitions feed the shell's status
@@ -54,4 +54,4 @@ inline const char* PhaseName(NoteModelState::Phase phase) {
     }
 }
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

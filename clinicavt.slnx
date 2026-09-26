@@ -1,0 +1,39 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/app/">
+    <Project Path="app/ClinicAVT.App.Core/ClinicAVT.App.Core.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="app/ClinicAVT.App.Platform/ClinicAVT.App.Platform.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="app/ClinicAVT.App.Tests/ClinicAVT.App.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="app/ClinicAVT.App/ClinicAVT.App.csproj">
+      <Platform Project="x64" />
+      <Deploy Solution="*|x64" />
+      <Deploy Solution="Debug|Any CPU" />
+    </Project>
+    <Project Path="app/ClinicAVT.Client.Tests/ClinicAVT.Client.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="app/ClinicAVT.Client/ClinicAVT.Client.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/engine/">
+    <File Path="engine/CMakeLists.txt" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ClinicAVT.FetchModels/ClinicAVT.FetchModels.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tools/ClinicAVT.FetchModels.Tests/ClinicAVT.FetchModels.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+</Solution>

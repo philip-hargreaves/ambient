@@ -12,7 +12,7 @@
 #include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -204,4 +204,4 @@ std::string Citation(std::string_view code, std::string_view number, std::string
     return out;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

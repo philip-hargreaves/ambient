@@ -6,7 +6,7 @@
 
 #include "core/common/strings.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 Paragraph Para(const char* text, int page = 0, float top = 0.1F, float bottom = 0.12F) {
@@ -243,4 +243,4 @@ TEST(DocumentUnits, AProofsLineNumbersLeaveTheText) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

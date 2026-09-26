@@ -4,7 +4,7 @@
 #include <span>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 inline constexpr std::size_t kMelBins = 80;
 
@@ -17,4 +17,4 @@ struct FbankFeatures {
 // mono 16 kHz. int16-range values break parity
 FbankFeatures EmbedderFbank(std::span<const float> audio);
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

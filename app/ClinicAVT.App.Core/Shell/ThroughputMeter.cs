@@ -1,0 +1,73 @@
+namespace ClinicAVT.App.Core.Shell;
+
+/// <summary>
+/// Tokens per second over a short rolling window, with one Token() per streamed piece. It
+/// reads no clock. Callers pass the time in seconds, so tests can script it.
+/// </summary>
+public sealed class ThroughputMeter(double windowSeconds = 2.0)
+{
+    private readonly Queue<double> _stamps = new();
+    private double _frozen;
+    private bool _streaming;
+
+    public void Token(double now)
+    {
+        _streaming = true;
+        _frozen = 0;
+        _stamps.Enqueue(now);
+        Trim(now);
+    }
+
+    /// <summary>Ends the stream. The last live value holds until Reset.</summary>
+    public void End(double now)
+    {
+        if (_streaming)
+        {
+            _frozen = Live(now);
+            _streaming = false;
+            _stamps.Clear();
+        }
+    }
+
+    public void Reset()
+    {
+        _stamps.Clear();
+        _frozen = 0;
+        _streaming = false;
+    }
+
+    public bool Streaming => _streaming;
+
+    /// <summary>0 when nothing has streamed, the frozen value after End.</summary>
+    public double TokensPerSecond(double now)
+    {
+        if (!_streaming)
+        {
+            return _frozen;
+        }
+
+        Trim(now);
+        return Live(now);
+    }
+
+    // Rate over what the window still holds. One token is not a rate yet.
+    // A stalled stream decays to zero as the window empties
+    private double Live(double now)
+    {
+        if (_stamps.Count < 2)
+        {
+            return 0;
+        }
+
+        var span = now - _stamps.Peek();
+        return span <= 0 ? 0 : (_stamps.Count - 1) / span;
+    }
+
+    private void Trim(double now)
+    {
+        while (_stamps.Count > 0 && now - _stamps.Peek() > windowSeconds)
+        {
+            _stamps.Dequeue();
+        }
+    }
+}

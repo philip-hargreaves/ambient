@@ -10,7 +10,7 @@
 #include "adapters/diarisation/deferred_diariser.hpp"
 #include "adapters/vad/deferred_vad.hpp"
 
-namespace ambient {
+namespace clinicavt {
 namespace {
 
 TEST(DeferredLoad, GetWaitsForTheBuild) {
@@ -195,4 +195,4 @@ TEST(DeferredDiariser, DiscardBeforeTheLoadIsANoOp) {
 }
 
 }  // namespace
-}  // namespace ambient
+}  // namespace clinicavt

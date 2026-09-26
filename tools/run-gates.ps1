@@ -19,7 +19,7 @@ if (-not (Test-Path $ctest)) { $ctest = (Get-Command ctest -ErrorAction Silently
 if (-not $ctest) { throw 'ctest not found; install the CMake component or put ctest on PATH' }
 
 # A stray note host holds the GPU and fails everything after it
-foreach ($image in 'Ambient.App', 'ambient_engine', 'ambient_note_host') {
+foreach ($image in 'ClinicAVT.App', 'clinicavt_engine', 'clinicavt_note_host') {
     Get-Process $image -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
@@ -55,7 +55,7 @@ if ($Build) {
         Enter-VsDevShell -VsInstallPath $vs -DevCmdArguments '-arch=x64 -no_logo' -SkipAutomaticLocation | Out-Null
         Set-Location $root
         cmake --build --preset release
-        dotnet build ambient.slnx -p:Platform=x64
+        dotnet build clinicavt.slnx -p:Platform=x64
     }
 }
 
@@ -66,16 +66,16 @@ Invoke-Gate 'engine' {
 }
 
 Invoke-Gate 'shell' {
-    if ($List) { dotnet test "$root\app\Ambient.App.Tests" --no-build -t }
-    else { dotnet test "$root\app\Ambient.App.Tests" --no-build }
+    if ($List) { dotnet test "$root\app\ClinicAVT.App.Tests" --no-build -t }
+    else { dotnet test "$root\app\ClinicAVT.App.Tests" --no-build }
 }
 
 Invoke-Gate 'contract' {
-    if ($List) { dotnet test "$root\app\Ambient.Client.Tests" -t }
-    else { dotnet test "$root\app\Ambient.Client.Tests" }
+    if ($List) { dotnet test "$root\app\ClinicAVT.Client.Tests" -t }
+    else { dotnet test "$root\app\ClinicAVT.Client.Tests" }
 }
 
-foreach ($image in 'ambient_engine', 'ambient_note_host') {
+foreach ($image in 'clinicavt_engine', 'clinicavt_note_host') {
     Get-Process $image -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 

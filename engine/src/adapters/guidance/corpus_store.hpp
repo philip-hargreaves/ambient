@@ -9,7 +9,7 @@
 #include "adapters/guidance/embedder.hpp"
 #include "adapters/storage/db.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 inline constexpr std::uint32_t kCorpusApplicationId = 0x414D4247;  // "AMBG"
 inline constexpr int kCorpusFormat = 1;
@@ -86,4 +86,4 @@ class CorpusStore {
     store::Db::Stmt text_;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

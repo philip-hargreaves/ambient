@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -179,4 +179,4 @@ bool EndsWithToken(std::string_view text) {
     return last != std::string_view::npos && text.size() - last <= kTail;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

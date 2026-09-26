@@ -8,11 +8,11 @@
 #include "ports/note_lane.hpp"
 #include "ports/note_writer.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 class ModelStore;
-}  // namespace ambient::models
+}  // namespace clinicavt::models
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 // The note model in its own supervised process, so a GPU driver fault can
 // never corrupt or hang the engine. The process boundary is also the tier
@@ -56,4 +56,4 @@ class WorkerNoteWriter : public INoteWriter, public INoteLane {
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

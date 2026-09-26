@@ -7,7 +7,7 @@
 #include "adapters/storage/db.hpp"
 #include "guidance_fixture.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 const EmbedderIdentity kEmbedder{"words", "rev-a", 4, 64, ""};
@@ -117,4 +117,4 @@ TEST(DocumentIndex, AnotherEmbedderEmptiesItAndAForeignFileIsMadeAgain) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

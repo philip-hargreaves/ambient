@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 enum class AnchorOrigin { kNone, kAccrued, kEnrolled };
 
@@ -62,4 +62,4 @@ class AnchorStore {
     detail::AnchorRecord record_;
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

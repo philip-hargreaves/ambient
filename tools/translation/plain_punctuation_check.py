@@ -20,7 +20,7 @@ import judge
 from tokenizer_parity import PLAIN, english
 from translate import LANGUAGES
 
-ROOT = Path(r"D:\ambient-mt")
+ROOT = Path(r"D:\clinicavt-mt")
 MODEL = Path(r"C:\dev\ambient\models\nllb-200-600m-int8")
 BEFORE = ROOT / "probe" / "tokenizers" / "bpe-shipped"
 OUT = ROOT / "results" / "plain-punctuation.jsonl"

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 asr::Turn C(std::uint64_t first, std::uint64_t end, const char* text) {
@@ -82,4 +82,4 @@ TEST(Resplit, NothingMovesWithoutAMarginOrWithOneCluster) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

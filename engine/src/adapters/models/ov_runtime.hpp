@@ -8,7 +8,7 @@
 
 #include "adapters/models/model_store.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 
 // CACHE_DIR plus the manifest's properties. Values reach OpenVINO as the
 // strings its own property parsing accepts ("32" for a float hint), bools
@@ -37,4 +37,4 @@ class OvRuntime {
     ov::Core core_;
 };
 
-}  // namespace ambient::models
+}  // namespace clinicavt::models

@@ -14,7 +14,7 @@
 #include "guidance_fixture.hpp"
 #include "tiny_pdf.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 // Sixty-four buckets of hashed words, unit length: shared words score higher
@@ -356,7 +356,7 @@ TEST(DocumentIngest, AddCopiesIntoTheFolderAndSkipsWhatItCannotTake) {
 }
 
 TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
-    Harness h(AMBIENT_INGEST_HOST);
+    Harness h(CLINICAVT_INGEST_HOST);
     const std::vector<std::string> lines = {
         "Offer allopurinol after a first attack when urate stays high.",
         "Check urate six weeks after any dose change."};
@@ -390,7 +390,7 @@ TEST(DocumentIngest, ReadsAPdfThroughTheHostWithItsPages) {
 }
 
 TEST(DocumentIngest, HostRefusalsBecomeTheRowsError) {
-    Harness h(AMBIENT_FAKE_INGEST_HOST);
+    Harness h(CLINICAVT_FAKE_INGEST_HOST);
     h.Write("locked.pdf", "FAKE exit 3");
     h.Write("broken.pdf", "FAKE crash");
     h.Write("fine.pdf", "%PDF canned");
@@ -471,4 +471,4 @@ TEST(DocumentIngest, IndexingPausesWhileAConsultationRunsAndRemoveDuringItCancel
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

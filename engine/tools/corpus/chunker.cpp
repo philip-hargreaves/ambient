@@ -6,7 +6,7 @@
 #include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 // Whitespace runs to one space
@@ -137,4 +137,4 @@ std::vector<Chunk> ChunksFromText(const std::string& code, const std::string& ti
     return out;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

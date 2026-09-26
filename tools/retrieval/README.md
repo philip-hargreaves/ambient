@@ -83,9 +83,9 @@ run. Each script's docstring has the rest.
 ## Native proof
 
 ```
-cmake -S tools\retrieval\native -B D:\ambient-rag\native-build -G "Visual Studio 18 2026" -A x64 ^
+cmake -S tools\retrieval\native -B D:\clinicavt-rag\native-build -G "Visual Studio 18 2026" -A x64 ^
   -DOpenVINO_DIR=external\openvino\runtime\cmake -DOpenVINOGenAI_DIR=external\openvino\runtime\cmake
-cmake --build D:\ambient-rag\native-build --config Release
+cmake --build D:\clinicavt-rag\native-build --config Release
 proof embed  <model_dir> cls 512 texts.txt
 proof rerank <model_dir> 512 "<query>" texts.txt
 ```

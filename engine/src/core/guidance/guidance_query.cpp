@@ -8,7 +8,7 @@
 
 #include "core/common/strings.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -97,4 +97,4 @@ std::vector<std::string> SubQueries(std::string_view note) {
     return out;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

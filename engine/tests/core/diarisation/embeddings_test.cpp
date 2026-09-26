@@ -7,7 +7,7 @@
 
 #include "core/diarisation/diar_regions.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 TEST(Embeddings, DotRunsOverTheSharedDimensions) {
@@ -77,4 +77,4 @@ TEST(Embeddings, AppendVadHopsPadsOnlyWhenAsked) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

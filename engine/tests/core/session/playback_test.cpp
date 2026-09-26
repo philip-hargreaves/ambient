@@ -12,7 +12,7 @@
 
 #include "adapters/storage/sqlite_session_store.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 namespace {
 
 using audio::LevelReading;
@@ -79,7 +79,7 @@ struct Fixture {
 
     Fixture() {
         root = std::filesystem::temp_directory_path() /
-               ("ambient-playback-" +
+               ("clinicavt-playback-" +
                 std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
         store = std::make_unique<store::SqliteSessionStore>(root, std::chrono::hours(1));
@@ -274,4 +274,4 @@ TEST(Playback, ASourceNeverSearchedStillHasItsCopySearched) {
 }
 
 }  // namespace
-}  // namespace ambient::session
+}  // namespace clinicavt::session

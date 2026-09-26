@@ -5,7 +5,7 @@
 
 #include "ports/guidance_retriever.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 using nlohmann::json;
 
@@ -34,4 +34,4 @@ std::string Dump(const Record& record);
 // A stored record this reader can trust: an object no newer than kRecordVersion
 bool CanRead(const json& j);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

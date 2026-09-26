@@ -39,7 +39,7 @@ if ($InPlace) {
     $staging = (Resolve-Path $Source).Path
     $sourceRecord = @{ path = $staging }
 } else {
-    $staging = Join-Path ([IO.Path]::GetTempPath()) "ambient-stage-$Id"
+    $staging = Join-Path ([IO.Path]::GetTempPath()) "clinicavt-stage-$Id"
     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory $staging | Out-Null
     if ($Source) {

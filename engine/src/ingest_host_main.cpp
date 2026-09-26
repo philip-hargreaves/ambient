@@ -37,7 +37,7 @@ namespace {
 
 using json = nlohmann::json;
 
-namespace ingest_exit = ambient::guidance::ingest_exit;
+namespace ingest_exit = clinicavt::guidance::ingest_exit;
 constexpr std::size_t kOutputCap = 64u << 20;
 
 std::vector<unsigned char> ReadStdin() {
@@ -62,10 +62,10 @@ void AppendUtf8(std::string& out, unsigned int unit, unsigned int& high) {
     if (unit >= 0xDC00 && unit <= 0xDFFF) {
         cp = high != 0 ? 0x10000 + ((high - 0xD800) << 10) + (unit - 0xDC00) : 0xFFFD;
     } else if (high != 0) {
-        ambient::utf8::Encode(out, 0xFFFD);
+        clinicavt::utf8::Encode(out, 0xFFFD);
     }
     high = 0;
-    ambient::utf8::Encode(out, cp);
+    clinicavt::utf8::Encode(out, cp);
 }
 
 struct Line {
@@ -98,7 +98,7 @@ json PageJson(FPDF_DOCUMENT doc, int index) {
         Line line;
         unsigned int high = 0;
         const auto flush = [&] {
-            line.text = std::string(ambient::strings::Trim(line.text));
+            line.text = std::string(clinicavt::strings::Trim(line.text));
             if (line.any && !line.text.empty()) {
                 lines.push_back(
                     {{"text", line.text}, {"box", {line.left, line.top, line.right, line.bottom}}});
@@ -175,7 +175,7 @@ int Extract(FPDF_DOCUMENT doc) {
         line_total += pages.back()["lines"].size();
     }
     const std::string out = json{{"pages", std::move(pages)}}.dump();
-    std::fprintf(stderr, "ambient-ingest-host: %d pages, %zu lines\n", count, line_total);
+    std::fprintf(stderr, "clinicavt-ingest-host: %d pages, %zu lines\n", count, line_total);
     return WriteOut(out.data(), out.size());
 }
 
@@ -225,8 +225,8 @@ int Render(FPDF_DOCUMENT doc, int index, int dpi) {
     }
     FPDFBitmap_Destroy(bitmap);
     FPDF_ClosePage(page);
-    std::fprintf(stderr, "ambient-ingest-host: page %d at %d dpi, %d x %d\n", index + 1, dpi, width,
-                 height);
+    std::fprintf(stderr, "clinicavt-ingest-host: page %d at %d dpi, %d x %d\n", index + 1, dpi,
+                 width, height);
     return WriteOut(out.data(), out.size());
 }
 
@@ -234,13 +234,13 @@ int Render(FPDF_DOCUMENT doc, int index, int dpi) {
 
 int main(int argc, char* argv[]) {
     // A crash writes no dump of the document
-    WerAddExcludedApplication(L"ambient_ingest_host.exe", FALSE);
+    WerAddExcludedApplication(L"clinicavt_ingest_host.exe", FALSE);
     const bool extract = argc == 2 && std::strcmp(argv[1], "extract") == 0;
     const bool render = argc == 4 && std::strcmp(argv[1], "render") == 0;
     if (!extract && !render) {
         std::fprintf(stderr,
-                     "usage: ambient_ingest_host extract < document.pdf\n"
-                     "       ambient_ingest_host render <page> <dpi> < document.pdf\n");
+                     "usage: clinicavt_ingest_host extract < document.pdf\n"
+                     "       clinicavt_ingest_host render <page> <dpi> < document.pdf\n");
         return ingest_exit::kBadArgs;
     }
     const auto bytes = ReadStdin();

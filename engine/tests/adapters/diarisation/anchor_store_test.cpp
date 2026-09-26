@@ -10,17 +10,17 @@
 
 #include "adapters/diarisation/cluster_voiceprint.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 struct TempDir {
     std::filesystem::path path;
 
     TempDir() {
-        path =
-            std::filesystem::temp_directory_path() /
-            ("ambient-anchor-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-             "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        path = std::filesystem::temp_directory_path() /
+               ("clinicavt-anchor-" +
+                std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::create_directories(path);
     }
 
@@ -166,4 +166,4 @@ TEST(VoiceprintRanges, StopAtTheCapAndRefuseUnderASecond) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

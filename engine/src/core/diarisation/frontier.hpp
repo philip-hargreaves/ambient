@@ -7,7 +7,7 @@
 #include "core/diarisation/diar_regions.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // The frame below which diarisation state is final, from segmentation and
 // VAD alone. A region's final
@@ -37,4 +37,4 @@ inline bool TurnClosed(std::span<const float> vad_probabilities, std::uint64_t e
     return true;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar
