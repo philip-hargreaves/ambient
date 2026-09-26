@@ -13,7 +13,7 @@
 
 #include "core/metrics/metrics.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 
 // Builds T on a background thread. Get waits and rethrows a load failure.
 // A successful build records its seconds under `name`
@@ -29,11 +29,11 @@ class DeferredLoad {
                 built_ = build();
                 const double seconds =
                     std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-                std::fprintf(stderr, "ambient-engine: %s ready in %.1f s\n", name_.c_str(),
+                std::fprintf(stderr, "clinicavt-engine: %s ready in %.1f s\n", name_.c_str(),
                              seconds);
                 if (metrics != nullptr) metrics->RecordLoad(name_, seconds);
             } catch (const std::exception& e) {
-                std::fprintf(stderr, "ambient-engine: %s unavailable (%s)\n", name_.c_str(),
+                std::fprintf(stderr, "clinicavt-engine: %s unavailable (%s)\n", name_.c_str(),
                              e.what());
                 error_ = std::current_exception();
             } catch (...) {
@@ -81,4 +81,4 @@ class DeferredLoad {
     std::thread loader_;
 };
 
-}  // namespace ambient::models
+}  // namespace clinicavt::models

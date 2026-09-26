@@ -17,7 +17,7 @@ ROOT = r"C:\dev\ambient"
 # PERF_ENGINE: run a copied binary so rebuilds don't fight a live sweep.
 # PERF_ENGINE_ARGS: extra flags, e.g. "--asr-device NPU".
 ENGINE = os.environ.get("PERF_ENGINE",
-                        os.path.join(ROOT, r"build\release\engine\ambient_engine.exe"))
+                        os.path.join(ROOT, r"build\release\engine\clinicavt_engine.exe"))
 ENGINE_ARGS = os.environ.get("PERF_ENGINE_ARGS", "").split()
 MODELS = os.path.join(ROOT, "models")
 # Working data (tracks, store, logs, results) lives under build/, never in the repo
@@ -137,12 +137,12 @@ def system_memory_mb():
 
 def note_host_pids():
     out = subprocess.run(
-        ["tasklist", "/FI", "IMAGENAME eq ambient_note_host.exe", "/FO", "CSV", "/NH"],
+        ["tasklist", "/FI", "IMAGENAME eq clinicavt_note_host.exe", "/FO", "CSV", "/NH"],
         capture_output=True, text=True).stdout
     pids = []
     for line in out.splitlines():
         parts = [p.strip('"') for p in line.split('","')]
-        if len(parts) > 1 and parts[0] == "ambient_note_host.exe":
+        if len(parts) > 1 and parts[0] == "clinicavt_note_host.exe":
             pids.append(int(parts[1]))
     return pids
 
@@ -159,7 +159,7 @@ class Engine:
     # PeekNamedPipe says how much is waiting and only that much is read.
     def __init__(self, index):
         self.index = index
-        self.pipe_name = f"LOCAL\\ambient-perf-{os.getpid()}-{index}"
+        self.pipe_name = f"LOCAL\\clinicavt-perf-{os.getpid()}-{index}"
         self.log_path = os.path.join(LOGS, f"engine-{index:03d}.log")
         self.log_offset = 0
         self.notifications = collections.deque()
@@ -467,8 +467,8 @@ def run_session(engine, track, duration, cycle, run_index, tags=None, on_stop=No
                 stages[name] = float(line.rsplit(" at ", 1)[1].rstrip(" s"))
             except ValueError:
                 pass
-        elif "ambient-engine:" in line and ("ready in" not in line):
-            extra.append(line.split("ambient-engine: ", 1)[-1][:160])
+        elif "clinicavt-engine:" in line and ("ready in" not in line):
+            extra.append(line.split("clinicavt-engine: ", 1)[-1][:160])
     rec["finalise_stages"] = stages
     rec["engine_log"] = extra[-12:]
     with open(RESULTS, "a", encoding="utf-8") as f:

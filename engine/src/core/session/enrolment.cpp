@@ -8,7 +8,7 @@
 
 #include "core/audio/voice_enrolment.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 Enrolment::Enrolment(const SourceFactory& factory, audio::IStreamingVad& vad,
                      diar::IDiariser& diariser, ISessionEvents& events)
@@ -106,4 +106,4 @@ void Enrolment::Run(double seconds, const MicSelection& mic, double min_speech_s
     events_.OnEnrolDone(why.empty(), why, speech_s);
 }
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

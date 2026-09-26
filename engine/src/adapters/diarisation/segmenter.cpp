@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 namespace {
 
@@ -73,4 +73,4 @@ SegResult Segmenter::Run(std::span<const float> audio) {
     return result;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

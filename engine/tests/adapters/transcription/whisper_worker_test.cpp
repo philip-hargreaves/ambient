@@ -12,7 +12,7 @@
 #include "adapters/transcription/whisper_transcriber.hpp"
 #include "core/metrics/metrics.hpp"
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 namespace {
 
 Turn Labelled(std::uint64_t first_frame, std::size_t count) {
@@ -108,9 +108,9 @@ TEST(WhisperWorker, AFailedLoadResolvesClipsEmpty) {
 }
 
 }  // namespace
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 namespace {
 
 Turn At(std::uint64_t first, std::uint64_t count, const char* text) {
@@ -137,4 +137,4 @@ TEST(WhisperWorker, ChunksReachTheClipCallerAndTheirEdgesBecomeCuts) {
 }
 
 }  // namespace
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

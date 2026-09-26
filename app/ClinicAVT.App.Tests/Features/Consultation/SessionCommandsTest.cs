@@ -1,0 +1,261 @@
+using ClinicAVT.App.Core.Features.Consultation;
+using ClinicAVT.App.Tests.Support;
+using ClinicAVT.App.Tests.TestDoubles;
+using static ClinicAVT.App.Tests.Support.Waits;
+using static ClinicAVT.App.Tests.Support.Wire;
+
+namespace ClinicAVT.App.Tests.Features.Consultation;
+
+public class SessionCommandsTest
+{
+    [Fact]
+    public async Task CommandsDriveTheMachineAndCanExecuteVisibilityAndTheClockFollowTheState()
+    {
+        var (session, engine, _) = TestSession.Create();
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
+
+        // Recording waits for the engine
+        engine.SetConnected(false);
+        Assert.False(controls.StartRecordingCommand.CanExecute(null));
+        engine.SetConnected(true);
+        Assert.True(controls.StartRecordingCommand.CanExecute(null));
+
+        Assert.False(controls.StopRecordingCommand.CanExecute(null));
+        Assert.False(controls.NewConsultationCommand.CanExecute(null));
+        Assert.True(controls.IdleVisible);
+        Assert.True(controls.CentreStageVisible);
+        Assert.False(controls.PanesVisible);
+        Assert.False(controls.ReviewVisible);
+        Assert.True(controls.MicPickerVisible);
+        Assert.True(controls.MicPickerEnabled);
+
+        await controls.StartRecordingCommand.ExecuteAsync(null);
+        Assert.Equal(SessionState.Recording, controls.State);
+        Assert.False(controls.StartRecordingCommand.CanExecute(null));
+        Assert.True(controls.StopRecordingCommand.CanExecute(null));
+        Assert.True(controls.CancelRecordingCommand.CanExecute(null));
+        Assert.False(controls.IdleVisible);
+        Assert.True(controls.RecordingVisible);
+        Assert.True(controls.CentreStageVisible);
+        Assert.True(controls.MicPickerVisible, "shown while recording, read-only");
+        Assert.False(controls.MicPickerEnabled, "pinned: changes apply next time");
+
+        // The clock and the ring follow delivered audio
+        for (var i = 0; i < 754; i++)
+        {
+            engine.RaiseNotification("audio.level", Params(new { level = 0.5, clipped = false }));
+        }
+
+        Assert.Equal("01:15", controls.ElapsedLabel);
+        Assert.Equal(0.5, controls.Level);
+
+        // Once sealed and before the note streams, the centre holds and says why
+        await controls.StopRecordingCommand.ExecuteAsync(null);
+        Assert.True(controls.CentreStageVisible);
+        Assert.True(controls.FinalisingVisible);
+        Assert.False(controls.PanesVisible);
+        Assert.Equal("Preparing note", controls.FinalisingLabel);
+
+        // The first token opens the panes, with the note already filling
+        engine.RaiseNotification("note/partial", Params(new { text = "The" }));
+        Assert.True(controls.PanesVisible);
+        Assert.False(controls.FinalisingVisible);
+        engine.RaiseNotification("note/ready");
+        Assert.True(controls.ReviewVisible);
+        Assert.False(controls.RecordingVisible);
+        Assert.False(controls.CentreStageVisible);
+        Assert.True(controls.NewConsultationCommand.CanExecute(null));
+        Assert.False(controls.MicPickerVisible, "the cell is New consultation's now");
+
+        controls.NewConsultationCommand.Execute(null);
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.True(controls.IdleVisible);
+    }
+
+    [Fact]
+    public async Task AThinRecordingOpensThePanesOnTheCannedNote()
+    {
+        // No partial streams for a thin recording, so note/ready must open
+        // the panes on its own or the centre would spin forever
+        var (session, engine, _) = TestSession.Create();
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
+        await session.StartRecordingAsync();
+        await session.StopRecordingAsync();
+        Assert.True(controls.CentreStageVisible);
+
+        engine.RaiseNotification("note/ready", Params(new { text = "The recording was too short" }));
+
+        Assert.True(controls.PanesVisible);
+        Assert.True(controls.ReviewVisible);
+    }
+
+    [Fact]
+    public async Task FirstTimeSetupBlocksRecordingUntilModelsCompile()
+    {
+        var (session, engine, _) = TestSession.Create(
+            engine: new FakeEngineClient(autoNotify: false) { FirstUse = true, ModelsCompiled = false },
+            readinessPollInterval: TimeSpan.FromMilliseconds(1));
+        var bar = session.Status;
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
+        bar.SetEngineState(ClinicAVT.App.Core.Hosting.EngineStatus.Running);
+        bar.SetEngineReady(true);
+
+        Assert.False(session.ModelsReady);
+        Assert.False(controls.StartRecordingCommand.CanExecute(null));
+        Assert.Contains("First-time setup", bar.DisplayLabel);
+
+        engine.ModelsCompiled = true;
+        await WaitUntilAsync(() => session.ModelsReady);
+
+        Assert.True(session.ModelsReady);
+        Assert.True(controls.StartRecordingCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void AWarmLaunchAndAWarmNoteModelLoadNeverGateRecording()
+    {
+        var (session, engine, _) = TestSession.Create();
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
+        Assert.True(session.ModelsReady);
+        Assert.Equal(1, engine.Requests.Count(r => r.Method == "engine/readiness"));
+        session.Status.SetEngineState(ClinicAVT.App.Core.Hosting.EngineStatus.Running);
+        session.Status.SetEngineReady(true);
+
+        engine.RaiseNotification("note/model", System.Text.Json.JsonSerializer.SerializeToElement(
+            new { tier = "default", id = "qwen3.5-9b-int4", name = "Qwen3.5 9B", state = "loading", firstUse = false }));
+
+        Assert.True(session.ModelsReady);
+        Assert.True(controls.StartRecordingCommand.CanExecute(null));
+        Assert.Equal("Ready", session.Status.DisplayLabel);
+
+        engine.RaiseNotification("note/model", System.Text.Json.JsonSerializer.SerializeToElement(
+            new { tier = "default", id = "qwen3.5-9b-int4", name = "Qwen3.5 9B", state = "loading", firstUse = true }));
+        Assert.False(session.ModelsReady);
+        Assert.Contains("Preparing note model", session.Status.DisplayLabel);
+    }
+
+    [Fact]
+    public async Task FinaliseStagesNameTheCentreSpinner()
+    {
+        var (session, engine, _) = TestSession.Create();
+        var controls = new SessionControlsViewModel(session, TestSession.Mic());
+        var phases = new List<FinalisePhase>();
+        session.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ConsultationViewModel.Phase))
+            {
+                phases.Add(session.Phase);
+            }
+        };
+
+        await session.StartRecordingAsync();
+        engine.RaiseNotification("session/progress", Params(new { stage = "speakers" }));
+        Assert.Equal(FinalisePhase.None, session.Phase);  // ignored before finalising
+
+        // The engine reports its stages while session/stop blocks
+        engine.BeforeReply = method =>
+        {
+            if (method != "session/stop")
+            {
+                return;
+            }
+
+            Assert.Equal("Finalising", controls.FinalisingLabel);
+            engine.RaiseNotification("session/progress", Params(new { stage = "transcript" }));
+            Assert.Equal("Writing transcript", controls.FinalisingLabel);
+            engine.RaiseNotification("session/progress", Params(new { stage = "unknown" }));
+            Assert.Equal("Writing transcript", controls.FinalisingLabel);  // an unknown stage changes nothing
+            engine.RaiseNotification("session/progress", Params(new { stage = "speakers" }));
+            Assert.Equal("Labelling speakers", controls.FinalisingLabel);
+            // The per-turn re-decode is transcript work again, and on the
+            // NPU the longest stage, so the spinner says what it is doing
+            engine.RaiseNotification("session/progress", Params(new { stage = "turns" }));
+            Assert.Equal("Writing transcript", controls.FinalisingLabel);
+        };
+        await session.StopRecordingAsync();
+        engine.BeforeReply = null;
+
+        // Once sealed the caption names the prefill, and a late stage cannot go back
+        Assert.Equal(FinalisePhase.Note, session.Phase);
+        Assert.Equal("Preparing note", controls.FinalisingLabel);
+        engine.RaiseNotification("session/progress", Params(new { stage = "transcript" }));
+        Assert.Equal(FinalisePhase.Note, session.Phase);
+        // Start resets to None, then the stop walks forward only
+        Assert.Collection(phases.SkipWhile(p => p == FinalisePhase.None),
+            p => Assert.Equal(FinalisePhase.Sealing, p),
+            p => Assert.Equal(FinalisePhase.Transcript, p),
+            p => Assert.Equal(FinalisePhase.Speakers, p),
+            p => Assert.Equal(FinalisePhase.Turns, p),
+            p => Assert.Equal(FinalisePhase.Note, p));
+
+        // The next stop starts from the beginning again
+        engine.RaiseNotification("note/partial", Params(new { text = "The" }));
+        Assert.Equal(FinalisePhase.Streaming, session.Phase);
+        engine.RaiseNotification("note/ready", Params(new { text = "note" }));
+        engine.RaiseNotification("patient/ready", Params(new { text = "sheet" }));
+        session.StartNewConsultation();
+        Assert.Equal(FinalisePhase.None, session.Phase);
+        await session.StartRecordingAsync();
+        await session.StopRecordingAsync();
+        Assert.Equal(FinalisePhase.Note, session.Phase);
+    }
+
+    [Fact]
+    public async Task ARestartedEngineResumesTheLiveSessionButNothingWhileIdle()
+    {
+        var (session, engine, _) = TestSession.Create();
+
+        engine.SetConnected(false);
+        engine.SetConnected(true);
+        Assert.DoesNotContain(engine.Requests, r => r.Method == "session/start");
+        Assert.Equal(SessionState.Idle, session.State);
+
+        await session.StartRecordingAsync();
+        engine.SetConnected(false);
+        engine.SetConnected(true);
+
+        var starts = engine.Requests.Where(r => r.Method == "session/start").ToList();
+        Assert.Equal(2, starts.Count);
+        Assert.Contains("resume", starts[1].Params);
+        Assert.Contains("s1", starts[1].Params);
+        Assert.Equal(SessionState.Recording, session.State);
+    }
+
+    [Fact]
+    public async Task AResumeThatLosesTheEngineStaysRecordingForTheNextReconnect()
+    {
+        var (session, engine, _) = TestSession.Create();
+        await session.StartRecordingAsync();
+
+        // The engine dies again while the resume is in flight, and the next
+        // reconnect must retry it
+        engine.FailNext = method => method == "session/start"
+            ? new IOException("pipe transport is closed") : null;
+        engine.SetConnected(false);
+        engine.SetConnected(true);
+        Assert.Equal(SessionState.Recording, session.State);
+        Assert.Equal("Recovering", session.Status.LatestActivity);
+
+        engine.SetConnected(false);
+        engine.SetConnected(true);
+
+        Assert.Equal(3, engine.Requests.Count(r => r.Method == "session/start"));
+        Assert.Equal(SessionState.Recording, session.State);
+        Assert.Equal("Recording", session.Status.LatestActivity);
+    }
+
+    [Fact]
+    public async Task AResumeTheEngineRefusesKeepsTheSessionAndStopsRecording()
+    {
+        var (session, engine, _) = TestSession.Create();
+        await session.StartRecordingAsync();
+
+        engine.FailNext = method => method == "session/start"
+            ? new ClinicAVT.Client.EngineErrorException(-32000, "no stored audio", null) : null;
+        engine.SetConnected(false);
+        engine.SetConnected(true);
+
+        Assert.Equal(SessionState.Idle, session.State);
+        Assert.Equal("Could not resume - session kept", session.Status.LatestActivity);
+    }
+}

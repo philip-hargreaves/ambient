@@ -2,7 +2,7 @@
 
     python export.py <id> [--weights int8|int4]
 
-Everything lands under MT_ROOT (default D:\\ambient-mt): the checkpoint in hf/, the export in
+Everything lands under MT_ROOT (default D:\\clinicavt-mt): the checkpoint in hf/, the export in
 models/<id>-<weights>, with provenance.json beside it. A finished export is skipped.
 """
 
@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 CANDIDATES = json.load(open(Path(__file__).with_name("candidates.json"), encoding="utf-8"))
 
 # IPv6 drops on this network

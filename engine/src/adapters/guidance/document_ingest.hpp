@@ -17,7 +17,7 @@
 #include "adapters/system/recycle_bin.hpp"
 #include "ports/document_ingest.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 inline constexpr const char* kReadMe = "Instructions.txt";
 
@@ -101,4 +101,4 @@ class DocumentIngest : public IDocumentIngest {
     std::function<void(const DocumentInfo&)> on_document_;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

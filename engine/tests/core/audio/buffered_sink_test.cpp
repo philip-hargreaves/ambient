@@ -14,7 +14,7 @@
 
 #include "ports/audio_source.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 namespace {
 
 // Records what arrives, in order. Holding it lets the ring fill behind it
@@ -146,4 +146,4 @@ TEST(BufferedSink, TheSourceThreadNeverWaitsOnTheSink) {
     EXPECT_LT(elapsed, std::chrono::milliseconds(50)) << "a held sink must not slow the source";
 }
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

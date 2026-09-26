@@ -9,7 +9,7 @@
 #include "ports/diariser.hpp"
 #include "ports/streaming_vad.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 // Voice enrolment: the microphone until Finish (or a cap in seconds), the
 // speech embedded, the anchor replaced. Progress and the outcome arrive on
@@ -47,4 +47,4 @@ class Enrolment {
     bool finish_ = false;   // under mutex_
 };
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

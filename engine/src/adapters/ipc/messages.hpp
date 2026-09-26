@@ -10,7 +10,7 @@
 
 #include "ports/transcriber.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 
 using nlohmann::json;
 
@@ -161,4 +161,4 @@ inline asr::Turn TurnFromJson(const json& t) {
             t.value("speaker", ""), t.value("text", "")};
 }
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

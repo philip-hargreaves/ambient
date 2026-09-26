@@ -19,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 REFERENCE = "nllb-600m-int8"
 LOW_RESOURCE = ("Urdu", "Punjabi", "Bengali", "Gujarati", "Somali")
 SCRIPT = {"Urdu": "ARABIC", "Arabic": "ARABIC", "Punjabi": "GURMUKHI", "Bengali": "BENGALI",

@@ -4,7 +4,7 @@
 
 #include "kaldi-native-fbank/csrc/online-feature.h"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // The blessed research contract (torchaudio kaldi defaults + ERes2NetV2
 // front-end). A mismatch fails embedder parity
@@ -53,4 +53,4 @@ FbankFeatures EmbedderFbank(std::span<const float> audio) {
     return out;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

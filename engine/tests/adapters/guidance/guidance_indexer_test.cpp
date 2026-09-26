@@ -13,10 +13,10 @@
 #include "guidance_fixture.hpp"
 #include "tools/corpus/indexer.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
-constexpr const char* kFixtureDir = AMBIENT_GUIDANCE_FIXTURE_DIR;
+constexpr const char* kFixtureDir = CLINICAVT_GUIDANCE_FIXTURE_DIR;
 constexpr int kDim = 8;
 
 // Deterministic unit vectors from the text, so a rebuild reproduces a corpus
@@ -151,4 +151,4 @@ TEST(IndexCorpus, BuildsACorpusTheStoreOpensWithTheEmbeddersIdentity) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

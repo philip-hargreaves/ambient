@@ -5,12 +5,12 @@
 #include <chrono>
 #include <cwchar>
 
-namespace ambient::system {
+namespace clinicavt::system {
 namespace {
 
 TEST(ProcessScan, ReturnsAtOnceWhenNoSuchProcessRuns) {
     const auto t0 = std::chrono::steady_clock::now();
-    EXPECT_TRUE(WaitUntilGone(L"ambient_no_such_process.exe", std::chrono::seconds(5)));
+    EXPECT_TRUE(WaitUntilGone(L"clinicavt_no_such_process.exe", std::chrono::seconds(5)));
     EXPECT_LT(std::chrono::steady_clock::now() - t0, std::chrono::seconds(1));
 }
 
@@ -27,4 +27,4 @@ TEST(ProcessScan, GivesUpAtTheBoundOnAProcessThatStays) {
 }
 
 }  // namespace
-}  // namespace ambient::system
+}  // namespace clinicavt::system

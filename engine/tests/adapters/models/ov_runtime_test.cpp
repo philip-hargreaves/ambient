@@ -9,7 +9,7 @@
 #include <openvino/op/parameter.hpp>
 #include <string>
 
-namespace ambient::models {
+namespace clinicavt::models {
 namespace {
 
 struct TempRoot {
@@ -18,7 +18,7 @@ struct TempRoot {
     TempRoot() {
         path =
             std::filesystem::temp_directory_path() /
-            ("ambient-ovrt-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+            ("clinicavt-ovrt-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
              "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::create_directories(path);
     }
@@ -109,4 +109,4 @@ TEST(OvRuntime, AnUnsupportedManifestDeviceIsRefused) {
 }
 
 }  // namespace
-}  // namespace ambient::models
+}  // namespace clinicavt::models

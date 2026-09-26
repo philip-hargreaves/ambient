@@ -14,7 +14,7 @@
 #include "core/note/summary_scrub.hpp"
 #include "ports/session_store.hpp"
 
-namespace ambient::demo {
+namespace clinicavt::demo {
 
 // One seeded consultation from demo/reflections: the app's transcript of a real recording, the
 // notes its best model wrote, and hand-written answers. Dated relative to seed time
@@ -131,4 +131,4 @@ inline bool HasSamples(store::ISessionStore& sessions) {
     return false;
 }
 
-}  // namespace ambient::demo
+}  // namespace clinicavt::demo

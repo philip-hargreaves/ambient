@@ -17,7 +17,7 @@
 #include "adapters/system/gpu_lease.hpp"
 #include "core/metrics/metrics.hpp"
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 namespace {
 
@@ -72,15 +72,16 @@ struct LlmNoteWriter::Impl {
         const std::string device = runtime.ResolveDevice(info.device);
         // Build and warm hold the GPU lease (nothing runs beside them) and a
         // power request (no standby mid-load)
-        const system::AwakeRequest awake(L"Ambient: loading the note model");
+        const system::AwakeRequest awake(L"ClinicAVT: loading the note model");
         const auto lease = system::GpuLease::Global().Acquire();
         std::shared_ptr<TextPipeline> built = MakeTextPipeline(info, device);
         report.seconds = Seconds(t0);
-        std::fprintf(stderr,
-                     "ambient-engine: note %s (%s, %s) on %s, checked in %.1f s, loaded in %.1f s, "
-                     "lease wait %.2f s\n",
-                     info.id.c_str(), tier.c_str(), info.pipeline.c_str(), device.c_str(), verified,
-                     report.seconds, lease.waited());
+        std::fprintf(
+            stderr,
+            "clinicavt-engine: note %s (%s, %s) on %s, checked in %.1f s, loaded in %.1f s, "
+            "lease wait %.2f s\n",
+            info.id.c_str(), tier.c_str(), info.pipeline.c_str(), device.c_str(), verified,
+            report.seconds, lease.waited());
         if (metrics != nullptr) {
             metrics->RecordDevice("note", device);
             metrics->RecordLoad("note", report.seconds);
@@ -103,9 +104,9 @@ struct LlmNoteWriter::Impl {
             config.apply_chat_template = false;
             built.Generate("<|im_start|>user\n" + LoadPrompt(prompt_dir / "note-narrative.md"),
                            config, nullptr);
-            std::fprintf(stderr, "ambient-engine: note prefix warmed in %.1f s\n", Seconds(t0));
+            std::fprintf(stderr, "clinicavt-engine: note prefix warmed in %.1f s\n", Seconds(t0));
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "ambient-engine: note prefix warm failed (%s)\n", e.what());
+            std::fprintf(stderr, "clinicavt-engine: note prefix warm failed (%s)\n", e.what());
         }
     }
 
@@ -172,7 +173,7 @@ void LlmNoteWriter::Prepare() {
                 }
                 report.ok = false;
                 report.detail = e.what();
-                std::fprintf(stderr, "ambient-engine: note load failed (%s)\n", e.what());
+                std::fprintf(stderr, "clinicavt-engine: note load failed (%s)\n", e.what());
             }
             impl->loading = false;
             impl->Report(report);
@@ -236,13 +237,13 @@ void LlmNoteWriter::Prefill(const std::vector<asr::Turn>& transcript, const Note
         const auto t0 = std::chrono::steady_clock::now();
         const TextPipeline::Result result = pipeline->Generate(prompt, config, nullptr);
         std::fprintf(stderr,
-                     "ambient-note-host: prefill %zu turns, %zu tokens, %zu shared chars, "
+                     "clinicavt-note-host: prefill %zu turns, %zu tokens, %zu shared chars, "
                      "%.2f s, lease wait %.2f s\n",
                      transcript.size(), result.input_tokens,
                      SharedPrefix(prompt, impl_->last_prefill), Seconds(t0), lease.waited());
         impl_->last_prefill = prompt;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-note-host: prefill failed (%s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-note-host: prefill failed (%s)\n", e.what());
         impl_->last_prefill.clear();
     }
 }
@@ -275,7 +276,8 @@ std::string LlmNoteWriter::Generate(const std::string& prompt, const Progress& p
 
     if (!impl_->last_prefill.empty()) {
         const std::size_t shared = SharedPrefix(wrapped, impl_->last_prefill);
-        std::fprintf(stderr, "ambient-note-host: prompt %zu chars, prefill covered %zu (%.0f%%)\n",
+        std::fprintf(stderr,
+                     "clinicavt-note-host: prompt %zu chars, prefill covered %zu (%.0f%%)\n",
                      wrapped.size(), shared, 100.0 * shared / wrapped.size());
         impl_->last_prefill.clear();
     }
@@ -294,10 +296,10 @@ std::string LlmNoteWriter::Generate(const std::string& prompt, const Progress& p
     };
     // Generation holds the GPU lease. A recording started meanwhile decodes
     // after it ends
-    const system::AwakeRequest awake(L"Ambient: writing the note");
+    const system::AwakeRequest awake(L"ClinicAVT: writing the note");
     const auto lease = system::GpuLease::Global().Acquire();
     if (lease.waited() > 0.25) {
-        std::fprintf(stderr, "ambient-note-host: generation waited %.2f s for the GPU lease\n",
+        std::fprintf(stderr, "clinicavt-note-host: generation waited %.2f s for the GPU lease\n",
                      lease.waited());
     }
     pipeline->Generate(wrapped, config, streamer);
@@ -308,4 +310,4 @@ void LlmNoteWriter::Cancel() {
     impl_->cancel = true;
 }
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

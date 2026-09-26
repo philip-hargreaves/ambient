@@ -12,7 +12,7 @@
 #include "core/metrics/metrics.hpp"
 #include "ports/audio_source.hpp"
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 
 namespace {
 
@@ -29,7 +29,7 @@ DecodeFn MakeWhisperDecode(const models::ModelStore& store, models::OvRuntime& r
     store.Verify(info);
     const std::string device =
         runtime.ResolveDevice(device_override.empty() ? info.device : device_override);
-    std::fprintf(stderr, "ambient-engine: %s on %s\n", role, device.c_str());
+    std::fprintf(stderr, "clinicavt-engine: %s on %s\n", role, device.c_str());
     if (metrics != nullptr) metrics->RecordDevice(role, device);
 
     ov::AnyMap properties{{"CACHE_DIR", (info.dir / ".cache").string()}};
@@ -49,10 +49,10 @@ DecodeFn MakeWhisperDecode(const models::ModelStore& store, models::OvRuntime& r
         const auto lease = gpu.Acquire(std::chrono::minutes(10));
         if (!was_broken && gpu.Broken()) {
             std::fprintf(stderr,
-                         "ambient-engine: the GPU lease holder is wedged; decoding beside it\n");
+                         "clinicavt-engine: the GPU lease holder is wedged; decoding beside it\n");
         }
         if (lease.waited() > 0.25) {
-            std::fprintf(stderr, "ambient-engine: asr waited %.2f s for the GPU lease\n",
+            std::fprintf(stderr, "clinicavt-engine: asr waited %.2f s for the GPU lease\n",
                          lease.waited());
         }
         auto result = pipeline->generate(audio, config);
@@ -154,7 +154,7 @@ void WhisperTranscriber::LoadIfPending() {
                 std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
         }
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: transcription unavailable (%s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: transcription unavailable (%s)\n", e.what());
     }
     loader_ = {};
 }
@@ -209,4 +209,4 @@ void WhisperTranscriber::WorkerLoop() {
     for (auto& clip : clips_) clip.chunks.set_value({});
 }
 
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

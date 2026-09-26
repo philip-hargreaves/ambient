@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace ambient::store {
+namespace clinicavt::store {
 namespace {
 
 std::vector<std::uint8_t> SampleChunk() {
@@ -105,4 +105,4 @@ TEST(ChunkCipher, GarbageWrappedKeyThrows) {
 }
 
 }  // namespace
-}  // namespace ambient::store
+}  // namespace clinicavt::store

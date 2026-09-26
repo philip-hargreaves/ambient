@@ -5,7 +5,7 @@
 #include "adapters/storage/schema.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 namespace {
 
 bool TableExists(Db& db, const char* table) {
@@ -30,7 +30,7 @@ void RequireForeignKeys(Db& db) {
 
 std::filesystem::path DatabasePath(const std::filesystem::path& root) {
     std::filesystem::create_directories(root);
-    return root / "ambient.db";
+    return root / "clinicavt.db";
 }
 
 }  // namespace
@@ -40,11 +40,11 @@ Db OpenDatabase(const std::filesystem::path& root) {
     const std::int64_t application_id = db.ApplicationId();
     std::int64_t version = db.UserVersion();
     if (application_id != 0 && application_id != kApplicationId) {
-        throw StoreError(StoreCode::kSchema, "not an ambient store");
+        throw StoreError(StoreCode::kSchema, "not an clinicavt store");
     }
     if (version == 0) {
         if (db.QueryInt64("SELECT count(*) FROM sqlite_master") != 0) {
-            throw StoreError(StoreCode::kSchema, "not an ambient store");
+            throw StoreError(StoreCode::kSchema, "not an clinicavt store");
         }
         // Incremental vacuum is creation-time. The WAL switch already wrote the
         // header, so the empty file is rebuilt to take it
@@ -59,7 +59,7 @@ Db OpenDatabase(const std::filesystem::path& root) {
         throw StoreError(StoreCode::kSchema, "store schema is newer than this build");
     } else {
         if (application_id == 0 && !TableExists(db, "sessions")) {
-            throw StoreError(StoreCode::kSchema, "not an ambient store");
+            throw StoreError(StoreCode::kSchema, "not an clinicavt store");
         }
         if (version == 2) {
             Db::Transaction txn(db);
@@ -107,4 +107,4 @@ Db OpenDatabase(const std::filesystem::path& root) {
     return db;
 }
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

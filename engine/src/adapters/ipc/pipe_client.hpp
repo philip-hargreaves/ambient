@@ -12,7 +12,7 @@
 
 #include "adapters/ipc/framing.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 
 // The client end of a private named pipe: whole frames out, frames in
 // through a decoder. Synchronous handle. The caller serialises its readers
@@ -88,4 +88,4 @@ class PipeClient {
     FrameDecoder decoder_;
 };
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

@@ -2,7 +2,7 @@
     "jsonrpc": "2.0",
     "id": 15,
     "result": {
-        "folder": "C:\\Users\\clinician\\Documents\\Ambient guidelines",
+        "folder": "C:\\Users\\clinician\\Documents\\ClinicAVT guidelines",
         "found": true,
         "unsupported": 2,
         "documents": [

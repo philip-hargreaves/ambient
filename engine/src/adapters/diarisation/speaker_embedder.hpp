@@ -7,7 +7,7 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 inline constexpr std::size_t kEmbeddingDims = 192;
 
@@ -24,4 +24,4 @@ class SpeakerEmbedder {
     ov::InferRequest request_;
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

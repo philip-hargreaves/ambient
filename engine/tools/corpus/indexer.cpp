@@ -8,7 +8,7 @@
 #include "core/common/strings.hpp"
 #include "core/guidance/guidance_query.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 std::string ReadFile(const std::filesystem::path& path) {
@@ -151,4 +151,4 @@ IndexReport IndexCorpus(const BuildSpec& spec, IEmbedder& embedder,
     return report;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

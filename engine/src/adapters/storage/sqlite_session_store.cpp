@@ -10,7 +10,7 @@
 
 #include "adapters/storage/store_migrations.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 namespace {
 
@@ -88,7 +88,7 @@ SqliteSessionStore::~SqliteSessionStore() {
         try {
             CommitPending();
         } catch (const StoreError& e) {
-            std::fprintf(stderr, "ambient-engine: store commit failed at close: %s\n", e.what());
+            std::fprintf(stderr, "clinicavt-engine: store commit failed at close: %s\n", e.what());
         }
     }
 }
@@ -579,7 +579,7 @@ void SqliteSessionStore::WriterLoop() {
         try {
             if (CommitPending() && open_->faulted) {
                 open_->faulted = false;
-                std::fprintf(stderr, "ambient-engine: store commits again\n");
+                std::fprintf(stderr, "clinicavt-engine: store commits again\n");
             }
         } catch (const StoreError& e) {
             Open& session = *open_;
@@ -593,7 +593,7 @@ void SqliteSessionStore::WriterLoop() {
             }
             if (!session.faulted) {
                 session.faulted = true;
-                std::fprintf(stderr, "ambient-engine: store commit failed: %s\n", e.what());
+                std::fprintf(stderr, "clinicavt-engine: store commit failed: %s\n", e.what());
                 if (on_fault_) {
                     const auto listener = on_fault_;
                     lock.unlock();
@@ -618,8 +618,8 @@ void SqliteSessionStore::SetMaxPageCount(std::int64_t pages) {
 
 void SqliteSessionStore::Checkpoint() {
     if (!db_.CheckpointTruncate()) {
-        std::fprintf(stderr, "ambient-engine: store log kept, a reader holds it\n");
+        std::fprintf(stderr, "clinicavt-engine: store log kept, a reader holds it\n");
     }
 }
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

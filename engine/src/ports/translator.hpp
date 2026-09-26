@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::translate {
+namespace clinicavt::translate {
 
 // Streams partials, returns the translation, throws on failure. Cancel
 // interrupts from another thread
@@ -30,4 +30,4 @@ class ITranslator {
     virtual void Cancel() {}
 };
 
-}  // namespace ambient::translate
+}  // namespace clinicavt::translate

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ClinicAVT.App (Unpackaged)": {
+      "commandName": "Project"
+    },
+    "ClinicAVT.App (Package)": {
+      "commandName": "MsixPackage"
+    }
+  }
+}

@@ -12,7 +12,7 @@
 #include "core/guidance/guidance_rank.hpp"
 #include "ports/guidance_retriever.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 struct RetrieverOptions {
     double floor = kDefaultFloor;
@@ -90,4 +90,4 @@ class Retriever : public IGuidanceRetriever {
     Readiness readiness_;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

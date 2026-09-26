@@ -8,10 +8,10 @@
 #include "adapters/models/ov_runtime.hpp"
 #include "adapters/translate/nllb_translator.hpp"
 
-namespace ambient::translate {
+namespace clinicavt::translate {
 namespace {
 
-const std::filesystem::path kModels = AMBIENT_MODELS_DIR;
+const std::filesystem::path kModels = CLINICAVT_MODELS_DIR;
 
 constexpr const char* kSheet =
     "Your appointment today\n"
@@ -82,4 +82,4 @@ TEST(NllbTranslator, AnUnknownLanguageIsRefused) {
 }
 
 }  // namespace
-}  // namespace ambient::translate
+}  // namespace clinicavt::translate

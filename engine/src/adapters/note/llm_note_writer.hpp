@@ -8,16 +8,16 @@
 
 #include "ports/note_writer.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 class ModelStore;
 class OvRuntime;
-}  // namespace ambient::models
+}  // namespace clinicavt::models
 
-namespace ambient::metrics {
+namespace clinicavt::metrics {
 class Registry;
-}  // namespace ambient::metrics
+}  // namespace clinicavt::metrics
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 // Qwen behind the note port: one background load, resident pipeline,
 // prompts re-read per note. The tier is a role the store resolves. The
@@ -74,4 +74,4 @@ class LlmNoteWriter : public INoteWriter {
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

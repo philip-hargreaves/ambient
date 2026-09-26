@@ -8,7 +8,7 @@
 #include "ports/audio_source.hpp"
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 inline constexpr std::uint64_t kVoiceprintCapFrames = 90 * audio::kSampleRate;  // long-exposure cap
 inline constexpr std::uint64_t kVoiceprintMinFrames =
@@ -34,4 +34,4 @@ inline std::vector<Region> VoiceprintRanges(const std::vector<LabelledSlice>& sl
 std::vector<float> ClusterVoiceprint(SpeakerEmbedder& embedder, std::span<const float> audio,
                                      const std::vector<LabelledSlice>& slices, int cluster);
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

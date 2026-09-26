@@ -1,5 +1,5 @@
 # core has no deps; OpenVINO and Win32 live in adapters
-add_library(ambient_core STATIC
+add_library(clinicavt_core STATIC
     src/core/diarisation/resplit.cpp
     src/core/diarisation/role_naming.cpp
     src/core/diarisation/tidy_transcript.cpp
@@ -17,17 +17,17 @@ add_library(ambient_core STATIC
     src/core/session/playback.cpp
     src/core/session/session_controller.cpp
     src/core/session/transcribe_recording.cpp)
-target_include_directories(ambient_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(ambient_core PRIVATE ambient_warnings)
+target_include_directories(clinicavt_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(clinicavt_core PRIVATE clinicavt_warnings)
 
 # Toolchain is fetched and pinned by tools/get-openvino.ps1
-if(NOT EXISTS "${ambient_SOURCE_DIR}/external/openvino")
+if(NOT EXISTS "${clinicavt_SOURCE_DIR}/external/openvino")
     message(FATAL_ERROR "OpenVINO not found: run tools/get-openvino.ps1 first")
 endif()
 find_package(OpenVINOGenAI REQUIRED)
 
 # Archive ships Debug and Release runtimes. Shipping trims this to the minimal set
-set(_ov_root "${ambient_SOURCE_DIR}/external/openvino/runtime")
+set(_ov_root "${clinicavt_SOURCE_DIR}/external/openvino/runtime")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     file(GLOB _ov_dlls "${_ov_root}/bin/intel64/Debug/*.dll"
          "${_ov_root}/bin/intel64/Debug/cache.json"
@@ -40,7 +40,7 @@ else()
     list(APPEND _ov_dlls ${_tbb_dlls})
 endif()
 # One deployment per output directory; targets there depend on the stamp
-function(ambient_deploy_openvino stamp_target)
+function(clinicavt_deploy_openvino stamp_target)
     add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ov.deployed"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_ov_dlls}
                 "${CMAKE_CURRENT_BINARY_DIR}"
@@ -50,7 +50,7 @@ function(ambient_deploy_openvino stamp_target)
 endfunction()
 
 # The PDF reader the ingest host links, fetched and pinned by tools/get-pdfium.ps1
-set(_pdfium_root "${ambient_SOURCE_DIR}/external/pdfium")
+set(_pdfium_root "${clinicavt_SOURCE_DIR}/external/pdfium")
 if(NOT EXISTS "${_pdfium_root}")
     message(FATAL_ERROR "PDFium not found: run tools/get-pdfium.ps1 first")
 endif()
@@ -72,22 +72,22 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 # Results to and from JSON. Ports and json only, so ipc links this and not the
 # guidance adapter
-add_library(ambient_guidance_record STATIC
+add_library(clinicavt_guidance_record STATIC
     src/adapters/guidance/guidance_record.cpp)
-target_link_libraries(ambient_guidance_record
-    PUBLIC ambient_core nlohmann_json::nlohmann_json
-    PRIVATE ambient_warnings)
+target_link_libraries(clinicavt_guidance_record
+    PUBLIC clinicavt_core nlohmann_json::nlohmann_json
+    PRIVATE clinicavt_warnings)
 
-add_library(ambient_ipc STATIC
+add_library(clinicavt_ipc STATIC
     src/adapters/ipc/engine_handlers.cpp
     src/adapters/ipc/guidance_handlers.cpp
     src/adapters/ipc/session_handlers.cpp
     src/adapters/ipc/pipe_security.cpp
     src/adapters/ipc/pipe_server.cpp
     src/adapters/ipc/wire_events.cpp)
-target_link_libraries(ambient_ipc
-    PUBLIC ambient_core ambient_guidance_record ambient_models nlohmann_json::nlohmann_json
-    PRIVATE ambient_warnings ambient_audio advapi32)
+target_link_libraries(clinicavt_ipc
+    PUBLIC clinicavt_core clinicavt_guidance_record clinicavt_models nlohmann_json::nlohmann_json
+    PRIVATE clinicavt_warnings clinicavt_audio advapi32)
 
 FetchContent_Declare(
     sqlite3
@@ -110,66 +110,66 @@ set_target_properties(sqlite3 PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
 
 # The schema and its migrations are SQL files, embedded so the engine stays
 # a single binary
-set(ambient_schema_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/adapters/storage/schema)
-file(READ ${ambient_schema_dir}/ambient.sql AMBIENT_SCHEMA_SQL)
-file(READ ${ambient_schema_dir}/migrate-2-to-3.sql AMBIENT_MIGRATE_2_TO_3_SQL)
-file(READ ${ambient_schema_dir}/migrate-3-to-4.sql AMBIENT_MIGRATE_3_TO_4_SQL)
-file(READ ${ambient_schema_dir}/migrate-4-to-5.sql AMBIENT_MIGRATE_4_TO_5_SQL)
-file(READ ${ambient_schema_dir}/migrate-5-to-6.sql AMBIENT_MIGRATE_5_TO_6_SQL)
+set(clinicavt_schema_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/adapters/storage/schema)
+file(READ ${clinicavt_schema_dir}/clinicavt.sql CLINICAVT_SCHEMA_SQL)
+file(READ ${clinicavt_schema_dir}/migrate-2-to-3.sql CLINICAVT_MIGRATE_2_TO_3_SQL)
+file(READ ${clinicavt_schema_dir}/migrate-3-to-4.sql CLINICAVT_MIGRATE_3_TO_4_SQL)
+file(READ ${clinicavt_schema_dir}/migrate-4-to-5.sql CLINICAVT_MIGRATE_4_TO_5_SQL)
+file(READ ${clinicavt_schema_dir}/migrate-5-to-6.sql CLINICAVT_MIGRATE_5_TO_6_SQL)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${ambient_schema_dir}/ambient.sql ${ambient_schema_dir}/migrate-2-to-3.sql
-    ${ambient_schema_dir}/migrate-3-to-4.sql ${ambient_schema_dir}/migrate-4-to-5.sql
-    ${ambient_schema_dir}/migrate-5-to-6.sql)
+    ${clinicavt_schema_dir}/clinicavt.sql ${clinicavt_schema_dir}/migrate-2-to-3.sql
+    ${clinicavt_schema_dir}/migrate-3-to-4.sql ${clinicavt_schema_dir}/migrate-4-to-5.sql
+    ${clinicavt_schema_dir}/migrate-5-to-6.sql)
 configure_file(src/adapters/storage/schema.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/adapters/storage/schema.hpp @ONLY)
 
-add_library(ambient_storage STATIC
+add_library(clinicavt_storage STATIC
     src/adapters/storage/chunk_cipher.cpp
     src/adapters/storage/db.cpp
     src/adapters/storage/sqlite_session_store.cpp
     src/adapters/storage/store_migrations.cpp)
-target_include_directories(ambient_storage PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(ambient_storage
-    PUBLIC ambient_core
-    PRIVATE ambient_warnings sqlite3 bcrypt crypt32 nlohmann_json::nlohmann_json)
+target_include_directories(clinicavt_storage PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(clinicavt_storage
+    PUBLIC clinicavt_core
+    PRIVATE clinicavt_warnings sqlite3 bcrypt crypt32 nlohmann_json::nlohmann_json)
 
-add_library(ambient_models STATIC
+add_library(clinicavt_models STATIC
     src/adapters/models/model_store.cpp
     src/adapters/models/ov_runtime.cpp)
-target_link_libraries(ambient_models
-    PUBLIC ambient_core nlohmann_json::nlohmann_json openvino::genai
-    PRIVATE ambient_warnings bcrypt)
+target_link_libraries(clinicavt_models
+    PUBLIC clinicavt_core nlohmann_json::nlohmann_json openvino::genai
+    PRIVATE clinicavt_warnings bcrypt)
 
-add_library(ambient_transcription STATIC
+add_library(clinicavt_transcription STATIC
     src/adapters/transcription/whisper_transcriber.cpp)
-target_link_libraries(ambient_transcription
-    PUBLIC ambient_core
-    PRIVATE ambient_models ambient_warnings openvino::genai)
+target_link_libraries(clinicavt_transcription
+    PUBLIC clinicavt_core
+    PRIVATE clinicavt_models clinicavt_warnings openvino::genai)
 
-add_library(ambient_note STATIC
+add_library(clinicavt_note STATIC
     src/adapters/note/llm_note_writer.cpp
     src/adapters/note/text_pipeline.cpp
     src/adapters/note/worker_note_writer.cpp)
-target_link_libraries(ambient_note
-    PUBLIC ambient_core
-    PRIVATE ambient_models ambient_warnings nlohmann_json::nlohmann_json openvino::genai)
+target_link_libraries(clinicavt_note
+    PUBLIC clinicavt_core
+    PRIVATE clinicavt_models clinicavt_warnings nlohmann_json::nlohmann_json openvino::genai)
 
-add_library(ambient_translate STATIC
+add_library(clinicavt_translate STATIC
     src/adapters/translate/nllb_translator.cpp)
-target_link_libraries(ambient_translate
-    PUBLIC ambient_core nlohmann_json::nlohmann_json
-    PRIVATE ambient_models ambient_warnings openvino::genai)
+target_link_libraries(clinicavt_translate
+    PUBLIC clinicavt_core nlohmann_json::nlohmann_json
+    PRIVATE clinicavt_models clinicavt_warnings openvino::genai)
 
 # The corpus schema is a SQL file, embedded like the session schema
-set(ambient_guidance_schema_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/adapters/guidance/schema)
-file(READ ${ambient_guidance_schema_dir}/corpus.sql AMBIENT_CORPUS_SCHEMA_SQL)
-file(READ ${ambient_guidance_schema_dir}/index.sql AMBIENT_INDEX_SCHEMA_SQL)
+set(clinicavt_guidance_schema_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/adapters/guidance/schema)
+file(READ ${clinicavt_guidance_schema_dir}/corpus.sql CLINICAVT_CORPUS_SCHEMA_SQL)
+file(READ ${clinicavt_guidance_schema_dir}/index.sql CLINICAVT_INDEX_SCHEMA_SQL)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${ambient_guidance_schema_dir}/corpus.sql ${ambient_guidance_schema_dir}/index.sql)
+    ${clinicavt_guidance_schema_dir}/corpus.sql ${clinicavt_guidance_schema_dir}/index.sql)
 configure_file(src/adapters/guidance/schema.hpp.in
     ${CMAKE_CURRENT_BINARY_DIR}/generated/adapters/guidance/schema.hpp @ONLY)
 
-add_library(ambient_guidance STATIC
+add_library(clinicavt_guidance STATIC
     src/adapters/guidance/document_index.cpp
     src/adapters/guidance/document_ingest.cpp
     src/adapters/guidance/folder_scan.cpp
@@ -178,16 +178,16 @@ add_library(ambient_guidance STATIC
     src/adapters/guidance/embedder.cpp
     src/adapters/guidance/guidance_lane.cpp
     src/adapters/guidance/retriever.cpp)
-target_include_directories(ambient_guidance PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(ambient_guidance
-    PUBLIC ambient_core ambient_models nlohmann_json::nlohmann_json
-    PRIVATE ambient_storage ambient_warnings openvino::genai bcrypt ole32 shell32)
+target_include_directories(clinicavt_guidance PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(clinicavt_guidance
+    PUBLIC clinicavt_core clinicavt_models nlohmann_json::nlohmann_json
+    PRIVATE clinicavt_storage clinicavt_warnings openvino::genai bcrypt ole32 shell32)
 
-add_library(ambient_vad STATIC
+add_library(clinicavt_vad STATIC
     src/adapters/vad/silero_vad.cpp)
-target_link_libraries(ambient_vad
-    PUBLIC ambient_core
-    PRIVATE ambient_models ambient_warnings openvino::genai)
+target_link_libraries(clinicavt_vad
+    PUBLIC clinicavt_core
+    PRIVATE clinicavt_models clinicavt_warnings openvino::genai)
 
 # Average-linkage clustering (fastcluster), the implementation the research
 # proved identical to the sklearn reference. No CMake build upstream; the
@@ -220,7 +220,7 @@ FetchContent_MakeAvailable(kaldi_native_fbank)
 # Not ours to keep warning-clean
 set_target_properties(kaldi-native-fbank-core kissfft PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
 
-add_library(ambient_diarisation STATIC
+add_library(clinicavt_diarisation STATIC
     src/adapters/diarisation/anchor_store.cpp
     src/adapters/diarisation/cluster_voiceprint.cpp
     src/adapters/diarisation/capture_stage.cpp
@@ -229,65 +229,65 @@ add_library(ambient_diarisation STATIC
     src/adapters/diarisation/speaker_clustering.cpp
     src/adapters/diarisation/speaker_diariser.cpp
     src/adapters/diarisation/speaker_embedder.cpp)
-target_include_directories(ambient_diarisation SYSTEM PRIVATE ${kaldi_native_fbank_SOURCE_DIR})
-target_link_libraries(ambient_diarisation
-    PUBLIC ambient_core ambient_models ambient_vad
-    PRIVATE ambient_warnings crypt32 hclust kaldi-native-fbank-core)
+target_include_directories(clinicavt_diarisation SYSTEM PRIVATE ${kaldi_native_fbank_SOURCE_DIR})
+target_link_libraries(clinicavt_diarisation
+    PUBLIC clinicavt_core clinicavt_models clinicavt_vad
+    PRIVATE clinicavt_warnings crypt32 hclust kaldi-native-fbank-core)
 
-add_library(ambient_audio STATIC
+add_library(clinicavt_audio STATIC
     src/adapters/audio/capture_devices.cpp
     src/adapters/audio/wasapi_capture.cpp
     src/adapters/audio/wasapi_player.cpp
     src/adapters/audio/wav_source.cpp)
-target_link_libraries(ambient_audio
-    PUBLIC ambient_core
-    PRIVATE ambient_warnings ole32 advapi32)
+target_link_libraries(clinicavt_audio
+    PUBLIC clinicavt_core
+    PRIVATE clinicavt_warnings ole32 advapi32)
 
-add_executable(ambient_engine src/engine_main.cpp)
-target_link_libraries(ambient_engine PRIVATE
-    ambient_ipc ambient_audio ambient_diarisation ambient_guidance ambient_note ambient_storage
-    ambient_transcription ambient_translate ambient_vad ambient_warnings ole32 shell32)
-ambient_deploy_openvino(ov_engine_runtime)
-add_dependencies(ambient_engine ov_engine_runtime)
+add_executable(clinicavt_engine src/engine_main.cpp)
+target_link_libraries(clinicavt_engine PRIVATE
+    clinicavt_ipc clinicavt_audio clinicavt_diarisation clinicavt_guidance clinicavt_note clinicavt_storage
+    clinicavt_transcription clinicavt_translate clinicavt_vad clinicavt_warnings ole32 shell32)
+clinicavt_deploy_openvino(ov_engine_runtime)
+add_dependencies(clinicavt_engine ov_engine_runtime)
 
 # The note model's own process; deployed beside the engine that spawns it
-add_executable(ambient_note_host src/note_host_main.cpp)
-target_link_libraries(ambient_note_host PRIVATE
-    ambient_ipc ambient_models ambient_note ambient_warnings)
-add_dependencies(ambient_note_host ov_engine_runtime)
-add_dependencies(ambient_engine ambient_note_host)
+add_executable(clinicavt_note_host src/note_host_main.cpp)
+target_link_libraries(clinicavt_note_host PRIVATE
+    clinicavt_ipc clinicavt_models clinicavt_note clinicavt_warnings)
+add_dependencies(clinicavt_note_host ov_engine_runtime)
+add_dependencies(clinicavt_engine clinicavt_note_host)
 
 # Reads PDFs in a process of its own, so a parser fault costs one document
-add_executable(ambient_ingest_host src/ingest_host_main.cpp)
-target_link_libraries(ambient_ingest_host PRIVATE
-    ambient_core pdfium nlohmann_json::nlohmann_json wer ambient_warnings)  # wer: Windows Error Reporting, for WerAddExcludedApplication
-add_custom_command(TARGET ambient_ingest_host POST_BUILD
+add_executable(clinicavt_ingest_host src/ingest_host_main.cpp)
+target_link_libraries(clinicavt_ingest_host PRIVATE
+    clinicavt_core pdfium nlohmann_json::nlohmann_json wer clinicavt_warnings)  # wer: Windows Error Reporting, for WerAddExcludedApplication
+add_custom_command(TARGET clinicavt_ingest_host POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_pdfium_root}/bin/pdfium.dll"
-            "$<TARGET_FILE_DIR:ambient_ingest_host>"
+            "$<TARGET_FILE_DIR:clinicavt_ingest_host>"
     VERBATIM)
-add_dependencies(ambient_engine ambient_ingest_host)
+add_dependencies(clinicavt_engine clinicavt_ingest_host)
 
 # Corpus building: the chunker, builder and indexer the engine never runs.
-# ambient_index builds a corpus with the staged embedder, so index and query
+# clinicavt_index builds a corpus with the staged embedder, so index and query
 # embeddings come from the same code; neither tool is deployed
-add_library(ambient_corpus STATIC
+add_library(clinicavt_corpus STATIC
     tools/corpus/chunker.cpp
     tools/corpus/corpus_builder.cpp
     tools/corpus/indexer.cpp)
-target_include_directories(ambient_corpus
+target_include_directories(clinicavt_corpus
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(ambient_corpus
-    PUBLIC ambient_guidance ambient_models nlohmann_json::nlohmann_json
-    PRIVATE ambient_storage ambient_warnings openvino::genai)
+target_link_libraries(clinicavt_corpus
+    PUBLIC clinicavt_guidance clinicavt_models nlohmann_json::nlohmann_json
+    PRIVATE clinicavt_storage clinicavt_warnings openvino::genai)
 
-add_executable(ambient_index tools/corpus/index_main.cpp)
-target_link_libraries(ambient_index PRIVATE ambient_corpus ambient_warnings)
-add_dependencies(ambient_index ov_engine_runtime)
+add_executable(clinicavt_index tools/corpus/index_main.cpp)
+target_link_libraries(clinicavt_index PRIVATE clinicavt_corpus clinicavt_warnings)
+add_dependencies(clinicavt_index ov_engine_runtime)
 
 # Prints a PDF's units, to check the chunker on real documents
-add_executable(ambient_units tools/units_main.cpp)
-target_link_libraries(ambient_units PRIVATE ambient_guidance nlohmann_json::nlohmann_json ambient_warnings)
-add_dependencies(ambient_units ambient_ingest_host)
+add_executable(clinicavt_units tools/units_main.cpp)
+target_link_libraries(clinicavt_units PRIVATE clinicavt_guidance nlohmann_json::nlohmann_json clinicavt_warnings)
+add_dependencies(clinicavt_units clinicavt_ingest_host)
 
 add_subdirectory(tests)

@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 const std::vector<float> kAudio(400000, 0.1f);
@@ -150,9 +150,9 @@ TEST(SpeculatedTurns, NothingKnownIsEmpty) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 TEST(AssembleFromChunks, ACutPieceOnChunkEdgesIsAssembledNotRedecoded) {
@@ -175,4 +175,4 @@ TEST(AssembleFromChunks, ACutPieceOnChunkEdgesIsAssembledNotRedecoded) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

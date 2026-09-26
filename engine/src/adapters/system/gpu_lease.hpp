@@ -14,11 +14,11 @@
 #endif
 #include <windows.h>
 
-namespace ambient::system {
+namespace clinicavt::system {
 
 // One named mutex serialises the engine's Whisper decodes against the note host's
 // capture-phase prefills, so the two GPU models never run concurrently (the driver
-// fault configuration). Named by AMBIENT_GPU_LEASE, which the engine sets and the
+// fault configuration). Named by CLINICAVT_GPU_LEASE, which the engine sets and the
 // host inherits. Inert when unset
 class GpuLease {
    public:
@@ -72,7 +72,7 @@ class GpuLease {
     static GpuLease& Global() {
         static GpuLease lease([] {
 #pragma warning(suppress : 4996)
-            const char* name = std::getenv("AMBIENT_GPU_LEASE");
+            const char* name = std::getenv("CLINICAVT_GPU_LEASE");
             return std::string(name != nullptr ? name : "");
         }());
         return lease;
@@ -114,4 +114,4 @@ class GpuLease {
     std::atomic<bool> broken_{false};
 };
 
-}  // namespace ambient::system
+}  // namespace clinicavt::system

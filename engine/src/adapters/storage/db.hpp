@@ -11,7 +11,7 @@
 struct sqlite3;
 struct sqlite3_stmt;
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 class Db {
    public:
@@ -88,4 +88,4 @@ class Db {
     sqlite3* db_ = nullptr;
 };
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

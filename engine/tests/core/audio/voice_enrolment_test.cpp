@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 namespace {
 
 // Speech wherever the hop has energy
@@ -57,4 +57,4 @@ TEST(EnrolRejection, NamesCancellationDeviceLossAndTooLittleSpeech) {
 }
 
 }  // namespace
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

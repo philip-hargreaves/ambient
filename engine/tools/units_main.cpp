@@ -14,16 +14,16 @@
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
-        std::fprintf(stderr, "usage: ambient_units <document.pdf>\n");
+        std::fprintf(stderr, "usage: clinicavt_units <document.pdf>\n");
         return 1;
     }
     std::ifstream file(argv[1], std::ios::binary);
     const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(file)),
                                           std::istreambuf_iterator<char>());
-    const auto host = std::filesystem::path(argv[0]).parent_path() / "ambient_ingest_host.exe";
+    const auto host = std::filesystem::path(argv[0]).parent_path() / "clinicavt_ingest_host.exe";
     try {
-        auto pages = ambient::guidance::IngestHost(host).Extract(bytes);
-        for (const auto& unit : ambient::guidance::UnitsFromPages(pages)) {
+        auto pages = clinicavt::guidance::IngestHost(host).Extract(bytes);
+        for (const auto& unit : clinicavt::guidance::UnitsFromPages(pages)) {
             const nlohmann::json row{{"page", unit.page},
                                      {"number", unit.number},
                                      {"section", unit.section},

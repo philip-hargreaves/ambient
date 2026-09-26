@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::metrics {
+namespace clinicavt::metrics {
 namespace {
 
 TEST(Metrics, RecordsAndSnapshots) {
@@ -49,4 +49,4 @@ TEST(Metrics, ANewSessionKeepsDevicesAndLoadsOnly) {
 }
 
 }  // namespace
-}  // namespace ambient::metrics
+}  // namespace clinicavt::metrics

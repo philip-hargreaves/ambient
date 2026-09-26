@@ -25,7 +25,7 @@
 #include "ports/streaming_vad.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 // One session at a time. Every ending has a storage outcome: Stop
 // finalises, Cancel erases, an interruption abandons recoverable
@@ -159,4 +159,4 @@ class SessionController {
     audio::SourceEnd end_{};
 };
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

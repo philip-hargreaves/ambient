@@ -8,7 +8,7 @@
 
 #include "ports/streaming_vad.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // Batch Silero over the whole recording, cut finely. Validated, do not retune
 inline constexpr float kEnter = 0.40f;
@@ -87,4 +87,4 @@ inline std::vector<Region> SpeechRegions(std::span<const float> probabilities,
     return regions;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

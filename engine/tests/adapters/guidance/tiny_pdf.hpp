@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance::fixture {
+namespace clinicavt::guidance::fixture {
 
 // A one-page PDF with the lines set in Helvetica, offsets computed here
 inline std::vector<std::uint8_t> TinyPdf(const std::vector<std::string>& lines) {
@@ -41,4 +41,4 @@ inline std::vector<std::uint8_t> TinyPdf(const std::vector<std::string>& lines) 
     return {pdf.begin(), pdf.end()};
 }
 
-}  // namespace ambient::guidance::fixture
+}  // namespace clinicavt::guidance::fixture

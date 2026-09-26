@@ -5,7 +5,7 @@
 
 #include "ports/guidance_retriever.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 struct SearchRequest {
     std::string session;   // empty for a typed query
@@ -28,4 +28,4 @@ class IGuidanceLane {
     virtual void Run(SearchRequest request) = 0;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

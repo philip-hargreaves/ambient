@@ -9,7 +9,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_text.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -109,4 +109,4 @@ void DropReferenceTail(std::vector<Paragraph>& paragraphs) {
     }
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

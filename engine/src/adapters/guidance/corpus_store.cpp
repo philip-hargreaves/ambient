@@ -7,7 +7,7 @@
 #include "adapters/guidance/loader_core.hpp"
 #include "adapters/models/model_store.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 std::string Str(const nlohmann::json& j, const char* key) {
@@ -178,4 +178,4 @@ ChunkText CorpusStore::TextAt(std::size_t ord) {
     return out;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

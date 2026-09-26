@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // A document in the guidelines folder, one per content
 struct DocumentInfo {
@@ -80,4 +80,4 @@ class IDocumentIngest {
                              std::function<void(const DocumentInfo&)> document) = 0;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

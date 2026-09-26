@@ -9,7 +9,7 @@
 #include "ports/store_error.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 using SessionId = std::string;
 
@@ -124,4 +124,4 @@ class ISessionStore {
     virtual void SetFaultListener(std::function<void(const StoreError&)>) {}
 };
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

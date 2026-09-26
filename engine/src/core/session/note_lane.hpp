@@ -14,7 +14,7 @@
 #include "ports/session_store.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 // The documents written from a finished transcript on their own thread, after
 // finalise: the note, then the patient sheet, then the title. One write at a
@@ -76,4 +76,4 @@ class NoteLane {
     std::atomic<bool> refused_{false};
 };
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

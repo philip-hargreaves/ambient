@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 HERE = Path(__file__).resolve().parent
 LANGUAGES = ["Urdu", "Punjabi", "Bengali", "Gujarati", "Polish", "Romanian", "Arabic", "Somali"]
 LOW_RESOURCE = ("Urdu", "Punjabi", "Bengali", "Gujarati", "Somali")

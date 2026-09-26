@@ -8,7 +8,7 @@
 #include "adapters/guidance/embedder.hpp"
 #include "tools/corpus/chunker.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // What the indexer knows about a corpus that the chunks do not carry
 struct CorpusSpec {
@@ -32,4 +32,4 @@ struct CorpusSpec {
 void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
                  const std::vector<Chunk>& chunks, std::span<const float> vectors);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

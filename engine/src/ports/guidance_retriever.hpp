@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // A guidance corpus the retriever found. The hash, embedder and build date
 // name the exact text a result came from. A corpus that failed a load guard is
@@ -87,4 +87,4 @@ class IGuidanceRetriever {
     virtual void SetResearch(bool /*include*/) {}
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

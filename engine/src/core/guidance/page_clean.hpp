@@ -9,7 +9,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_text.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // A running header or footer repeats on this share of the pages, at least
 // kFurnitureMinPages, inside the top or bottom band of each
@@ -51,4 +51,4 @@ void CleanPages(std::vector<Page>& pages);
 // Every word the document uses, lower case, ASCII letters only
 std::unordered_set<std::string> DocumentWords(const std::vector<Page>& pages);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

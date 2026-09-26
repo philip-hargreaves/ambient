@@ -6,11 +6,11 @@
 #include <openvino/genai/streamer_base.hpp>
 #include <string>
 
-namespace ambient::models {
+namespace clinicavt::models {
 struct ModelInfo;
-}  // namespace ambient::models
+}  // namespace clinicavt::models
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 // One resident model behind whichever GenAI pipeline its manifest names. The
 // writer never learns which. A single history: a prompt that extends the
@@ -35,4 +35,4 @@ class TextPipeline {
 std::unique_ptr<TextPipeline> MakeTextPipeline(const models::ModelInfo& info,
                                                const std::string& device);
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

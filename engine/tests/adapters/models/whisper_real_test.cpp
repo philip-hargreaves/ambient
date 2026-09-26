@@ -11,7 +11,7 @@
 #include "adapters/transcription/whisper_transcriber.hpp"
 #include "ports/audio_source.hpp"
 
-namespace ambient::asr {
+namespace clinicavt::asr {
 namespace {
 
 // Not in the repo. The test skips without it
@@ -36,7 +36,7 @@ TEST(WhisperReal, TranscribesRealSpeechWithTimingsInsideTheClip) {
         GTEST_SKIP() << "research corpus not mounted";
     }
     const auto frames = First30Seconds(kWav);
-    const models::ModelStore store(std::filesystem::path(AMBIENT_MODELS_DIR));
+    const models::ModelStore store(std::filesystem::path(CLINICAVT_MODELS_DIR));
     models::OvRuntime runtime;
 
     WhisperTranscriber transcriber(store, runtime);
@@ -55,4 +55,4 @@ TEST(WhisperReal, TranscribesRealSpeechWithTimingsInsideTheClip) {
 }
 
 }  // namespace
-}  // namespace ambient::asr
+}  // namespace clinicavt::asr

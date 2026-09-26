@@ -20,7 +20,7 @@
 #include "ports/diariser.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 
 Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& diariser,
                                asr::ITranscriber& transcriber, ISessionEvents& events,
@@ -33,7 +33,7 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
     {
         const auto& t = result.timing;
         std::fprintf(stderr,
-                     "ambient-engine: diarise finish %.2f s, embed %.2f s (%d hits, %d misses), "
+                     "clinicavt-engine: diarise finish %.2f s, embed %.2f s (%d hits, %d misses), "
                      "cluster %.2f s, overlap %.2f s\n",
                      t.finish_s, t.embed_s, t.embed_hits, t.embed_misses, t.cluster_s, t.overlap_s);
         if (metrics != nullptr) {
@@ -97,7 +97,7 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
             longest = std::max(longest, turns[i].end_frame - turns[i].first_frame);
         }
         std::fprintf(stderr,
-                     "ambient-engine: %zu turns, %zu with text, %zu cached, longest %.1f s, "
+                     "clinicavt-engine: %zu turns, %zu with text, %zu cached, longest %.1f s, "
                      "%d clusters\n",
                      turns.size(), with_text, cache.size(),
                      static_cast<double>(longest) / audio::kSampleRate, result.cluster_count);
@@ -120,7 +120,8 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
             std::snprintf(one, sizeof one, " %.3f", s);
             sims += one;
         }
-        std::fprintf(stderr, "ambient-engine: roles anchor sims%s margin %.3f -> doctor %d by %s\n",
+        std::fprintf(stderr,
+                     "clinicavt-engine: roles anchor sims%s margin %.3f -> doctor %d by %s\n",
                      sims.empty() ? " none" : sims.c_str(), roles.margin, roles.doctor_cluster,
                      roles.from_anchor ? "print" : "content");
     }
@@ -141,4 +142,4 @@ Transcript TranscribeRecording(std::span<const float> audio, diar::IDiariser& di
     return transcript;
 }
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

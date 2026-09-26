@@ -10,7 +10,7 @@
 #include "core/note/note_label.hpp"
 #include "core/note/summary_scrub.hpp"
 
-namespace ambient::session {
+namespace clinicavt::session {
 namespace {
 
 std::size_t TranscriptWords(const std::vector<asr::Turn>& turns) {
@@ -83,7 +83,7 @@ void NoteLane::WriteNote(store::SessionId id, std::vector<asr::Turn> transcript,
                                   [&forward](const std::string& partial) { forward(partial); });
             if (const auto reason = note::RefusalReason(note);
                 reason.has_value() && !options.confirmed) {
-                std::fprintf(stderr, "ambient-engine: note refused: %s\n", reason->c_str());
+                std::fprintf(stderr, "clinicavt-engine: note refused: %s\n", reason->c_str());
                 refused_ = true;
                 events_.OnNoteRefused(*reason, true);
                 return;  // no note, no sheet, no label, and the print learns nothing
@@ -93,10 +93,10 @@ void NoteLane::WriteNote(store::SessionId id, std::vector<asr::Turn> transcript,
                 try {
                     events_.OnNoteSaved(id, *stored);
                 } catch (const std::exception& e) {
-                    std::fprintf(stderr, "ambient-engine: work after the note not started: %s\n",
+                    std::fprintf(stderr, "clinicavt-engine: work after the note not started: %s\n",
                                  e.what());
                 } catch (...) {
-                    std::fprintf(stderr, "ambient-engine: work after the note not started\n");
+                    std::fprintf(stderr, "clinicavt-engine: work after the note not started\n");
                 }
             }
             refused_ = false;
@@ -243,4 +243,4 @@ void NoteLane::SaveLabel(const store::SessionId& id, const std::string& note_tex
     }
 }
 
-}  // namespace ambient::session
+}  // namespace clinicavt::session

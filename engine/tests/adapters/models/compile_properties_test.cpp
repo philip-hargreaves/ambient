@@ -2,7 +2,7 @@
 
 #include "adapters/models/ov_runtime.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 namespace {
 
 TEST(CompileProperties, TheCacheSitsBesideTheModelAndManifestPropertiesPassThrough) {
@@ -26,4 +26,4 @@ TEST(CompileProperties, NoPropertiesMeansTheCacheAlone) {
 }
 
 }  // namespace
-}  // namespace ambient::models
+}  // namespace clinicavt::models

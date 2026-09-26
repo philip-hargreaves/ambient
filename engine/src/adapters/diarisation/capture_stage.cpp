@@ -16,7 +16,7 @@
 #include "core/diarisation/slice_refinement.hpp"
 #include "core/diarisation/turn_decode.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 CaptureStage::CaptureStage(audio::SileroVad& vad, Segmenter& segmenter, SpeakerEmbedder& embedder)
     : vad_(vad), segmenter_(segmenter), embedder_(embedder) {
@@ -162,7 +162,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
             ++decoded;
             decoded_audio += static_cast<double>(b - a) / audio::kSampleRate;
             if (catch_up) {
-                std::fprintf(stderr, "ambient-engine: %s decoded %.1f-%.1f s\n",
+                std::fprintf(stderr, "clinicavt-engine: %s decoded %.1f-%.1f s\n",
                              catch_up ? "catch-up" : "tick",
                              static_cast<double>(a) / audio::kSampleRate,
                              static_cast<double>(b) / audio::kSampleRate);
@@ -176,7 +176,7 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     if (catch_up) {
         const auto t_end = Clock::now();
         std::fprintf(stderr,
-                     "ambient-engine: catch-up frontier %.1f of %.1f s, slices %zu, "
+                     "clinicavt-engine: catch-up frontier %.1f of %.1f s, slices %zu, "
                      "segment+cuts %.2f s, embed %.2f s, cluster %.2f s, decode %d spans "
                      "(%.1f s audio, %d cached) %.2f s, total %.2f s\n",
                      static_cast<double>(settled) / audio::kSampleRate,
@@ -239,4 +239,4 @@ void CaptureStage::Advance(std::span<const float> audio, const DecodeClipFn& dec
     }
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

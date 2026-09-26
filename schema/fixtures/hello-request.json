@@ -3,7 +3,7 @@
   "id": 1,
   "method": "engine/hello",
   "params": {
-    "name": "ambient-shell",
+    "name": "clinicavt-shell",
     "version": "0.1.0",
     "protocolVersion": 1
   }

@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(os.environ.get("MT_ROOT", r"D:\ambient-mt"))
+ROOT = Path(os.environ.get("MT_ROOT", r"D:\clinicavt-mt"))
 HERE = Path(__file__).resolve().parent
 SHIPPED = Path(r"C:\dev\ambient\models\nllb-200-600m-int8")
 

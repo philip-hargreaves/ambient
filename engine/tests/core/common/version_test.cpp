@@ -3,9 +3,9 @@
 #include <gtest/gtest.h>
 
 TEST(Version, NameIsSet) {
-    EXPECT_STREQ(ambient::kName, "ambient");
+    EXPECT_STREQ(clinicavt::kName, "clinicavt");
 }
 
 TEST(Version, MatchesCMakeProjectVersion) {
-    EXPECT_STREQ(ambient::kVersion, AMBIENT_CMAKE_VERSION);
+    EXPECT_STREQ(clinicavt::kVersion, CLINICAVT_CMAKE_VERSION);
 }

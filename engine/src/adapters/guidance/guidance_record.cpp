@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 // Null where absence is a state of its own, distinct from built and refused
@@ -175,4 +175,4 @@ bool CanRead(const json& j) {
     return shown != j.end() && shown->is_array() && abstained != j.end() && abstained->is_boolean();
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

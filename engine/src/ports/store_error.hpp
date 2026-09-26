@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 // Why a store call failed, so a caller can tell a missing session from a full disk
 enum class StoreCode { kNotFound, kBusy, kFull, kIo, kAuth, kSchema, kOther };
@@ -20,4 +20,4 @@ class StoreError : public std::runtime_error {
     StoreCode code_;
 };
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

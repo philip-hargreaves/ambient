@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 // The note model's first line when the transcript is not a healthcare
 // consultation. The engine reports a refusal instead of saving a note
@@ -67,4 +67,4 @@ class RefusalFilter {
     bool refused_ = false;
 };
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

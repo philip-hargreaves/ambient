@@ -17,7 +17,7 @@
 #include "adapters/storage/db.hpp"
 #include "adapters/storage/sqlite_session_store.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 namespace {
 
 using namespace std::chrono_literals;
@@ -30,10 +30,10 @@ struct TempRoot {
     std::filesystem::path path;
 
     TempRoot() {
-        path =
-            std::filesystem::temp_directory_path() /
-            ("ambient-store-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-             "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        path = std::filesystem::temp_directory_path() /
+               ("clinicavt-store-" +
+                std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name());
     }
 
     ~TempRoot() {
@@ -42,7 +42,7 @@ struct TempRoot {
     }
 
     std::filesystem::path DbPath() const {
-        return path / "ambient.db";
+        return path / "clinicavt.db";
     }
 };
 
@@ -1098,7 +1098,7 @@ TEST(SessionStore, ErasedKeysLeaveNoRemnantInTheFileOrWal) {
     ASSERT_GT(wrapped.size(), 96u);
     // Past the header every DPAPI blob shares
     const std::vector<std::uint8_t> needle(wrapped.begin() + 32, wrapped.begin() + 96);
-    const auto wal = root.path / "ambient.db-wal";
+    const auto wal = root.path / "clinicavt.db-wal";
     ASSERT_TRUE(FileHolds(root.DbPath(), needle) || FileHolds(wal, needle));
 
     store.Delete(id);
@@ -1138,4 +1138,4 @@ TEST(SessionStore, AppendNeverWaitsOnTheDatabase) {
 }
 
 }  // namespace
-}  // namespace ambient::store
+}  // namespace clinicavt::store

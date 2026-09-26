@@ -1,6 +1,6 @@
 """Parity of the native C++ pipelines against the Python harness and the reference model.
 
-  python native_check.py bge-base --precision fp16 [--proof D:\\ambient-rag\\native-build\\Release\\proof.exe] [--n 20]
+  python native_check.py bge-base --precision fp16 [--proof D:\\clinicavt-rag\\native-build\\Release\\proof.exe] [--n 20]
   python native_check.py minilm-l6 --precision fp16 --rerank
 
 Writes rag/results/<stamp>-native-<id>/parity.json
@@ -42,7 +42,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("id")
     ap.add_argument("--precision", default="fp16")
-    ap.add_argument("--proof", default=r"D:\ambient-rag\native-build\Release\proof.exe")
+    ap.add_argument("--proof", default=r"D:\clinicavt-rag\native-build\Release\proof.exe")
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--rerank", action="store_true")
     args = ap.parse_args()

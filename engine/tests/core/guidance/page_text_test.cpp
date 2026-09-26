@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 PageLine Line(const char* text, float top, float bottom, float left = 0.1F, float right = 0.9F) {
@@ -126,4 +126,4 @@ TEST(PageText, EmptyLinesAndEmptyPagesLeaveNothing) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

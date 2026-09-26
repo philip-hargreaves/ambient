@@ -9,7 +9,7 @@
 #include "adapters/guidance/ingest_exit.hpp"
 #include "adapters/system/child_process.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 using json = nlohmann::json;
@@ -206,4 +206,4 @@ Bitmap IngestHost::Render(std::span<const std::uint8_t> document, int page, int 
         Run(document, L"render " + std::to_wstring(page) + L" " + std::to_wstring(dpi)));
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -7,7 +7,7 @@
 
 #include "core/guidance/recommendation_marks.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // One retrievable unit: a recommendation from a structured guideline, or a
 // paragraph run from plain text. The same record the evaluation harness indexed
@@ -43,4 +43,4 @@ std::vector<Chunk> ChunksFromDocument(const nlohmann::json& doc, std::set<std::s
 std::vector<Chunk> ChunksFromText(const std::string& code, const std::string& title,
                                   const std::string& text, const std::string& url = "");
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

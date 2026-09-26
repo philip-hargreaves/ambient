@@ -11,7 +11,7 @@
 
 #include "tools/corpus/chunker.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 nlohmann::json Document() {
@@ -120,9 +120,10 @@ TEST(ChunksFromDocument, ReproducesTheHarnessChunkFileWhenTheCorpusIsPresent) {
         std::free(value);
         return out;
     };
-    const auto dir = env("AMBIENT_NICE_DIR");
-    const auto file = env("AMBIENT_NICE_CHUNKS");
-    if (dir.empty() || file.empty()) GTEST_SKIP() << "set AMBIENT_NICE_DIR and AMBIENT_NICE_CHUNKS";
+    const auto dir = env("CLINICAVT_NICE_DIR");
+    const auto file = env("CLINICAVT_NICE_CHUNKS");
+    if (dir.empty() || file.empty())
+        GTEST_SKIP() << "set CLINICAVT_NICE_DIR and CLINICAVT_NICE_CHUNKS";
     const std::filesystem::path root(dir);
     std::set<std::string> requested;
     {
@@ -173,4 +174,4 @@ TEST(ChunksFromDocument, ReproducesTheHarnessChunkFileWhenTheCorpusIsPresent) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

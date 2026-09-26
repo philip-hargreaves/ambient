@@ -2,7 +2,7 @@
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "name": "ambient",
+    "name": "clinicavt",
     "version": "0.1.0",
     "protocolVersion": 1
   }

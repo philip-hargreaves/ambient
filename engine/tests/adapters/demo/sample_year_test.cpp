@@ -7,7 +7,7 @@
 
 #include "core/note/summary_scrub.hpp"
 
-namespace ambient::demo {
+namespace clinicavt::demo {
 namespace {
 
 using namespace std::chrono;
@@ -15,7 +15,7 @@ using namespace std::chrono;
 // The shipped content: eight consultations over eight distinct months, each
 // whole, and nothing in what the app shows that the scrub would change
 TEST(SampleYear, TheShippedContentIsWholeAndSpreadOverTheYear) {
-    const auto samples = LoadSampleYear(AMBIENT_DEMO_DIR);
+    const auto samples = LoadSampleYear(CLINICAVT_DEMO_DIR);
     ASSERT_EQ(samples.size(), 8u);
     std::set<int> months;
     std::set<std::string> sources;
@@ -63,4 +63,4 @@ TEST(SampleYear, StartsFallOnTheSampleDayMonthsBackClampedToTheMonth) {
 }
 
 }  // namespace
-}  // namespace ambient::demo
+}  // namespace clinicavt::demo

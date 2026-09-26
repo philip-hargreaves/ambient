@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 // 32 ms hops. Speech everywhere except a pause at hops 40-42 (1.28-1.34 s)
@@ -40,4 +40,4 @@ TEST(SnapClipCuts, TwoEdgesOnOnePauseKeepOne) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

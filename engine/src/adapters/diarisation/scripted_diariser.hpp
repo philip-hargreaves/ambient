@@ -5,7 +5,7 @@
 
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // CI stand-in when no speaker models are staged: the whole recording is one
 // speaker, so the finalise decode yields one turn
@@ -24,4 +24,4 @@ class ScriptedDiariser : public IDiariser {
     }
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

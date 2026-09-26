@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::note {
+namespace clinicavt::note {
 namespace {
 
 TEST(RefusalReason, ReadsTheSentinelLineAndNothingElse) {
@@ -47,4 +47,4 @@ TEST(RefusalFilter, AnOrdinaryOpeningStreamsAtOnce) {
 }
 
 }  // namespace
-}  // namespace ambient::note
+}  // namespace clinicavt::note

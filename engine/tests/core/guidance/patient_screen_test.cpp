@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 TEST(PatientScreen, FindsAnNhsNumberByItsCheckDigit) {
@@ -20,7 +20,7 @@ TEST(PatientScreen, FindsLetterAndRecordPhrasesAndNothingInAGuideline) {
     EXPECT_TRUE(LooksLikePatientData("DISCHARGE SUMMARY\nWard 4"));
     EXPECT_TRUE(LooksLikePatientData("DOB: 12/03/1961"));
     EXPECT_TRUE(
-        LooksLikePatientData("Ambient export - not for the guidelines folder.\n\nPlan: ..."))
+        LooksLikePatientData("ClinicAVT export - not for the guidelines folder.\n\nPlan: ..."))
         << "the app's own exports are refused if filed as guidance";
     EXPECT_FALSE(LooksLikePatientData(
         "We recommend initiation of low-dose steroid therapy with gradually tailored tapering in "
@@ -28,4 +28,4 @@ TEST(PatientScreen, FindsLetterAndRecordPhrasesAndNothingInAGuideline) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

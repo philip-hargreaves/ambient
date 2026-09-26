@@ -10,7 +10,7 @@
 
 #include "core/guidance/page_text.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 struct HostLimits {
     std::chrono::milliseconds timeout{180'000};
@@ -40,7 +40,7 @@ struct Bitmap {
     std::vector<std::uint8_t> bmp;
 };
 
-// Runs ambient_ingest_host once per call in a job of its own: one process, a
+// Runs clinicavt_ingest_host once per call in a job of its own: one process, a
 // memory cap, killed with the engine. The document goes in on stdin and the
 // pages or the pixels come back on stdout, checked before anything reads them
 class IngestHost {
@@ -57,4 +57,4 @@ class IngestHost {
     HostLimits limits_;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

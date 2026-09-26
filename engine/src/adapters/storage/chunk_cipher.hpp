@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 // Keeps each stream's IVs disjoint. Every domain counts seq from zero
 enum class Domain : std::uint8_t {
@@ -70,4 +70,4 @@ class ChunkCipher {
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 namespace {
 
@@ -136,4 +136,4 @@ std::wstring WideId(const std::string& id) {
     return out;
 }
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

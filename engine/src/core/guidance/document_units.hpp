@@ -12,7 +12,7 @@
 #include "core/guidance/recommendation_marks.hpp"
 #include "core/guidance/reference_tail.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // What an added document is searched and shown by: a paragraph, or a run of
 // short ones, under the heading that preceded it. A box for each line it covers
@@ -93,4 +93,4 @@ std::vector<Unit> UnitsFromPages(std::vector<Page>& pages);
 
 std::vector<Unit> UnitsFromText(const std::string& text);
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

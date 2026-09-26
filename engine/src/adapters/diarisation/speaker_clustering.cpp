@@ -7,7 +7,7 @@
 #include "core/diarisation/embeddings.hpp"
 #include "fastcluster.h"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 std::vector<std::vector<float>> Normalised(const std::vector<std::vector<float>>& embeddings) {
@@ -148,4 +148,4 @@ ClusterResult ClusterSpeakers(const std::vector<std::vector<float>>& embeddings,
     return result;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

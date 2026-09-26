@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 Results Sample() {
@@ -139,4 +139,4 @@ TEST(GuidanceRecord, CarriesTheSearchedCorpusAndFloor) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

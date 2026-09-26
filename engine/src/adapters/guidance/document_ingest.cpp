@@ -13,7 +13,7 @@
 #include "core/guidance/patient_screen.hpp"
 #include "ports/store_error.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 constexpr std::uintmax_t kSpareBytes = 200ull << 20;
@@ -26,14 +26,14 @@ constexpr int kMaxDepth = 3;
 constexpr const char* kPdf = "application/pdf";
 
 constexpr const char* kReadMeText =
-    "Guidelines for Ambient\n\n"
-    "PDF, text and Markdown files in this folder are read by Ambient and searched after each\n"
+    "Guidelines for ClinicAVT\n\n"
+    "PDF, text and Markdown files in this folder are read by ClinicAVT and searched after each\n"
     "consultation note, beside the installed guidance. Passages it finds are shown with the\n"
     "page they came from.\n\n"
     "Add a file to start searching it. Replace a file to update it. Delete a file, or move it\n"
-    "out, to stop searching it. Ambient notices within a few seconds and a new document takes\n"
-    "about ten seconds to read. Ambient never changes your files. If you delete this folder,\n"
-    "Ambient makes it again, empty.\n\n"
+    "out, to stop searching it. ClinicAVT notices within a few seconds and a new document takes\n"
+    "about ten seconds to read. ClinicAVT never changes your files. If you delete this folder,\n"
+    "ClinicAVT makes it again, empty.\n\n"
     "Do not add patient-identifiable documents. Text from these files is shown beside other\n"
     "consultations and kept with their notes. If this folder is inside OneDrive, its files\n"
     "sync like the rest of your Documents.\n\n"
@@ -498,11 +498,11 @@ void DocumentIngest::Index(const Queued& item) {
         Publish();
         Notify(index_.Get(id));
     } catch (const HostError& e) {
-        std::fprintf(stderr, "ambient-engine: document %lld %s: %s\n", static_cast<long long>(id),
+        std::fprintf(stderr, "clinicavt-engine: document %lld %s: %s\n", static_cast<long long>(id),
                      e.Reason().c_str(), e.what());
         fail(e.Reason());
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: document %lld failed: %s\n",
+        std::fprintf(stderr, "clinicavt-engine: document %lld failed: %s\n",
                      static_cast<long long>(id), e.what());
         fail("unreadable");
     }
@@ -562,4 +562,4 @@ void DocumentIngest::Progress(std::int64_t id, const char* phase, int done, int 
     if (listener) listener({id, phase, done, total});
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

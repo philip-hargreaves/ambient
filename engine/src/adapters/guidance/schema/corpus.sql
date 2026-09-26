@@ -1,4 +1,4 @@
--- Ambient guidance corpus. One file per corpus, built as corpus.db.tmp by the
+-- ClinicAVT guidance corpus. One file per corpus, built as corpus.db.tmp by the
 -- indexer and renamed into corpora/<id>/corpus.db beside manifest.json.
 -- Public or licensed reference text, never patient data, so nothing is sealed.
 -- Immutable once built: rollback journal, opened read-only. page_size 65536.

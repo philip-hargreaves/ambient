@@ -29,7 +29,7 @@ namespace {
 // the pipe stays responsive to cancel
 class GenerationLane {
    public:
-    explicit GenerationLane(ambient::ipc::PipeServer& server) : server_(server) {}
+    explicit GenerationLane(clinicavt::ipc::PipeServer& server) : server_(server) {}
 
     ~GenerationLane() {
         if (thread_.joinable()) {
@@ -37,7 +37,7 @@ class GenerationLane {
         }
     }
 
-    bool Run(std::function<std::string(const ambient::note::INoteWriter::Progress&)> generate) {
+    bool Run(std::function<std::string(const clinicavt::note::INoteWriter::Progress&)> generate) {
         if (running_.exchange(true)) {
             return false;
         }
@@ -53,7 +53,7 @@ class GenerationLane {
                     generate([this, &t0, &first_at, &pieces](const std::string& partial) {
                         if (pieces++ == 0) {
                             first_at = std::chrono::steady_clock::now();
-                            std::fprintf(stderr, "ambient-note-host: first token in %.1f s\n",
+                            std::fprintf(stderr, "clinicavt-note-host: first token in %.1f s\n",
                                          std::chrono::duration<double>(first_at - t0).count());
                         }
                         server_.PushNotification("partial", {{"text", partial}});
@@ -62,7 +62,7 @@ class GenerationLane {
                     std::chrono::duration<double>(std::chrono::steady_clock::now() - first_at)
                         .count();
                 if (pieces > 1 && decode_s > 0) {
-                    std::fprintf(stderr, "ambient-note-host: %zu tokens in %.1f s, %.1f tok/s\n",
+                    std::fprintf(stderr, "clinicavt-note-host: %zu tokens in %.1f s, %.1f tok/s\n",
                                  pieces, decode_s, (pieces - 1) / decode_s);
                 }
                 server_.PushNotification("ready", {{"text", text}});
@@ -77,15 +77,15 @@ class GenerationLane {
     }
 
    private:
-    ambient::ipc::PipeServer& server_;
+    clinicavt::ipc::PipeServer& server_;
     std::thread thread_;
     std::atomic<bool> running_{false};
 };
 
-std::vector<ambient::asr::Turn> TurnsFrom(const nlohmann::json& params) {
-    std::vector<ambient::asr::Turn> turns;
+std::vector<clinicavt::asr::Turn> TurnsFrom(const nlohmann::json& params) {
+    std::vector<clinicavt::asr::Turn> turns;
     for (const auto& t : params.value("turns", nlohmann::json::array())) {
-        turns.push_back(ambient::ipc::TurnFromJson(t));
+        turns.push_back(clinicavt::ipc::TurnFromJson(t));
     }
     return turns;
 }
@@ -101,28 +101,30 @@ int main(int argc, char* argv[]) {
 #endif
     try {
         if (argc < 4) {
-            std::fprintf(stderr, "usage: ambient_note_host <pipe> <models> <prompts-dir> [tier]\n");
+            std::fprintf(stderr,
+                         "usage: clinicavt_note_host <pipe> <models> <prompts-dir> [tier]\n");
             return 2;
         }
-        std::fprintf(stderr, "ambient-note-host: power throttling %s\n",
-                     ambient::system::Describe(ambient::system::DisableThrottlingOnSelf()).c_str());
+        std::fprintf(
+            stderr, "clinicavt-note-host: power throttling %s\n",
+            clinicavt::system::Describe(clinicavt::system::DisableThrottlingOnSelf()).c_str());
         const std::wstring pipe_name = std::filesystem::path(argv[1]).wstring();
         const std::filesystem::path models_root = argv[2];
         const std::filesystem::path prompt_path = argv[3];
         // The tier is a role that the store inside this process resolves
         const std::string tier = argc > 4 ? argv[4] : "default";
 
-        ambient::ipc::PipeServer server(pipe_name);
-        ambient::models::ModelStore store(models_root);
-        ambient::models::OvRuntime runtime;
-        ambient::note::LlmNoteWriter writer(store, runtime, prompt_path, nullptr, tier);
+        clinicavt::ipc::PipeServer server(pipe_name);
+        clinicavt::models::ModelStore store(models_root);
+        clinicavt::models::OvRuntime runtime;
+        clinicavt::note::LlmNoteWriter writer(store, runtime, prompt_path, nullptr, tier);
         GenerationLane lane(server);
 
-        using ambient::ipc::Error;
-        using ambient::ipc::json;
-        using ambient::ipc::kSessionError;
+        using clinicavt::ipc::Error;
+        using clinicavt::ipc::json;
+        using clinicavt::ipc::kSessionError;
         // The engine supervises the load through these two events
-        writer.SetLoadListener([&server](const ambient::note::LlmNoteWriter::LoadReport& r) {
+        writer.SetLoadListener([&server](const clinicavt::note::LlmNoteWriter::LoadReport& r) {
             if (r.ok) {
                 server.PushNotification("loaded", {{"id", r.id},
                                                    {"name", r.name},
@@ -147,15 +149,15 @@ int main(int argc, char* argv[]) {
             try {
                 writer.Prefill(TurnsFrom(params), {params.value("style", "prose"), "standard"});
             } catch (const std::exception& e) {
-                std::fprintf(stderr, "ambient-note-host: prefill dropped (%s)\n", e.what());
+                std::fprintf(stderr, "clinicavt-note-host: prefill dropped (%s)\n", e.what());
             }
             return json::object();
         });
         server.RegisterMethod(
             "write", [&writer, &lane](const json& params) -> std::variant<json, Error> {
                 auto turns = TurnsFrom(params);
-                ambient::note::NoteOptions options{params.value("style", "prose"),
-                                                   params.value("detail", "standard")};
+                clinicavt::note::NoteOptions options{params.value("style", "prose"),
+                                                     params.value("detail", "standard")};
                 options.confirmed = params.value("confirmed", false);
                 if (!lane.Run([&writer, turns = std::move(turns),
                                options = std::move(options)](const auto& progress) {
@@ -201,7 +203,7 @@ int main(int argc, char* argv[]) {
         server.ServeOneClient();
         return 0;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-note-host: fatal: %s\n", e.what());
+        std::fprintf(stderr, "clinicavt-note-host: fatal: %s\n", e.what());
         return 1;
     }
 }

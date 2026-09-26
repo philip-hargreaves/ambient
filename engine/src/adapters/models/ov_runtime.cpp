@@ -2,7 +2,7 @@
 
 #include <stdexcept>
 
-namespace ambient::models {
+namespace clinicavt::models {
 
 ov::AnyMap CompileProperties(const ModelInfo& info) {
     ov::AnyMap map{{"CACHE_DIR", (info.dir / ".cache").string()}};
@@ -77,4 +77,4 @@ LoadedModel OvRuntime::Load(const ModelStore& store, std::string_view task, std:
     return loaded;
 }
 
-}  // namespace ambient::models
+}  // namespace clinicavt::models

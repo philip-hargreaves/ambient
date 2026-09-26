@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 TEST(SplitSentences, MirrorsTheHarnessBoundaries) {
@@ -72,4 +72,4 @@ TEST(SubQueries, AOneSentenceNoteIsOneQuery) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

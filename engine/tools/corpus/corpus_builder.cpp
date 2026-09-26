@@ -19,7 +19,7 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/storage/db.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 void Require(bool ok, const std::string& why) {
@@ -158,4 +158,4 @@ void BuildCorpus(const std::filesystem::path& dir, const CorpusSpec& spec,
     if (!out) throw std::runtime_error("corpus build: manifest write failed");
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

@@ -13,6 +13,15 @@
             "happened": "Reassured too quickly before checking for infection.",
             "learned": "Warmth over a bursa needs a temperature and a look for a portal of entry.",
             "next": "Add a red-flag check to my bursitis consultations.",
+            "references": [
+                {
+                    "key": "nice:ng100",
+                    "reference": "NG100",
+                    "title": "Rheumatoid arthritis in adults: management",
+                    "link": "https://www.nice.org.uk/guidance/ng100",
+                    "source": "NICE"
+                }
+            ],
             "createdAt": "2026-09-06T10:26:40Z",
             "editedAt": null
         }

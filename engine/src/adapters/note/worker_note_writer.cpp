@@ -24,7 +24,7 @@
 #include "adapters/system/child_process.hpp"
 #include "adapters/system/gpu_lease.hpp"
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 using nlohmann::json;
 
@@ -96,7 +96,7 @@ struct WorkerNoteWriter::Impl {
         }
         CloseWorker();
 
-        const std::wstring pipe_path = L"\\\\.\\pipe\\LOCAL\\ambient-note-" +
+        const std::wstring pipe_path = L"\\\\.\\pipe\\LOCAL\\clinicavt-note-" +
                                        std::to_wstring(GetCurrentProcessId()) + L"-" +
                                        std::to_wstring(++spawn_count);
         const std::string tier = Tier();
@@ -348,7 +348,7 @@ struct WorkerNoteWriter::Impl {
             {
                 std::lock_guard<std::mutex> lock(state_mutex);
                 if (closing) throw;
-                std::fprintf(stderr, "ambient-engine: note worker failed (%.100s); respawning\n",
+                std::fprintf(stderr, "clinicavt-engine: note worker failed (%.100s); respawning\n",
                              e.what());
                 respawning = true;
                 CloseWorker();
@@ -408,7 +408,7 @@ void WorkerNoteWriter::Prepare() {
         impl_->Send("prepare", json::object());
         if (starting) impl_->StartWatcher();
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: note worker prepare failed (%s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: note worker prepare failed (%s)\n", e.what());
         impl_->Transition([&e](NoteModelState& s) {
             s.phase = NoteModelState::Phase::kFailed;
             s.detail = e.what();
@@ -475,7 +475,7 @@ void WorkerNoteWriter::Prefill(const std::vector<asr::Turn>& transcript,
         impl_->DrainAcks();
         impl_->Send("prefill", {{"turns", TurnsJson(transcript)}, {"style", options.style}});
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: note prefill not sent (%.100s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: note prefill not sent (%.100s)\n", e.what());
     }
 }
 
@@ -514,7 +514,7 @@ std::string WorkerNoteWriter::WriteLabel(const std::string& note) {
     try {
         return impl_->Attempt("label", {{"note", note}}, nullptr);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: no label (%.100s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: no label (%.100s)\n", e.what());
         return {};
     }
 }
@@ -529,4 +529,4 @@ void WorkerNoteWriter::Cancel() {
     }
 }
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

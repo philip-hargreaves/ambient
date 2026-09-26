@@ -12,7 +12,7 @@
 #include "ports/session_store.hpp"
 #include "ports/translator.hpp"
 
-namespace ambient::ipc {
+namespace clinicavt::ipc {
 
 // Session events as pipe notifications. Streamed text is metered at the
 // source and capped at ~12 Hz on the wire
@@ -61,4 +61,4 @@ class WireEvents : public session::ISessionEvents {
     const std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now();
 };
 
-}  // namespace ambient::ipc
+}  // namespace clinicavt::ipc

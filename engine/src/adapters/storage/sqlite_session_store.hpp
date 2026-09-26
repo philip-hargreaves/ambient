@@ -13,10 +13,10 @@
 #include "adapters/storage/db.hpp"
 #include "ports/session_store.hpp"
 
-namespace ambient::store {
+namespace clinicavt::store {
 
-// One ambient.db, content sealed per blob under per-session keys. A writer
-// thread commits per interval. Layout in schema/ambient.sql
+// One clinicavt.db, content sealed per blob under per-session keys. A writer
+// thread commits per interval. Layout in schema/clinicavt.sql
 class SqliteSessionStore : public ISessionStore {
    public:
     explicit SqliteSessionStore(
@@ -99,4 +99,4 @@ class SqliteSessionStore : public ISessionStore {
     Pending pending_;
 };
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

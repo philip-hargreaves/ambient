@@ -5,11 +5,11 @@
 #include <string>
 #include <vector>
 
-namespace ambient::models {
+namespace clinicavt::models {
 class ModelStore;
-}  // namespace ambient::models
+}  // namespace clinicavt::models
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // The staged embedder a corpus must have been built with
 struct EmbedderIdentity {
@@ -56,4 +56,4 @@ class Embedder : public IEmbedder {
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

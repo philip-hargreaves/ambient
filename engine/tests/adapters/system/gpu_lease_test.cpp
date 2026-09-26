@@ -6,7 +6,7 @@
 #include <chrono>
 #include <thread>
 
-namespace ambient::system {
+namespace clinicavt::system {
 namespace {
 
 // A holder that never releases is a process wedged in a driver call: the
@@ -14,7 +14,7 @@ namespace {
 // returns at once so the waiter carries on without the GPU to itself
 TEST(GpuLease, ABoundedAcquireGivesUpOnAWedgedHolderAndStaysBroken) {
     const std::string name =
-        "Local\\ambient-gpu-lease-wedged-" + std::to_string(GetCurrentProcessId());
+        "Local\\clinicavt-gpu-lease-wedged-" + std::to_string(GetCurrentProcessId());
     GpuLease wedged(name);
     GpuLease waiter(name);
     const auto held = wedged.Acquire();  // never released while this test runs
@@ -47,7 +47,7 @@ TEST(GpuLease, UnnamedLeaseIsInertAndFree) {
 
 TEST(GpuLease, TwoHoldersOfOneNameTakeTurns) {
     const std::string name =
-        "Local\\ambient-gpu-lease-test-" + std::to_string(GetCurrentProcessId());
+        "Local\\clinicavt-gpu-lease-test-" + std::to_string(GetCurrentProcessId());
     GpuLease engine(name);
     GpuLease host(name);  // a second handle, as the other process would open it
     ASSERT_TRUE(engine.Active());
@@ -70,4 +70,4 @@ TEST(GpuLease, TwoHoldersOfOneNameTakeTurns) {
 }
 
 }  // namespace
-}  // namespace ambient::system
+}  // namespace clinicavt::system

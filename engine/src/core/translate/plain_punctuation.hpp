@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 
-namespace ambient::translate {
+namespace clinicavt::translate {
 
 // NLLB's vocabulary has none of these characters, so each would become an
 // unknown token
@@ -37,4 +37,4 @@ inline std::string PlainPunctuation(std::string_view text) {
     return out;
 }
 
-}  // namespace ambient::translate
+}  // namespace clinicavt::translate

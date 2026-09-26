@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 // Three sub-queries, hand-computed reciprocal rank fusion with k = 60:
@@ -145,4 +145,4 @@ TEST(NearDuplicate, AQualityStatementRestatingItsGuidelineIsADuplicate) {
 }
 
 }  // namespace
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

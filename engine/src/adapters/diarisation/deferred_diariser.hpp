@@ -7,7 +7,7 @@
 #include "adapters/models/deferred_load.hpp"
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // Diarisation behind a background load. Callers already run off the audio threads
 class DeferredDiariser : public IDiariser {
@@ -87,4 +87,4 @@ class DeferredDiariser : public IDiariser {
     models::DeferredLoad<IDiariser> inner_;
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

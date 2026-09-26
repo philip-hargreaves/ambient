@@ -9,7 +9,7 @@
 #include "adapters/models/ov_runtime.hpp"
 #include "core/diarisation/diar_regions.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 inline constexpr std::size_t kSegWindowFrames = 160000;  // the model's fixed 10 s input
 inline constexpr int kSegMinHoldFrames = 6;              // ~100 ms flicker guard
@@ -36,4 +36,4 @@ class Segmenter {
     ov::InferRequest request_;
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

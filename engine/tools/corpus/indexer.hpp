@@ -11,7 +11,7 @@
 #include "tools/corpus/chunker.hpp"
 #include "tools/corpus/corpus_builder.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 // What to index and how to describe it, read from a build spec json
 struct BuildSpec {
@@ -47,4 +47,4 @@ IndexReport IndexCorpus(const BuildSpec& spec, IEmbedder& embedder,
                         const std::filesystem::path& out_dir, const std::string& built_at,
                         const std::string& builder, const Progress& progress = {});
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

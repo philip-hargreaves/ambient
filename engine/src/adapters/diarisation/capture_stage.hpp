@@ -12,7 +12,7 @@
 #include "ports/diariser.hpp"
 #include "ports/transcriber.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 // Decodes per speculation pass, small so a long pass cannot stall the
 // causal stages that keep the settled frontier fresh
@@ -86,4 +86,4 @@ class CaptureStage {
     Speculation speculation_;
 };
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

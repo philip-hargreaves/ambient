@@ -12,7 +12,7 @@
 
 #include "adapters/system/power_throttling.hpp"
 
-namespace ambient::system {
+namespace clinicavt::system {
 
 // A Win32 handle closed with its scope
 class UniqueHandle {
@@ -150,4 +150,4 @@ class ChildProcess {
     UniqueHandle job_;
 };
 
-}  // namespace ambient::system
+}  // namespace clinicavt::system

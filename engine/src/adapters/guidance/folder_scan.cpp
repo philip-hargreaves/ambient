@@ -9,7 +9,7 @@
 #include "adapters/guidance/document_index.hpp"
 #include "core/common/strings.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 namespace {
 
 constexpr const char* kPdf = "application/pdf";
@@ -81,4 +81,4 @@ FolderListing ListFolder(const std::filesystem::path& folder, int max_depth,
     return listing;
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

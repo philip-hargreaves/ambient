@@ -15,7 +15,7 @@
 #include "core/guidance/guidance_query.hpp"
 #include "core/guidance/page_text.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 namespace {
 
@@ -217,4 +217,4 @@ void CleanPages(std::vector<Page>& pages) {
     RemoveFurniture(pages);
 }
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

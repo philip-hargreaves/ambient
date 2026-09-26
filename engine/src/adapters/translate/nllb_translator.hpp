@@ -6,12 +6,12 @@
 
 #include "ports/translator.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 class ModelStore;
 class OvRuntime;
-}  // namespace ambient::models
+}  // namespace clinicavt::models
 
-namespace ambient::translate {
+namespace clinicavt::translate {
 
 // NLLB-200 on the manifest CPU: encoder once, greedy stateful decode.
 // Loads on Prepare or first use and frees itself on Release or after ten
@@ -37,4 +37,4 @@ class NllbTranslator : public ITranslator {
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ambient::translate
+}  // namespace clinicavt::translate

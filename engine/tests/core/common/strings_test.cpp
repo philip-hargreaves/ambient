@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace ambient::strings {
+namespace clinicavt::strings {
 namespace {
 
 TEST(Strings, LowerLeavesNonAsciiBytesAlone) {
@@ -45,4 +45,4 @@ TEST(Strings, EndsSentenceSetsClosersAside) {
 }
 
 }  // namespace
-}  // namespace ambient::strings
+}  // namespace clinicavt::strings

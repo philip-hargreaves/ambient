@@ -6,10 +6,10 @@ $out = "C:\dev\ambient\build\perf-loop\tier-sweep.log"
 "tier sweep $(Get-Date -Format 'yyyy-MM-dd HH:mm')" | Set-Content $out
 foreach ($tier in @("constrained", "default", "accuracy")) {
     foreach ($pass in 1, 2) {
-        $env:AMBIENT_SWEEP_TIER = $tier
+        $env:CLINICAVT_SWEEP_TIER = $tier
         $csv = Join-Path $env:TEMP "sweep-$tier-$pass.csv"
         if (Test-Path $csv) { Remove-Item $csv }
-        $tp = Start-Process typeperf -ArgumentList @('"\Process(ambient_note_host*)\Working Set"', '-si', '1', '-o', ('"' + $csv + '"'), '-y') -PassThru -WindowStyle Hidden
+        $tp = Start-Process typeperf -ArgumentList @('"\Process(clinicavt_note_host*)\Working Set"', '-si', '1', '-o', ('"' + $csv + '"'), '-y') -PassThru -WindowStyle Hidden
         $lines = & build\release\engine\tests\models_tests.exe --gtest_filter=WorkerNoteWriter.NoteTierSweep 2>&1 | Select-String "note qwen|first token|tok/s|sweep |FAILED|SKIPPED"
         Stop-Process $tp -Force -ErrorAction SilentlyContinue
         Start-Sleep 1
@@ -20,7 +20,7 @@ foreach ($tier in @("constrained", "default", "accuracy")) {
         Start-Sleep 3
     }
 }
-Remove-Item Env:AMBIENT_SWEEP_TIER -ErrorAction SilentlyContinue
+Remove-Item Env:CLINICAVT_SWEEP_TIER -ErrorAction SilentlyContinue
 "=== python bench (3,462-token prompt, 200 tokens, 2 reps)" | Tee-Object -FilePath $out -Append
 Set-Location C:\dev\intelliscribe\bench\performance
 foreach ($m in @(@("qwen3.5-4b-int4", ""), @("qwen3.5-9b-int4", ""), @("qwen3.6-35b-a3b-int4", "--vlm --scale 32"))) {

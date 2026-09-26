@@ -13,7 +13,7 @@
 #include <dpapi.h>
 // clang-format on
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 namespace detail {
 
@@ -129,14 +129,14 @@ void AnchorStore::Load() {
     DATA_BLOB blob_out{};
     if (!CryptUnprotectData(&blob_in, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN,
                             &blob_out)) {
-        std::fprintf(stderr, "ambient-engine: anchor unreadable, starting fresh\n");
+        std::fprintf(stderr, "clinicavt-engine: anchor unreadable, starting fresh\n");
         return;
     }
     const auto record = detail::ParseAnchor({blob_out.pbData, blob_out.cbData});
     if (record.has_value()) {
         record_ = *record;
     } else {
-        std::fprintf(stderr, "ambient-engine: anchor format mismatch, starting fresh\n");
+        std::fprintf(stderr, "clinicavt-engine: anchor format mismatch, starting fresh\n");
     }
     SecureZeroMemory(blob_out.pbData, blob_out.cbData);
     LocalFree(blob_out.pbData);
@@ -146,7 +146,7 @@ void AnchorStore::Save() const {
     std::vector<std::uint8_t> plain = detail::SerializeAnchor(record_);
     DATA_BLOB blob_in{static_cast<DWORD>(plain.size()), plain.data()};
     DATA_BLOB blob_out{};
-    if (!CryptProtectData(&blob_in, L"ambient clinician anchor", nullptr, nullptr, nullptr,
+    if (!CryptProtectData(&blob_in, L"clinicavt clinician anchor", nullptr, nullptr, nullptr,
                           CRYPTPROTECT_UI_FORBIDDEN, &blob_out)) {
         throw std::runtime_error("CryptProtectData failed for the anchor");
     }
@@ -157,4 +157,4 @@ void AnchorStore::Save() const {
     if (!out) throw std::runtime_error("anchor write failed");
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

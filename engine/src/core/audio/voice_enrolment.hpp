@@ -14,7 +14,7 @@
 #include "ports/audio_source.hpp"
 #include "ports/streaming_vad.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 struct EnrolProgress {
     double elapsed_s = 0.0;
@@ -111,4 +111,4 @@ inline std::string EnrolRejection(const EnrolCapture& capture, bool cancelled,
     return {};
 }
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

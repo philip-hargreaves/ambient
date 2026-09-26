@@ -4,7 +4,7 @@
 
 #include "ports/audio_source.hpp"
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 
 class WasapiCapture : public IAudioSource {
    public:
@@ -24,4 +24,4 @@ class WasapiCapture : public IAudioSource {
     void* stop_event_ = nullptr;  // HANDLE, manual-reset: stopping is terminal
 };
 
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

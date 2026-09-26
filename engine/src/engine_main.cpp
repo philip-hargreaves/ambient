@@ -59,7 +59,7 @@ std::filesystem::path StoreRoot(const std::vector<std::string>& args) {
     if (_dupenv_s(&local_app_data, nullptr, "LOCALAPPDATA") != 0 || local_app_data == nullptr) {
         throw std::runtime_error("LOCALAPPDATA is not set and no store root was given");
     }
-    const auto root = std::filesystem::path(local_app_data) / "ambient" / "store";
+    const auto root = std::filesystem::path(local_app_data) / "ClinicAVT" / "store";
     std::free(local_app_data);
     return root;
 }
@@ -70,7 +70,7 @@ std::filesystem::path GuidelinesFolder(const std::string& override) {
     PWSTR documents = nullptr;
     std::filesystem::path folder;
     if (SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &documents) == S_OK) {
-        folder = std::filesystem::path(documents) / "Ambient guidelines";
+        folder = std::filesystem::path(documents) / "ClinicAVT guidelines";
     }
     CoTaskMemFree(documents);
     if (folder.empty()) throw std::runtime_error("no Documents folder and no --guidelines given");
@@ -78,127 +78,127 @@ std::filesystem::path GuidelinesFolder(const std::string& override) {
 }
 
 // True when a staged model has never been compiled on this machine
-bool Uncompiled(const ambient::models::ModelStore& store, const std::string& role) {
+bool Uncompiled(const clinicavt::models::ModelStore& store, const std::string& role) {
     return !std::filesystem::exists(store.Resolve(role, "default").dir / ".cache");
 }
 
-// A replay request plays a wav through the same port. A launch-time wav path
-// (CI, scripts) forces every session to replay that file
-ambient::session::SourceFactory MakeSourceFactory(std::string forced) {
+// A replay request plays a wav through the same port. A launch-time wav path,
+// used by CI and scripts, forces every session to replay that file
+clinicavt::session::SourceFactory MakeSourceFactory(std::string forced) {
     return [forced = std::move(forced)](
-               const std::optional<ambient::session::ReplaySpec>& replay,
-               const std::string& mic_id) -> std::unique_ptr<ambient::audio::IAudioSource> {
+               const std::optional<clinicavt::session::ReplaySpec>& replay,
+               const std::string& mic_id) -> std::unique_ptr<clinicavt::audio::IAudioSource> {
         if (replay.has_value()) {
-            return std::make_unique<ambient::audio::WavSource>(
-                replay->path, ambient::audio::WavSource::Config{replay->speed, replay->monitor,
-                                                                replay->start_frame});
+            return std::make_unique<clinicavt::audio::WavSource>(
+                replay->path, clinicavt::audio::WavSource::Config{replay->speed, replay->monitor,
+                                                                  replay->start_frame});
         }
-        if (!forced.empty()) return std::make_unique<ambient::audio::WavSource>(forced);
-        return std::make_unique<ambient::audio::WasapiCapture>(ambient::audio::WideId(mic_id));
+        if (!forced.empty()) return std::make_unique<clinicavt::audio::WavSource>(forced);
+        return std::make_unique<clinicavt::audio::WasapiCapture>(clinicavt::audio::WideId(mic_id));
     };
 }
 
-// Real transcription when the ASR role is staged, scripted otherwise (CI)
-std::unique_ptr<ambient::asr::ITranscriber> BuildTranscriber(
-    const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
-    const std::string& device, ambient::metrics::Registry& metrics, bool& first_use) {
+// Real transcription when the ASR role is staged, scripted otherwise as in CI
+std::unique_ptr<clinicavt::asr::ITranscriber> BuildTranscriber(
+    const clinicavt::models::ModelStore& store, clinicavt::models::OvRuntime& runtime,
+    const std::string& device, clinicavt::metrics::Registry& metrics, bool& first_use) {
     try {
         first_use |= Uncompiled(store, "asr");
-        return std::make_unique<ambient::asr::WhisperTranscriber>(store, runtime, device, &metrics);
+        return std::make_unique<clinicavt::asr::WhisperTranscriber>(store, runtime, device,
+                                                                    &metrics);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: scripted transcripts (%s)\n", e.what());
-        return std::make_unique<ambient::asr::ScriptedTranscriber>();
+        std::fprintf(stderr, "clinicavt-engine: scripted transcripts (%s)\n", e.what());
+        return std::make_unique<clinicavt::asr::ScriptedTranscriber>();
     }
 }
 
 // Compiles behind the serve loop. session/start waits on it, hello does not
-std::unique_ptr<ambient::audio::IStreamingVad> BuildVad(const ambient::models::ModelStore& store,
-                                                        ambient::models::OvRuntime& runtime,
-                                                        ambient::metrics::Registry& metrics) {
+std::unique_ptr<clinicavt::audio::IStreamingVad> BuildVad(
+    const clinicavt::models::ModelStore& store, clinicavt::models::OvRuntime& runtime,
+    clinicavt::metrics::Registry& metrics) {
     try {
         store.Resolve("vad", "default");
-        return std::make_unique<ambient::audio::DeferredVad>(
+        return std::make_unique<clinicavt::audio::DeferredVad>(
             [&store, &runtime] {
-                return std::make_unique<ambient::audio::SileroVad>(store, runtime);
+                return std::make_unique<clinicavt::audio::SileroVad>(store, runtime);
             },
             &metrics);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: capped windows (%s)\n", e.what());
-        return std::make_unique<ambient::audio::PassthroughVad>();
+        std::fprintf(stderr, "clinicavt-engine: capped windows (%s)\n", e.what());
+        return std::make_unique<clinicavt::audio::PassthroughVad>();
     }
 }
 
-// Diarisation needs both its models, scripted otherwise (CI)
-std::unique_ptr<ambient::diar::IDiariser> BuildDiariser(const ambient::models::ModelStore& store,
-                                                        ambient::models::OvRuntime& runtime,
-                                                        ambient::diar::AnchorStore& anchors,
-                                                        ambient::metrics::Registry& metrics) {
+// Diarisation needs both its models and is scripted otherwise, as in CI
+std::unique_ptr<clinicavt::diar::IDiariser> BuildDiariser(
+    const clinicavt::models::ModelStore& store, clinicavt::models::OvRuntime& runtime,
+    clinicavt::diar::AnchorStore& anchors, clinicavt::metrics::Registry& metrics) {
     try {
         store.Resolve("diarisation", "default");
         store.Resolve("segmentation", "default");
-        return std::make_unique<ambient::diar::DeferredDiariser>(
+        return std::make_unique<clinicavt::diar::DeferredDiariser>(
             [&store, &runtime, &anchors] {
-                return std::make_unique<ambient::diar::SpeakerDiariser>(store, runtime, anchors);
+                return std::make_unique<clinicavt::diar::SpeakerDiariser>(store, runtime, anchors);
             },
             &metrics);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: scripted speakers (%s)\n", e.what());
-        return std::make_unique<ambient::diar::ScriptedDiariser>();
+        std::fprintf(stderr, "clinicavt-engine: scripted speakers (%s)\n", e.what());
+        return std::make_unique<clinicavt::diar::ScriptedDiariser>();
     }
 }
 
-// Generation runs in its own supervised process: a GPU driver fault there
+// Generation runs in its own supervised process, so a GPU driver fault there
 // costs a respawn and leaves the engine standing. Null when nothing can write
-std::unique_ptr<ambient::note::WorkerNoteWriter> BuildNoteWriter(
-    ambient::models::ModelStore& store, const std::filesystem::path& models_root,
-    ambient::ipc::PipeServer& server, bool& first_use) {
+std::unique_ptr<clinicavt::note::WorkerNoteWriter> BuildNoteWriter(
+    clinicavt::models::ModelStore& store, const std::filesystem::path& models_root,
+    clinicavt::ipc::PipeServer& server, bool& first_use) {
     try {
         store.Resolve("note", "default");
-        const auto host = ambient::system::ExeDir() / "ambient_note_host.exe";
+        const auto host = clinicavt::system::ExeDir() / "clinicavt_note_host.exe";
         if (!std::filesystem::exists(host)) {
-            // Never write in-process: that is the configuration the driver fault corrupts
-            std::fprintf(stderr, "ambient-engine: note DISABLED, %s is missing\n",
+            // Never write in-process, because that is the configuration the driver fault corrupts
+            std::fprintf(stderr, "clinicavt-engine: note DISABLED, %s is missing\n",
                          host.string().c_str());
             return nullptr;
         }
-        auto worker = std::make_unique<ambient::note::WorkerNoteWriter>(
+        auto worker = std::make_unique<clinicavt::note::WorkerNoteWriter>(
             host, models_root, models_root.parent_path() / "prompts", &store);
         // The shell configures the tier on connect. A non-default tier's
         // first compile runs then
-        worker->SetListener([&server](const ambient::note::NoteModelState& state) {
-            server.PushNotification("note/model", ambient::ipc::NoteModelJson(state));
+        worker->SetListener([&server](const clinicavt::note::NoteModelState& state) {
+            server.PushNotification("note/model", clinicavt::ipc::NoteModelJson(state));
         });
-        // First use only: the one-off compile runs on an idle GPU, ahead of any recording
+        // On first use the one-off compile runs on an idle GPU, ahead of any recording
         if (Uncompiled(store, "note")) {
             first_use = true;
-            std::fprintf(stderr, "ambient-engine: first use, compiling the note model\n");
+            std::fprintf(stderr, "clinicavt-engine: first use, compiling the note model\n");
             worker->Prepare();
         }
         return worker;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: stub note (%s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: stub note (%s)\n", e.what());
         return nullptr;
     }
 }
 
 // Translation runs on the CPU, so it never contends with the GPU. Null when
 // the model is not staged
-std::unique_ptr<ambient::translate::NllbTranslator> BuildTranslator(
-    const ambient::models::ModelStore& store, ambient::models::OvRuntime& runtime,
+std::unique_ptr<clinicavt::translate::NllbTranslator> BuildTranslator(
+    const clinicavt::models::ModelStore& store, clinicavt::models::OvRuntime& runtime,
     bool& first_use) {
     try {
         store.Resolve("translation", "default");
-        auto translator = std::make_unique<ambient::translate::NllbTranslator>(store, runtime);
+        auto translator = std::make_unique<clinicavt::translate::NllbTranslator>(store, runtime);
         // The CPU compile joins the one-off warm-up, so the first translation
         // is as fast as every other
         if (Uncompiled(store, "translation")) {
             first_use = true;
-            std::fprintf(stderr, "ambient-engine: first use, compiling the translator\n");
+            std::fprintf(stderr, "clinicavt-engine: first use, compiling the translator\n");
             translator->Prepare();
         }
         return translator;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: no translation (%s)\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: no translation (%s)\n", e.what());
         return nullptr;
     }
 }
@@ -215,46 +215,50 @@ int main(int argc, char* argv[]) {
     _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
 #endif
     try {
-        // Flags first, then positional: pipe name, store root, models root, replay wav
+        // Flags come first, then the positional pipe name, store root, models root and replay wav
         std::vector<std::string> args(argv + 1, argv + argc);
-        const std::string asr_device = ambient::TakeFlag(args, "--asr-device");
-        const std::string corpora_override = ambient::TakeFlag(args, "--corpora");
-        const std::string guidelines_override = ambient::TakeFlag(args, "--guidelines");
-        // Dev builds only: a demo corpus marked research is searched when set
-        const bool include_research = ambient::TakeSwitch(args, "--include-research");
-        // Evaluation only: a held-out run must not teach the voiceprint
-        const bool freeze_anchor = ambient::TakeSwitch(args, "--freeze-anchor");
+        const std::string asr_device = clinicavt::TakeFlag(args, "--asr-device");
+        const std::string corpora_override = clinicavt::TakeFlag(args, "--corpora");
+        const std::string guidelines_override = clinicavt::TakeFlag(args, "--guidelines");
+        // For dev builds, a demo corpus marked research is searched when set
+        const bool include_research = clinicavt::TakeSwitch(args, "--include-research");
+        // For evaluation, where a held-out run must not teach the voiceprint
+        const bool freeze_anchor = clinicavt::TakeSwitch(args, "--freeze-anchor");
         // Whisper and the note host take turns on the GPU. With whisper on the
         // NPU there is nothing to share
         if (asr_device != "NPU") {
-            const std::string lease = "Local\\ambient-gpu-" + std::to_string(GetCurrentProcessId());
-            _putenv_s("AMBIENT_GPU_LEASE", lease.c_str());
-            std::fprintf(stderr, "ambient-engine: note prefill on, GPU lease %s\n", lease.c_str());
+            const std::string lease =
+                "Local\\clinicavt-gpu-" + std::to_string(GetCurrentProcessId());
+            _putenv_s("CLINICAVT_GPU_LEASE", lease.c_str());
+            std::fprintf(stderr, "clinicavt-engine: note prefill on, GPU lease %s\n",
+                         lease.c_str());
         }
-        std::fprintf(stderr, "ambient-engine: power throttling %s\n",
-                     ambient::system::Describe(ambient::system::DisableThrottlingOnSelf()).c_str());
+        std::fprintf(
+            stderr, "clinicavt-engine: power throttling %s\n",
+            clinicavt::system::Describe(clinicavt::system::DisableThrottlingOnSelf()).c_str());
 
-        std::wstring pipe_name = L"\\\\.\\pipe\\LOCAL\\ambient-engine";
+        std::wstring pipe_name = L"\\\\.\\pipe\\LOCAL\\clinicavt-engine";
         if (args.size() > 0) {
             pipe_name = L"\\\\.\\pipe\\" + std::wstring(args[0].begin(), args[0].end());
         }
         const std::filesystem::path store_root = StoreRoot(args);
-        const std::filesystem::path models_root =
-            args.size() > 2 ? std::filesystem::path(args[2]) : ambient::system::DefaultModelsRoot();
+        const std::filesystem::path models_root = args.size() > 2
+                                                      ? std::filesystem::path(args[2])
+                                                      : clinicavt::system::DefaultModelsRoot();
         // Guidance corpora sit beside the models, each replaced as a directory
         const std::filesystem::path corpora_root = corpora_override.empty()
                                                        ? models_root.parent_path() / "corpora"
                                                        : std::filesystem::path(corpora_override);
 
-        ambient::ipc::PipeServer server(pipe_name);
-        ambient::store::SqliteSessionStore session_store(store_root);
-        ambient::ipc::WireEvents events(server, session_store);
+        clinicavt::ipc::PipeServer server(pipe_name);
+        clinicavt::store::SqliteSessionStore session_store(store_root);
+        clinicavt::ipc::WireEvents events(server, session_store);
         // A consultation left by closing the app is left all the same
         session_store.EraseUnretained();
-        ambient::models::ModelStore model_store(models_root);
-        ambient::models::OvRuntime ov_runtime;
-        ambient::metrics::Registry metrics;
-        ambient::diar::AnchorStore anchors(store_root);
+        clinicavt::models::ModelStore model_store(models_root);
+        clinicavt::models::OvRuntime ov_runtime;
+        clinicavt::metrics::Registry metrics;
+        clinicavt::diar::AnchorStore anchors(store_root);
 
         bool first_use = false;
         auto transcriber =
@@ -264,17 +268,17 @@ int main(int argc, char* argv[]) {
         // A host from an engine that has died takes a moment to leave. One
         // still here after that is wedged in the driver, and only a reboot ends it
         const bool stray_note_host =
-            !ambient::system::WaitUntilGone(L"ambient_note_host.exe", std::chrono::seconds(5));
+            !clinicavt::system::WaitUntilGone(L"clinicavt_note_host.exe", std::chrono::seconds(5));
         if (stray_note_host) {
             std::fprintf(stderr,
-                         "ambient-engine: a note host from an earlier engine is still running; "
+                         "clinicavt-engine: a note host from an earlier engine is still running; "
                          "the GPU is not ours until the computer restarts\n");
         }
         auto note_writer = BuildNoteWriter(model_store, models_root, server, first_use);
         auto translator = BuildTranslator(model_store, ov_runtime, first_use);
-        std::unique_ptr<ambient::translate::TranslateLane> translate_lane;
+        std::unique_ptr<clinicavt::translate::TranslateLane> translate_lane;
         if (translator != nullptr) {
-            translate_lane = std::make_unique<ambient::translate::TranslateLane>(
+            translate_lane = std::make_unique<clinicavt::translate::TranslateLane>(
                 *translator, [&events](const std::string& method, const nlohmann::json& params) {
                     events.OnTranslation(method, params);
                 });
@@ -282,60 +286,62 @@ int main(int argc, char* argv[]) {
         }
         // Guidance retrieval runs on the CPU in its own lane. The embedder loads
         // in the background so the first note's search is warm
-        ambient::guidance::Retriever guidance_retriever(
-            [&model_store]() -> std::unique_ptr<ambient::guidance::IEmbedder> {
-                return ambient::guidance::Embedder::Load(model_store);
+        clinicavt::guidance::Retriever guidance_retriever(
+            [&model_store]() -> std::unique_ptr<clinicavt::guidance::IEmbedder> {
+                return clinicavt::guidance::Embedder::Load(model_store);
             },
             corpora_root,
-            ambient::guidance::RetrieverOptions{.include_research = include_research});
-        ambient::guidance::GuidanceLane guidance_lane(
-            guidance_retriever, [&server](const ambient::guidance::Readiness& readiness) {
+            clinicavt::guidance::RetrieverOptions{.include_research = include_research});
+        clinicavt::guidance::GuidanceLane guidance_lane(
+            guidance_retriever, [&server](const clinicavt::guidance::Readiness& readiness) {
                 server.PushNotification("guidance/model",
-                                        ambient::ipc::GuidanceModelJson(readiness));
+                                        clinicavt::ipc::GuidanceModelJson(readiness));
             });
         events.SetGuidance(&guidance_lane);
         guidance_lane.Prepare();
 
-        // 10 s rather than 3: a Bluetooth microphone link waking measured 1.6-8.8 s
-        // before first audio. Wired mics answer in well under a second either way
-        ambient::session::SessionController controller(
+        // 10 s because a Bluetooth microphone link takes 1.6-8.8 s to wake before
+        // first audio. Wired mics answer in well under a second
+        clinicavt::session::SessionController controller(
             MakeSourceFactory(args.size() > 3 ? args[3] : std::string()), events, session_store,
             *transcriber, *vad, *diariser, std::chrono::seconds(10),
-            5 * ambient::audio::kSampleRate, note_writer.get(), &metrics);
+            5 * clinicavt::audio::kSampleRate, note_writer.get(), &metrics);
         if (freeze_anchor) controller.FreezeAnchor();
 
         // Added documents embed between note searches and wait while a consultation runs
-        const auto ingest_host = ambient::system::ExeDir() / "ambient_ingest_host.exe";
-        ambient::guidance::DocumentIngest ingest(
+        const auto ingest_host = clinicavt::system::ExeDir() / "clinicavt_ingest_host.exe";
+        clinicavt::guidance::DocumentIngest ingest(
             guidance_retriever, GuidelinesFolder(guidelines_override), store_root / "documents",
             [&controller] { return controller.Running(); },
             std::filesystem::exists(ingest_host) ? ingest_host : std::filesystem::path());
         ingest.SetListener(
-            [&server](const ambient::guidance::IngestProgress& progress) {
-                server.PushNotification("guidance/progress", ambient::ipc::ProgressJson(progress));
+            [&server](const clinicavt::guidance::IngestProgress& progress) {
+                server.PushNotification("guidance/progress",
+                                        clinicavt::ipc::ProgressJson(progress));
             },
-            [&server](const ambient::guidance::DocumentInfo& document) {
-                server.PushNotification("guidance/document", ambient::ipc::DocumentJson(document));
-                if (ambient::ipc::ChangesReadySet(document)) {
+            [&server](const clinicavt::guidance::DocumentInfo& document) {
+                server.PushNotification("guidance/document",
+                                        clinicavt::ipc::DocumentJson(document));
+                if (clinicavt::ipc::ChangesReadySet(document)) {
                     server.PushNotification("guidance/documentsChanged", nlohmann::json::object());
                 }
             });
         // Demo playback ends in a review of the copy, its note searched like any other
-        ambient::session::Playback playback(
+        clinicavt::session::Playback playback(
             events, session_store,
             {.finalised = [&controller](const std::string& id) { controller.Open(id); },
              .guidance =
                  [&server, &session_store, &guidance_lane](const std::string& id) {
                      auto note =
-                         session_store.ReadDocument(id, ambient::store::DocumentKind::kNote);
+                         session_store.ReadDocument(id, clinicavt::store::DocumentKind::kNote);
                      if (note.text.empty()) return;
-                     guidance_lane.Run(ambient::ipc::GuidanceSearchRequest(
-                         session_store, id, std::move(note), ambient::ipc::kGuidanceLimit,
+                     guidance_lane.Run(clinicavt::ipc::GuidanceSearchRequest(
+                         session_store, id, std::move(note), clinicavt::ipc::kGuidanceLimit,
                          [&server](const std::string& method, nlohmann::json body) {
                              server.PushNotification(method, std::move(body));
                          }));
                  }});
-        ambient::ipc::RegisterMethods(
+        clinicavt::ipc::RegisterMethods(
             server, {.controller = controller,
                      .models = model_store,
                      .sessions = session_store,
@@ -349,13 +355,13 @@ int main(int argc, char* argv[]) {
                      .stray_note_host = stray_note_host,
                      .demo_dir = models_root.parent_path() / "demo" / "reflections",
                      .playback = &playback});
-        ambient::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
-                                              guidance_lane, ingest);
+        clinicavt::ipc::RegisterGuidanceMethods(server, session_store, guidance_retriever,
+                                                guidance_lane, ingest);
         server.ServeOneClient();
         controller.Stop();
         return 0;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "ambient-engine: %s\n", e.what());
+        std::fprintf(stderr, "clinicavt-engine: %s\n", e.what());
         return 1;
     }
 }

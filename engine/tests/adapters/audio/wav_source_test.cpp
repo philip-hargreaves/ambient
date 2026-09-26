@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 
-namespace ambient::audio {
+namespace clinicavt::audio {
 namespace {
 
 // Every file is built byte by byte in the test, so each malformation is
@@ -70,9 +70,10 @@ struct TempWav {
     std::filesystem::path path;
 
     explicit TempWav(const std::vector<std::uint8_t>& bytes) {
-        path = std::filesystem::temp_directory_path() /
-               ("ambient-wav-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-                "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".wav");
+        path =
+            std::filesystem::temp_directory_path() /
+            ("clinicavt-wav-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+             "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".wav");
         std::ofstream out(path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()),
                   static_cast<std::streamsize>(bytes.size()));
@@ -313,4 +314,4 @@ TEST(WavSource, StopWinsOverPause) {
 }
 
 }  // namespace
-}  // namespace ambient::audio
+}  // namespace clinicavt::audio

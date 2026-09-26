@@ -10,7 +10,7 @@
 #include "ports/guidance_lane.hpp"
 #include "ports/guidance_retriever.hpp"
 
-namespace ambient::guidance {
+namespace clinicavt::guidance {
 
 using ReadinessListener = std::function<void(const Readiness&)>;
 
@@ -41,4 +41,4 @@ class GuidanceLane : public IGuidanceLane {
     std::optional<SearchRequest> pending_text_;
 };
 
-}  // namespace ambient::guidance
+}  // namespace clinicavt::guidance

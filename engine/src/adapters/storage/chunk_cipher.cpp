@@ -15,7 +15,7 @@
 #include <dpapi.h>
 // clang-format on
 
-namespace ambient::store {
+namespace clinicavt::store {
 
 namespace {
 
@@ -165,6 +165,7 @@ ChunkCipher ChunkCipher::FromWrappedKey(const ChunkCipher& store, std::string_vi
 std::vector<std::uint8_t> ChunkCipher::Identity(const std::filesystem::path& file) const {
     // A MAC key of its own, derived from this key
     HmacSha256 derive(std::span(impl_->key_bytes, kKeyBytes));
+    // Fixed under the earlier name: stored documents are keyed by it
     const std::string_view purpose = "ambient document identity";
     derive.Update({reinterpret_cast<const std::uint8_t*>(purpose.data()), purpose.size()});
     HmacSha256 mac(derive.Finish());
@@ -241,4 +242,4 @@ std::vector<std::uint8_t> ChunkCipher::Open(Domain domain, std::string_view sess
     return plain;
 }
 
-}  // namespace ambient::store
+}  // namespace clinicavt::store

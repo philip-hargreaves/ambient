@@ -7,7 +7,7 @@
 #include <vector>
 
 // ASCII text helpers shared by the stages. Bytes above 127 pass through untouched
-namespace ambient::strings {
+namespace clinicavt::strings {
 
 inline std::string Lower(std::string_view s) {
     std::string out(s);
@@ -64,4 +64,4 @@ inline bool EndsSentence(std::string_view s) {
     return false;
 }
 
-}  // namespace ambient::strings
+}  // namespace clinicavt::strings

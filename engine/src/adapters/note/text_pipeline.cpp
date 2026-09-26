@@ -7,7 +7,7 @@
 #include "adapters/models/model_store.hpp"
 #include "adapters/models/ov_runtime.hpp"
 
-namespace ambient::note {
+namespace clinicavt::note {
 
 namespace {
 
@@ -60,4 +60,4 @@ std::unique_ptr<TextPipeline> MakeTextPipeline(const models::ModelInfo& info,
     return std::make_unique<LlmTextPipeline>(info, device);
 }
 
-}  // namespace ambient::note
+}  // namespace clinicavt::note

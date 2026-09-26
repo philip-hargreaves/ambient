@@ -2,9 +2,9 @@
 
 #include <gtest/gtest.h>
 
-using ambient::system::Describe;
-using ambient::system::DisableThrottlingOnSelf;
-using ambient::system::ReadThrottling;
+using clinicavt::system::Describe;
+using clinicavt::system::DisableThrottlingOnSelf;
+using clinicavt::system::ReadThrottling;
 
 TEST(PowerThrottling, OptOutReadsBackAsOff) {
     const auto state = DisableThrottlingOnSelf();

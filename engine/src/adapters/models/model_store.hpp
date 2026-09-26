@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ambient::models {
+namespace clinicavt::models {
 
 // Streaming SHA-256 as lowercase hex, shared by verification and test tooling
 std::string Sha256File(const std::filesystem::path& path);
@@ -50,4 +50,4 @@ class ModelStore {
     std::vector<ModelInfo> models_;
 };
 
-}  // namespace ambient::models
+}  // namespace clinicavt::models

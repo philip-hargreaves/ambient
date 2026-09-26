@@ -16,7 +16,7 @@ import openvino as ov
 import openvino_tokenizers  # noqa: F401
 
 SHEETS = Path(r"D:\dev\intelliscribe\bench\summarisation\notes\tier-accuracy-sheet")
-FLORES = Path(r"D:\ambient-mt\data\flores200_dataset\devtest\eng_Latn.devtest")
+FLORES = Path(r"D:\clinicavt-mt\data\flores200_dataset\devtest\eng_Latn.devtest")
 PLAIN = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-",
                        "\u2014": "-", "\u00a0": " ", "\u2026": "..."})
 UNK = 3

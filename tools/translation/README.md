@@ -1,6 +1,6 @@
 # translation
 
-The study that chose the translation model and the measurements behind the translator's lifecycle. Data, models and results live under `MT_ROOT` (default `D:\ambient-mt`).
+The study that chose the translation model and the measurements behind the translator's lifecycle. Data, models and results live under `MT_ROOT` (default `D:\clinicavt-mt`).
 
 ## Setup
 

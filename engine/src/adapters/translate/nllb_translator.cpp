@@ -16,7 +16,7 @@
 #include "adapters/models/residency.hpp"
 #include "core/translate/plain_punctuation.hpp"
 
-namespace ambient::translate {
+namespace clinicavt::translate {
 
 namespace {
 
@@ -88,12 +88,12 @@ struct NllbTranslator::Impl {
         // Primes the CPU kernels for the first real sentence
         const auto& first = languages.at("languages").begin().value();
         TranslateSentences("Ready.", first.at("id").get<std::int64_t>());
-        std::fprintf(stderr, "ambient-engine: translator warmed in %.1f s\n", SecondsSince(t0));
+        std::fprintf(stderr, "clinicavt-engine: translator warmed in %.1f s\n", SecondsSince(t0));
     }
 
     void Unload() {
         Reset();
-        std::fprintf(stderr, "ambient-engine: translator released\n");
+        std::fprintf(stderr, "clinicavt-engine: translator released\n");
     }
 
     void Reset() {
@@ -294,7 +294,7 @@ std::string NllbTranslator::Translate(const std::string& text, const std::string
             from = end + 1;
         }
 
-        std::fprintf(stderr, "ambient-engine: translated to %s in %.1f s\n", language.c_str(),
+        std::fprintf(stderr, "clinicavt-engine: translated to %s in %.1f s\n", language.c_str(),
                      SecondsSince(t0));
         return translated;
     });
@@ -304,4 +304,4 @@ void NllbTranslator::Cancel() {
     impl_->cancel = true;
 }
 
-}  // namespace ambient::translate
+}  // namespace clinicavt::translate

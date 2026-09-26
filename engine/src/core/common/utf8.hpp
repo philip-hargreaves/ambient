@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ambient::utf8 {
+namespace clinicavt::utf8 {
 
 // One code point from `at`, U+FFFD for a broken sequence
 inline char32_t Decode(std::string_view s, std::size_t& at) {
@@ -53,4 +53,4 @@ inline void Encode(std::string& out, char32_t cp) {
     }
 }
 
-}  // namespace ambient::utf8
+}  // namespace clinicavt::utf8

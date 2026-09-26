@@ -10,7 +10,7 @@
 #endif
 #include <windows.h>
 
-namespace ambient::system {
+namespace clinicavt::system {
 
 // Keeps the system out of standby for the object's lifetime: an idle timeout
 // mid-load or mid-generation leaves GPU work the driver may never finish.
@@ -42,4 +42,4 @@ class AwakeRequest {
     HANDLE request_ = INVALID_HANDLE_VALUE;
 };
 
-}  // namespace ambient::system
+}  // namespace clinicavt::system

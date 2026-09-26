@@ -224,7 +224,7 @@ def hash_texts(texts) -> str:
     return hashlib.sha256("\x00".join(texts).encode("utf-8")).hexdigest()[:16]
 
 
-SPM = r"D:\ambient-mt\probe\tokenizers\spm"
+SPM = r"D:\clinicavt-mt\probe\tokenizers\spm"
 VARIANTS = {
     "engine": [],
     "spm": ["--tokenizer", SPM],

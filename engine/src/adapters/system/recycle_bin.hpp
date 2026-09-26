@@ -13,7 +13,7 @@
 
 #include "ports/store_error.hpp"
 
-namespace ambient::system {
+namespace clinicavt::system {
 
 // Sends a file to the Recycle Bin, so a removed guideline is one click from
 // coming back. Throws a store error when it cannot
@@ -54,4 +54,4 @@ inline void RecycleFile(const std::filesystem::path& path) {
     }
 }
 
-}  // namespace ambient::system
+}  // namespace clinicavt::system

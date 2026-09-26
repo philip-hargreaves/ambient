@@ -8,7 +8,7 @@
 
 #include "ports/diariser.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 
 namespace {
 
@@ -102,4 +102,4 @@ std::vector<ResplitTurn> ResplitByEmbedding(const std::vector<LabelledSlice>& tu
     return out;
 }
 
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar

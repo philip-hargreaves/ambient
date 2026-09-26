@@ -16,7 +16,7 @@
 
 #include "core/common/strings.hpp"
 
-namespace ambient::models {
+namespace clinicavt::models {
 
 namespace {
 
@@ -177,4 +177,4 @@ void ModelStore::VerifyHashes(const ModelInfo& model) const {
     }
 }
 
-}  // namespace ambient::models
+}  // namespace clinicavt::models

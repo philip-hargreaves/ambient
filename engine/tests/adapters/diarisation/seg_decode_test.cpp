@@ -5,7 +5,7 @@
 
 #include "adapters/diarisation/segmenter.hpp"
 
-namespace ambient::diar {
+namespace clinicavt::diar {
 namespace {
 
 // 589 frames like the real model. Helpers author class runs
@@ -68,4 +68,4 @@ TEST(SegDecode, SpansMergeAcrossWindows) {
 }
 
 }  // namespace
-}  // namespace ambient::diar
+}  // namespace clinicavt::diar
